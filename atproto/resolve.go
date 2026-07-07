@@ -9,8 +9,10 @@ import (
 	"github.com/bluesky-social/indigo/atproto/syntax"
 )
 
-// Resolver wraps an identity.Directory to provide typed handle and
-// DID resolution with a sane default timeout.
+const resolveTimeout = 3 * time.Second
+
+// Resolver wraps an identity.Directory to provide typed handle and DID
+// resolution with a default timeout.
 type Resolver struct {
 	Directory identity.Directory
 }
@@ -21,7 +23,7 @@ func (r *Resolver) ResolveHandle(ctx context.Context, rawHandle string) (*identi
 		return nil, fmt.Errorf("parse handle %q: %w", rawHandle, err)
 	}
 
-	resolveCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	resolveCtx, cancel := context.WithTimeout(ctx, resolveTimeout)
 	defer cancel()
 
 	ident, err := r.Directory.LookupHandle(resolveCtx, handle)
@@ -38,7 +40,7 @@ func (r *Resolver) ResolveDID(ctx context.Context, didStr string) (*identity.Ide
 		return nil, fmt.Errorf("parse DID %q: %w", didStr, err)
 	}
 
-	resolveCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	resolveCtx, cancel := context.WithTimeout(ctx, resolveTimeout)
 	defer cancel()
 
 	ident, err := r.Directory.LookupDID(resolveCtx, did)
