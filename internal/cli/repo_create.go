@@ -69,7 +69,11 @@ Requires authentication (run "tg auth login" first).`,
 		fmt.Printf("Created repository %s/%s\n", handle, args[0])
 
 		if repoCreateClone {
-			if err := gitutil.CloneRepo(ctx, handle, args[0], args[0]); err != nil {
+			if err := gitutil.CloneRepo(ctx, gitutil.CloneRepoParams{
+				Handle:  handle,
+				Repo:    args[0],
+				RepoDir: args[0],
+			}); err != nil {
 				return fmt.Errorf("clone new repository: %w", err)
 			}
 		}

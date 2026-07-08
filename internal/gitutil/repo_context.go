@@ -7,6 +7,14 @@ import (
 	"strings"
 )
 
+// tangledSSHPrefix is the SSH remote prefix for Tangled repositories.
+const tangledSSHPrefix = "git@tangled.org:"
+
+// tangledRemoteURL builds the SSH clone/push URL for a Tangled repo.
+func tangledRemoteURL(handle, repo string) string {
+	return tangledSSHPrefix + handle + "/" + repo
+}
+
 // RepoContext holds the handle and repo name parsed from a git remote URL.
 type RepoContext struct {
 	Handle string
@@ -24,15 +32,14 @@ func DetectRepoFromCWD(ctx context.Context) (*RepoContext, error) {
 
 	url := strings.TrimSpace(string(output))
 
-	prefix := "git@tangled.org:"
-	if !strings.HasPrefix(url, prefix) {
+	if !strings.HasPrefix(url, tangledSSHPrefix) {
 		return nil, fmt.Errorf(
 			"remote URL %q does not look like a Tangled repo (expected %s<handle>/<repo>)",
-			url, prefix,
+			url, tangledSSHPrefix,
 		)
 	}
 
-	path := strings.TrimPrefix(url, prefix)
+	path := strings.TrimPrefix(url, tangledSSHPrefix)
 	parts := strings.SplitN(path, "/", 2)
 	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
 		return nil, fmt.Errorf("could not parse handle/repo from %q", url)

@@ -28,7 +28,11 @@ The default destination is the repository name.`,
 		}
 
 		fmt.Printf("Cloning %s/%s into %s...\n", handle, repo, dest)
-		if err := gitutil.CloneRepo(ctx, handle, repo, dest); err != nil {
+		if err := gitutil.CloneRepo(ctx, gitutil.CloneRepoParams{
+			Handle:  handle,
+			Repo:    repo,
+			RepoDir: dest,
+		}); err != nil {
 			return fmt.Errorf("clone %q: %w", args[0], err)
 		}
 		return nil

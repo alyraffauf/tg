@@ -23,7 +23,7 @@ type CheckoutPullParams struct {
 // CheckoutPull fetches the target branch as detached HEAD and applies
 // the PR's gzipped patch blob on top, all inside params.RepoDir.
 func CheckoutPull(ctx context.Context, params CheckoutPullParams) error {
-	fetchURL := fmt.Sprintf("git@tangled.org:%s/%s", params.TargetHandle, params.TargetRepo)
+	fetchURL := tangledRemoteURL(params.TargetHandle, params.TargetRepo)
 	if err := runIn(params.RepoDir, ctx, "git", "fetch", fetchURL, params.TargetBranch); err != nil {
 		return fmt.Errorf("fetch target branch: %w", err)
 	}
