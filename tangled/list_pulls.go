@@ -6,7 +6,7 @@ import (
 	"fmt"
 
 	"github.com/bluesky-social/indigo/atproto/atdata"
-	"github.com/bluesky-social/indigo/xrpc"
+	"github.com/bluesky-social/indigo/atproto/syntax"
 )
 
 type PullRecord struct {
@@ -86,7 +86,7 @@ func (t *Tangled) ListPulls(ctx context.Context, repoDid string, opts PullListOp
 	}
 
 	var out PullList
-	err := t.Client.Do(ctx, xrpc.Query, "", "sh.tangled.repo.listPulls", params, nil, &out)
+	err := t.Client.Get(ctx, syntax.NSID("sh.tangled.repo.listPulls"), params, &out)
 	if err != nil {
 		return nil, fmt.Errorf("list PRs for %q: %w", repoDid, err)
 	}

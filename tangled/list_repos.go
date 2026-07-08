@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/bluesky-social/indigo/xrpc"
+	"github.com/bluesky-social/indigo/atproto/syntax"
 )
 
 type RepoList struct {
@@ -14,14 +14,10 @@ type RepoList struct {
 
 func (t *Tangled) ListRepos(ctx context.Context, ownerDid string) (*RepoList, error) {
 	var repos RepoList
-	err := t.Client.Do(ctx,
-		xrpc.Query, "", "sh.tangled.repo.listRepos", map[string]any{
-			"subject": ownerDid,
-			"limit":   100,
-		},
-		nil,
-		&repos,
-	)
+	err := t.Client.Get(ctx, syntax.NSID("sh.tangled.repo.listRepos"), map[string]any{
+		"subject": ownerDid,
+		"limit":   100,
+	}, &repos)
 	if err != nil {
 		return nil, fmt.Errorf("list tangled repos for %q: %w", ownerDid, err)
 	}

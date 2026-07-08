@@ -67,23 +67,26 @@ func resolveTarget(ctx context.Context, args []string) (string, string, error) {
 	return rc.Handle, rc.Repo, nil
 }
 
-// findRepoDid resolves a handle to its owner DID, lists their repos,
-// and returns the repoDid of the matching repo. Matches by the Name
-// field, falling back to the rkey in the at:// URI when Name is empty.
+// findRepoDid resolves handle/repo to the repo's repoDid, which listIssues is
+// keyed by. It looks the record up directly by name (current schema uses the
+// name as the rkey), falling back to a listing for legacy repos whose rkey is a
+// TID with the name in the body.
 func findRepoDid(ctx context.Context, handle, repo string) (string, error) {
 	ident, err := resolver.ResolveHandle(ctx, handle)
 	if err != nil {
 		return "", fmt.Errorf("resolve handle %q: %w", handle, err)
 	}
 
-	repos, err := client.ListRepos(ctx, ident.DID.String())
-	if err != nil {
-		return "", fmt.Errorf("list repos for %q: %w", handle, err)
+	repoURI := fmt.Sprintf("at://%s/sh.tangled.repo/%s", ident.DID, repo)
+	if got, err := client.GetRepo(ctx, repoURI); err == nil {
+		return got.Value.RepoDid, nil
 	}
 
-	for _, item := range repos.Items {
-		if item.Value.Name == repo || strings.HasSuffix(item.URI, "/"+repo) {
-			return item.Value.RepoDid, nil
+	if repos, err := client.ListRepos(ctx, ident.DID.String()); err == nil {
+		for _, item := range repos.Items {
+			if item.Value.Name == repo || strings.HasSuffix(item.URI, "/"+repo) {
+				return item.Value.RepoDid, nil
+			}
 		}
 	}
 

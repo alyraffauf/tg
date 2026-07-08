@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/bluesky-social/indigo/xrpc"
+	"github.com/bluesky-social/indigo/atproto/syntax"
 )
 
 // RepoRecord is the value of a sh.tangled.repo lexicon record.
@@ -30,15 +30,7 @@ type Repo struct {
 
 func (t *Tangled) GetRepo(ctx context.Context, repoURI string) (*Repo, error) {
 	var repo Repo
-	err := t.Client.Do(
-		ctx,
-		xrpc.Query,
-		"",
-		"sh.tangled.repo.getRepo",
-		map[string]any{"repo": repoURI},
-		nil,
-		&repo,
-	)
+	err := t.Client.Get(ctx, syntax.NSID("sh.tangled.repo.getRepo"), map[string]any{"repo": repoURI}, &repo)
 	if err != nil {
 		return nil, fmt.Errorf("get tangled repo %q: %w", repoURI, err)
 	}

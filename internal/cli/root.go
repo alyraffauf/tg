@@ -7,8 +7,8 @@ import (
 
 	"github.com/alyraffauf/tg/atproto"
 	"github.com/alyraffauf/tg/tangled"
+	"github.com/bluesky-social/indigo/atproto/atclient"
 	"github.com/bluesky-social/indigo/atproto/identity"
-	"github.com/bluesky-social/indigo/xrpc"
 	"github.com/spf13/cobra"
 )
 
@@ -20,7 +20,7 @@ const (
 var (
 	resolver = &atproto.Resolver{Directory: identity.DefaultDirectory()}
 	client   = &tangled.Tangled{
-		Client: &xrpc.Client{Host: "https://api.tangled.org"},
+		Client: &atclient.APIClient{Host: "https://api.tangled.org"},
 		Logger: slog.Default(),
 	}
 	auth *atproto.AuthManager

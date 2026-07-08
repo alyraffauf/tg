@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/bluesky-social/indigo/xrpc"
+	"github.com/bluesky-social/indigo/atproto/syntax"
 )
 
 type IssueRecord struct {
@@ -59,7 +59,7 @@ func (t *Tangled) ListIssues(ctx context.Context, repoDid string, opts IssueList
 	}
 
 	var out IssueList
-	err := t.Client.Do(ctx, xrpc.Query, "", "sh.tangled.repo.listIssues", params, nil, &out)
+	err := t.Client.Get(ctx, syntax.NSID("sh.tangled.repo.listIssues"), params, &out)
 	if err != nil {
 		return nil, fmt.Errorf("list issues for %q: %w", repoDid, err)
 	}
