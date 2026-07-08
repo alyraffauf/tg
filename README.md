@@ -26,6 +26,15 @@ go install github.com/alyraffauf/tg/cmd/tg@latest
 # List repositories for a user
 tg repo list microcosm.blue
 
+# Create a repository (requires `tg auth login`)
+tg repo create my-tool --description "A small tool"
+
+# Create and clone it into the current directory
+tg repo create my-tool --clone
+
+# Create and push an existing local repo (at the given path) to the new remote
+tg repo create my-tool --push=.
+
 # Clone a repository
 tg repo clone microcosm.blue/microcosm-rs
 

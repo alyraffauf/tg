@@ -51,8 +51,9 @@ func init() {
 	prCmd.AddCommand(prCheckoutCmd)
 
 	rootCmd.AddCommand(repoCmd)
-	repoCmd.AddCommand(repoListCmd)
 	repoCmd.AddCommand(repoCloneCmd)
+	repoCmd.AddCommand(repoCreateCmd)
+	repoCmd.AddCommand(repoListCmd)
 }
 
 func initAuth() {
