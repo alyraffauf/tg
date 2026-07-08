@@ -79,4 +79,4 @@ tg pr checkout 3mporttfqez22
 
 ## License
 
-See [LICENSE.md].
+See [LICENSE](LICENSE.md).
