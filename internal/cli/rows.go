@@ -19,15 +19,6 @@ type listRow struct {
 	updated string
 }
 
-// resolveAuthor returns the handle for didStr, falling back to the
-// raw DID string on resolution failure.
-func resolveAuthor(ctx context.Context, didStr string) string {
-	if ident, err := resolver.ResolveDID(ctx, didStr); err == nil {
-		return ident.Handle.String()
-	}
-	return didStr
-}
-
 // shortDate trims an ISO 8601 timestamp to its YYYY-MM-DD prefix.
 func shortDate(timestamp string) string {
 	if len(timestamp) > 10 {
@@ -64,4 +55,16 @@ func extractRKey(uri string) string {
 		return uri[idx+1:]
 	}
 	return uri
+}
+
+// resolveAuthor resolves a DID to an author, falling back to the raw
+// DID string for Handle if resolution fails.
+func resolveAuthor(ctx context.Context, did string) author {
+	result := author{DID: did}
+	if ident, err := resolver.ResolveDID(ctx, did); err == nil {
+		result.Handle = ident.Handle.String()
+	} else {
+		result.Handle = did
+	}
+	return result
 }

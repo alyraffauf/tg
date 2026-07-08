@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/alyraffauf/tg/internal/gitutil"
 	"github.com/spf13/cobra"
@@ -27,7 +28,7 @@ The default destination is the repository name.`,
 			dest = args[1]
 		}
 
-		fmt.Printf("Cloning %s/%s into %s...\n", handle, repo, dest)
+		fmt.Fprintf(os.Stderr, "Cloning %s/%s into %s...\n", handle, repo, dest)
 		if err := gitutil.CloneRepo(ctx, gitutil.CloneRepoParams{
 			Handle:  handle,
 			Repo:    repo,
@@ -35,6 +36,14 @@ The default destination is the repository name.`,
 		}); err != nil {
 			return fmt.Errorf("clone %q: %w", args[0], err)
 		}
-		return nil
+
+		result := repoCloneResult{
+			Handle:      handle,
+			Repo:        repo,
+			Destination: dest,
+		}
+		return output(result, func(clone repoCloneResult) {
+			fmt.Printf("Cloned %s/%s into %s\n", clone.Handle, clone.Repo, clone.Destination)
+		})
 	},
 }

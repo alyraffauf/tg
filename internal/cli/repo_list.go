@@ -38,8 +38,8 @@ remote URL of the git repository in the current directory.`,
 			return fmt.Errorf("list repos for %q: %w", handle, err)
 		}
 
-		renderRepos(buildRepoRows(repos.Items))
-		return nil
+		items := buildRepoItems(repos.Items)
+		return output(items, renderRepoList)
 	},
 }
 
@@ -73,38 +73,33 @@ func resolveHandleOrSelf(ctx context.Context, args []string) (string, error) {
 	return ident.Handle.String(), nil
 }
 
-type repoRow struct {
-	name        string
-	knot        string
-	description string
-	created     string
-}
-
-func buildRepoRows(items []tangled.Repo) []repoRow {
-	rows := make([]repoRow, 0, len(items))
+func buildRepoItems(items []tangled.Repo) []repoItem {
+	result := make([]repoItem, 0, len(items))
 
 	for _, item := range items {
 		name := item.Value.Name
 		if name == "" {
-			// Fall back to the rkey from the at:// URI.
+			// Fall back to the rkey segment of the at:// URI.
 			if idx := strings.LastIndex(item.URI, "/"); idx != -1 {
 				name = item.URI[idx+1:]
 			}
 		}
 
-		rows = append(rows, repoRow{
-			name:        name,
-			knot:        item.Value.Knot,
-			description: item.Value.Description,
-			created:     shortDate(item.Value.CreatedAt),
+		result = append(result, repoItem{
+			Name:        name,
+			URI:         item.URI,
+			Knot:        item.Value.Knot,
+			Description: item.Value.Description,
+			CreatedAt:   item.Value.CreatedAt,
+			RepoDid:     item.Value.RepoDid,
 		})
 	}
 
-	return rows
+	return result
 }
 
-func renderRepos(rows []repoRow) {
-	if len(rows) == 0 {
+func renderRepoList(items []repoItem) {
+	if len(items) == 0 {
 		fmt.Println("No repositories found.")
 		return
 	}
@@ -112,8 +107,8 @@ func renderRepos(rows []repoRow) {
 	tw := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', tabwriter.TabIndent)
 	fmt.Fprintln(tw, "NAME\tKNOT\tDESCRIPTION\tCREATED")
 
-	for _, row := range rows {
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", row.name, row.knot, row.description, row.created)
+	for _, item := range items {
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", item.Name, item.Knot, item.Description, shortDate(item.CreatedAt))
 	}
 	tw.Flush()
 }

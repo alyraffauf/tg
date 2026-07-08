@@ -66,7 +66,12 @@ Requires authentication (run "tg auth login" first).`,
 		}
 
 		handle := ownerHandle(ctx, did)
-		fmt.Printf("Created repository %s/%s\n", handle, args[0])
+		result := repoCreateResult{
+			Handle: handle,
+			Name:   args[0],
+			URI:    uri,
+			Knot:   knotHost,
+		}
 
 		if repoCreateClone {
 			if err := gitutil.CloneRepo(ctx, gitutil.CloneRepoParams{
@@ -76,6 +81,7 @@ Requires authentication (run "tg auth login" first).`,
 			}); err != nil {
 				return fmt.Errorf("clone new repository: %w", err)
 			}
+			result.Cloned = true
 		}
 		if repoCreatePushPath != "" {
 			if err := pushToNewRepo(ctx, atClient, pushToNewRepoInput{
@@ -88,8 +94,18 @@ Requires authentication (run "tg auth login" first).`,
 			}); err != nil {
 				return err
 			}
+			result.Pushed = true
 		}
-		return nil
+
+		return output(result, func(repo repoCreateResult) {
+			fmt.Printf("Created repository %s/%s\n", repo.Handle, repo.Name)
+			if repo.Cloned {
+				fmt.Printf("Cloned into %s\n", repo.Name)
+			}
+			if repo.Pushed {
+				fmt.Printf("Pushed to %s\n", repo.Name)
+			}
+		})
 	},
 }
 
@@ -163,7 +179,7 @@ func pushToNewRepo(ctx context.Context, atClient *atproto.ATProto, in pushToNewR
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "warning: could not set default branch: %v\n", err)
 	} else {
-		fmt.Printf("Set default branch to %s\n", branch)
+		fmt.Fprintf(os.Stderr, "Set default branch to %s\n", branch)
 	}
 	if err := gitutil.PushNewRepo(ctx, gitutil.PushNewRepoParams{
 		Dir:        in.PushPath,

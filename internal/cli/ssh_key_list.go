@@ -43,12 +43,33 @@ If no argument is given, lists the authenticated user's keys
 			return fmt.Errorf("list SSH keys for %q: %w", handle, err)
 		}
 
-		renderSSHKeys(out.Records)
-		return nil
+		items := buildSSHKeyItems(out.Records)
+		return output(items, renderSSHKeyList)
 	},
 }
 
-func renderSSHKeys(items []atproto.RecordItem) {
+func buildSSHKeyItems(records []atproto.RecordItem) []sshKeyItem {
+	items := make([]sshKeyItem, 0, len(records))
+	for _, rec := range records {
+		var key sshKeyRecord
+		data, err := json.Marshal(rec.Value)
+		if err != nil {
+			continue
+		}
+		if err := json.Unmarshal(data, &key); err != nil {
+			continue
+		}
+		items = append(items, sshKeyItem{
+			Name:      key.Name,
+			Key:       key.Key,
+			CreatedAt: key.CreatedAt,
+			URI:       rec.URI,
+		})
+	}
+	return items
+}
+
+func renderSSHKeyList(items []sshKeyItem) {
 	if len(items) == 0 {
 		fmt.Println("No SSH keys found.")
 		return
@@ -58,15 +79,7 @@ func renderSSHKeys(items []atproto.RecordItem) {
 	fmt.Fprintln(tw, "NAME\tKEY\tADDED")
 
 	for _, item := range items {
-		var rec sshKeyRecord
-		data, err := json.Marshal(item.Value)
-		if err != nil {
-			continue
-		}
-		if err := json.Unmarshal(data, &rec); err != nil {
-			continue
-		}
-		fmt.Fprintf(tw, "%s\t%s\t%s\n", rec.Name, rec.Key, shortDate(rec.CreatedAt))
+		fmt.Fprintf(tw, "%s\t%s\t%s\n", item.Name, item.Key, shortDate(item.CreatedAt))
 	}
 	tw.Flush()
 }

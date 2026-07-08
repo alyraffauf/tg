@@ -24,6 +24,8 @@ var (
 		Logger: slog.Default(),
 	}
 	auth *atproto.AuthManager
+
+	jsonOutput bool
 )
 
 var rootCmd = &cobra.Command{
@@ -36,6 +38,8 @@ func Execute() error {
 }
 
 func init() {
+	rootCmd.PersistentFlags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
+
 	initAuth()
 
 	rootCmd.AddCommand(authCmd)

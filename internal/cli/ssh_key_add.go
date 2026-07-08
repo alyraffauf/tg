@@ -77,8 +77,10 @@ Requires authentication (run "tg auth login" first).`,
 			return fmt.Errorf("add SSH key: %w", err)
 		}
 
-		fmt.Printf("Added SSH key %q (%s)\n", title, uri)
-		return nil
+		result := sshKeyAddResult{Name: title, URI: uri}
+		return output(result, func(added sshKeyAddResult) {
+			fmt.Printf("Added SSH key %q (%s)\n", added.Name, added.URI)
+		})
 	},
 }
 

@@ -37,16 +37,13 @@ If no argument is given, the command detects the repository from the
 			return fmt.Errorf("list PRs for %q: %w", repo, err)
 		}
 
-		rows := buildPullRows(ctx, pulls.Items)
-		renderRows(rows, "No pull requests found.")
-		return nil
+		items := buildPullItems(ctx, pulls.Items)
+		return output(items, renderPullList)
 	},
 }
 
-// buildPullRows resolves each PR author's DID to a handle, falling back
-// to the raw DID on resolution failure.
-func buildPullRows(ctx context.Context, items []tangled.PullListItem) []listRow {
-	rows := make([]listRow, 0, len(items))
+func buildPullItems(ctx context.Context, items []tangled.PullListItem) []pullItem {
+	result := make([]pullItem, 0, len(items))
 
 	for _, item := range items {
 		var record tangled.PullRecord
@@ -64,14 +61,33 @@ func buildPullRows(ctx context.Context, items []tangled.PullListItem) []listRow 
 			title = "(no title)"
 		}
 
-		rows = append(rows, listRow{
-			rkey:    extractRKey(item.URI),
-			title:   title,
-			state:   item.State,
-			author:  resolveAuthor(ctx, extractDID(item.URI)),
-			updated: shortDate(updated),
+		result = append(result, pullItem{
+			Rkey:         extractRKey(item.URI),
+			URI:          item.URI,
+			Title:        title,
+			State:        item.State,
+			Author:       resolveAuthor(ctx, extractDID(item.URI)),
+			CreatedAt:    record.CreatedAt,
+			UpdatedAt:    updated,
+			CommentCount: item.CommentCount,
+			SourceBranch: record.Source.Branch,
+			TargetBranch: record.Target.Branch,
 		})
 	}
 
-	return rows
+	return result
+}
+
+func renderPullList(items []pullItem) {
+	rows := make([]listRow, 0, len(items))
+	for _, item := range items {
+		rows = append(rows, listRow{
+			rkey:    item.Rkey,
+			title:   item.Title,
+			state:   item.State,
+			author:  item.Author.Handle,
+			updated: shortDate(item.UpdatedAt),
+		})
+	}
+	renderRows(rows, "No pull requests found.")
 }

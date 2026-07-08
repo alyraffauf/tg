@@ -49,13 +49,21 @@ directory's git origin remote.`,
 			return err
 		}
 
-		fmt.Printf("Title:   %s\n", issue.Title)
-		fmt.Printf("Author:  %s\n", resolveAuthor(ctx, authorDID))
-		fmt.Printf("Created: %s\n", issue.CreatedAt)
-		if issue.Body != "" {
-			fmt.Printf("\n%s\n", issue.Body)
+		result := issueViewResult{
+			Rkey:      rkey,
+			Title:     issue.Title,
+			Body:      issue.Body,
+			Author:    resolveAuthor(ctx, authorDID),
+			CreatedAt: issue.CreatedAt,
 		}
-		return nil
+		return output(result, func(view issueViewResult) {
+			fmt.Printf("Title:   %s\n", view.Title)
+			fmt.Printf("Author:  %s\n", view.Author.Handle)
+			fmt.Printf("Created: %s\n", view.CreatedAt)
+			if view.Body != "" {
+				fmt.Printf("\n%s\n", view.Body)
+			}
+		})
 	},
 }
 

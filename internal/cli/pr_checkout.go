@@ -77,8 +77,14 @@ Must be run from inside a cloned Tangled repository.`,
 			return fmt.Errorf("checkout pull %q: %w", prRKey, err)
 		}
 
-		fmt.Printf("Checked out PR %s as detached HEAD in %s\n", prRKey, repoDir)
-		return nil
+		result := prCheckoutResult{
+			Rkey:      prRKey,
+			Branch:    pr.Target.Branch,
+			Directory: repoDir,
+		}
+		return output(result, func(checkout prCheckoutResult) {
+			fmt.Printf("Checked out PR %s as detached HEAD in %s\n", checkout.Rkey, checkout.Directory)
+		})
 	},
 }
 

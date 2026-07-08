@@ -39,9 +39,8 @@ If no argument is given, the command detects the repository from the
 			return fmt.Errorf("list issues for %q: %w", repo, err)
 		}
 
-		rows := buildIssueRows(ctx, issues.Items)
-		renderRows(rows, "No issues found.")
-		return nil
+		items := buildIssueItems(ctx, issues.Items)
+		return output(items, renderIssueList)
 	},
 }
 
@@ -93,10 +92,8 @@ func findRepoDid(ctx context.Context, handle, repo string) (string, error) {
 	return "", fmt.Errorf("repo %q not found for handle %q", repo, handle)
 }
 
-// buildIssueRows resolves each issue author's DID to a handle, falling
-// back to the raw DID on resolution failure.
-func buildIssueRows(ctx context.Context, items []tangled.IssueListItem) []listRow {
-	rows := make([]listRow, 0, len(items))
+func buildIssueItems(ctx context.Context, items []tangled.IssueListItem) []issueItem {
+	result := make([]issueItem, 0, len(items))
 
 	for _, item := range items {
 		var record tangled.IssueRecord
@@ -114,14 +111,31 @@ func buildIssueRows(ctx context.Context, items []tangled.IssueListItem) []listRo
 			title = "(no title)"
 		}
 
-		rows = append(rows, listRow{
-			rkey:    extractRKey(item.URI),
-			title:   title,
-			state:   item.State,
-			author:  resolveAuthor(ctx, extractDID(item.URI)),
-			updated: shortDate(updated),
+		result = append(result, issueItem{
+			Rkey:         extractRKey(item.URI),
+			URI:          item.URI,
+			Title:        title,
+			State:        item.State,
+			Author:       resolveAuthor(ctx, extractDID(item.URI)),
+			CreatedAt:    record.CreatedAt,
+			UpdatedAt:    updated,
+			CommentCount: item.CommentCount,
 		})
 	}
 
-	return rows
+	return result
+}
+
+func renderIssueList(items []issueItem) {
+	rows := make([]listRow, 0, len(items))
+	for _, item := range items {
+		rows = append(rows, listRow{
+			rkey:    item.Rkey,
+			title:   item.Title,
+			state:   item.State,
+			author:  item.Author.Handle,
+			updated: shortDate(item.UpdatedAt),
+		})
+	}
+	renderRows(rows, "No issues found.")
 }
