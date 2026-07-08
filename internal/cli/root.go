@@ -50,6 +50,7 @@ func init() {
 	rootCmd.AddCommand(prCmd)
 	prCmd.AddCommand(prListCmd)
 	prCmd.AddCommand(prCheckoutCmd)
+	prCmd.AddCommand(prViewCmd)
 
 	rootCmd.AddCommand(repoCmd)
 	repoCmd.AddCommand(repoCloneCmd)
