@@ -82,9 +82,6 @@ Must be run from inside a cloned Tangled repository.`,
 	},
 }
 
-// findPullByRKey searches a pull list for the item matching rkey,
-// decodes its record, and returns the record plus the author DID
-// extracted from the item's URI.
 func findPullByRKey(items []tangled.PullListItem, rkey string) (*tangled.PullRecord, string, error) {
 	for _, item := range items {
 		if !strings.HasSuffix(item.URI, "/"+rkey) {

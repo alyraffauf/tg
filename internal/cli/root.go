@@ -45,6 +45,7 @@ func init() {
 
 	rootCmd.AddCommand(issueCmd)
 	issueCmd.AddCommand(issueListCmd)
+	issueCmd.AddCommand(issueViewCmd)
 
 	rootCmd.AddCommand(prCmd)
 	prCmd.AddCommand(prListCmd)

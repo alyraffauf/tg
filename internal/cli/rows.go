@@ -12,6 +12,7 @@ const defaultListLimit int64 = 100
 
 // listRow is display-ready data for one issue or PR.
 type listRow struct {
+	rkey    string
 	title   string
 	state   string
 	author  string
@@ -44,10 +45,10 @@ func renderRows(rows []listRow, emptyMessage string) {
 	}
 
 	tw := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', tabwriter.TabIndent)
-	fmt.Fprintln(tw, "TITLE\tSTATE\tAUTHOR\tUPDATED")
+	fmt.Fprintln(tw, "RKEY\tTITLE\tSTATE\tAUTHOR\tUPDATED")
 
 	for _, row := range rows {
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", row.title, row.state, row.author, row.updated)
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", row.rkey, row.title, row.state, row.author, row.updated)
 	}
 	tw.Flush()
 }
@@ -56,4 +57,11 @@ func extractDID(uri string) string {
 	uri = strings.TrimPrefix(uri, "at://")
 	did, _, _ := strings.Cut(uri, "/")
 	return did
+}
+
+func extractRKey(uri string) string {
+	if idx := strings.LastIndex(uri, "/"); idx != -1 {
+		return uri[idx+1:]
+	}
+	return uri
 }

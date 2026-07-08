@@ -115,6 +115,7 @@ func buildIssueRows(ctx context.Context, items []tangled.IssueListItem) []listRo
 		}
 
 		rows = append(rows, listRow{
+			rkey:    extractRKey(item.URI),
 			title:   title,
 			state:   item.State,
 			author:  resolveAuthor(ctx, extractDID(item.URI)),
