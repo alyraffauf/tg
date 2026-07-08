@@ -20,7 +20,7 @@ const (
 var (
 	resolver = &atproto.Resolver{Directory: identity.DefaultDirectory()}
 	client   = &tangled.Tangled{
-		Client: &atclient.APIClient{Host: "https://api.tangled.org"},
+		Client: &atclient.APIClient{Host: "https://bobbin.klbr.net"},
 		Logger: slog.Default(),
 	}
 	auth *atproto.AuthManager
@@ -54,6 +54,10 @@ func init() {
 	repoCmd.AddCommand(repoCloneCmd)
 	repoCmd.AddCommand(repoCreateCmd)
 	repoCmd.AddCommand(repoListCmd)
+
+	rootCmd.AddCommand(sshKeyCmd)
+	sshKeyCmd.AddCommand(sshKeyAddCmd)
+	sshKeyCmd.AddCommand(sshKeyListCmd)
 }
 
 func initAuth() {

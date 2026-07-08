@@ -57,6 +57,22 @@ func resolveHandleArg(ctx context.Context, args []string) (string, error) {
 	return rc.Handle, nil
 }
 
+// resolveHandleOrSelf returns the handle from an explicit argument, or the
+// authenticated user's handle. It does not fall back to CWD git detection.
+func resolveHandleOrSelf(ctx context.Context, args []string) (string, error) {
+	if len(args) == 1 {
+		return args[0], nil
+	}
+	if auth == nil || !auth.IsAuthenticated() {
+		return "", fmt.Errorf("not logged in; provide a handle or run \"tg auth login\"")
+	}
+	ident, err := resolver.ResolveDID(ctx, auth.CurrentDID().String())
+	if err != nil {
+		return "", fmt.Errorf("resolve your DID: %w", err)
+	}
+	return ident.Handle.String(), nil
+}
+
 type repoRow struct {
 	name        string
 	knot        string

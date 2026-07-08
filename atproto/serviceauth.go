@@ -5,28 +5,24 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/bluesky-social/indigo/atproto/atclient"
 	"github.com/bluesky-social/indigo/atproto/syntax"
 )
 
-const serviceAuthTTL = 60 * time.Second
+const SERVICE_AUTH_TTL = 60 * time.Second
 
 // GetServiceAuth mints a short-lived service-auth JWT scoped to one lexicon
 // method on one audience (e.g. a knot's did:web). Present it to that audience
 // as a Bearer token.
-func GetServiceAuth(ctx context.Context, pds *atclient.APIClient, audience, lexiconMethod string) (string, error) {
-	if pds == nil {
-		return "", fmt.Errorf("PDS client is required")
-	}
+func (a *ATProto) GetServiceAuth(ctx context.Context, audience, lexiconMethod string) (string, error) {
 	var out struct {
 		Token string `json:"token"`
 	}
 	params := map[string]any{
 		"aud": audience,
-		"exp": time.Now().Add(serviceAuthTTL).Unix(),
+		"exp": time.Now().Add(SERVICE_AUTH_TTL).Unix(),
 		"lxm": lexiconMethod,
 	}
-	if err := pds.Get(ctx, syntax.NSID("com.atproto.server.getServiceAuth"), params, &out); err != nil {
+	if err := a.Client.Get(ctx, syntax.NSID("com.atproto.server.getServiceAuth"), params, &out); err != nil {
 		return "", fmt.Errorf("get service auth for %q: %w", audience, err)
 	}
 	if out.Token == "" {

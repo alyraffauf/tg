@@ -10,7 +10,6 @@ import (
 	"github.com/alyraffauf/tg/internal/gitutil"
 	"github.com/alyraffauf/tg/knot"
 	"github.com/alyraffauf/tg/tangled"
-	"github.com/bluesky-social/indigo/atproto/atclient"
 	"github.com/spf13/cobra"
 )
 
@@ -48,14 +47,15 @@ Requires authentication (run "tg auth login" first).`,
 		if err != nil {
 			return fmt.Errorf("get auth client: %w", err)
 		}
-		did := pds.AccountDID.String()
+		atClient := &atproto.ATProto{Client: pds}
+		did := auth.CurrentDID().String()
 
 		knotHost := repoCreateKnot
 		if knotHost == "" {
 			knotHost = knot.DefaultKnot
 		}
 
-		uri, err := provisionRepo(ctx, pds, provisionRepoInput{
+		uri, err := provisionRepo(ctx, atClient, provisionRepoInput{
 			KnotHost:    knotHost,
 			OwnerDID:    did,
 			Name:        args[0],
@@ -78,7 +78,7 @@ Requires authentication (run "tg auth login" first).`,
 			}
 		}
 		if repoCreatePushPath != "" {
-			if err := pushToNewRepo(ctx, pds, pushToNewRepoInput{
+			if err := pushToNewRepo(ctx, atClient, pushToNewRepoInput{
 				KnotHost:   knotHost,
 				RepoURI:    uri,
 				Handle:     handle,
@@ -109,9 +109,9 @@ type provisionRepoInput struct {
 }
 
 // provisionRepo creates the repo on the knot and writes the sh.tangled.repo
-// record to the PDS.
-func provisionRepo(ctx context.Context, pds *atclient.APIClient, in provisionRepoInput) (string, error) {
-	token, err := atproto.GetServiceAuth(ctx, pds, "did:web:"+in.KnotHost, "sh.tangled.repo.create")
+// record to the user's PDS.
+func provisionRepo(ctx context.Context, atClient *atproto.ATProto, in provisionRepoInput) (string, error) {
+	token, err := atClient.GetServiceAuth(ctx, "did:web:"+in.KnotHost, "sh.tangled.repo.create")
 	if err != nil {
 		return "", err
 	}
@@ -122,7 +122,6 @@ func provisionRepo(ctx context.Context, pds *atclient.APIClient, in provisionRep
 	if err != nil {
 		return "", err
 	}
-	// Name omitted: it's the rkey, and the AppView derives it from there.
 	record := tangled.RepoRecord{
 		Type:      "sh.tangled.repo",
 		Knot:      in.KnotHost,
@@ -132,7 +131,7 @@ func provisionRepo(ctx context.Context, pds *atclient.APIClient, in provisionRep
 	if in.Description != "" {
 		record.Description = in.Description
 	}
-	uri, _, err := atproto.PutRecord(ctx, pds, atproto.PutRecordInput{
+	uri, _, err := atClient.PutRecord(ctx, atproto.PutRecordInput{
 		Repo:       in.OwnerDID,
 		Collection: "sh.tangled.repo",
 		Rkey:       in.Name,
@@ -153,12 +152,10 @@ type pushToNewRepoInput struct {
 	RemoteName string
 }
 
-// pushToNewRepo sets the default branch to the local repo's current branch,
-// then pushes. Default-branch failure is warned, not fatal. Set before push so
-// the knot's post-receive hook sees pushed == default and skips its PR
-// suggestion.
-func pushToNewRepo(ctx context.Context, pds *atclient.APIClient, in pushToNewRepoInput) error {
-	branch, err := setDefaultBranch(ctx, pds, setDefaultBranchInput{
+// pushToNewRepo sets the default branch then pushes. Default-branch failure is
+// warned, not fatal. Set before push so the knot's hook skips its PR suggestion.
+func pushToNewRepo(ctx context.Context, atClient *atproto.ATProto, in pushToNewRepoInput) error {
+	branch, err := setDefaultBranch(ctx, atClient, setDefaultBranchInput{
 		KnotHost: in.KnotHost,
 		RepoURI:  in.RepoURI,
 		Dir:      in.PushPath,
@@ -186,14 +183,13 @@ type setDefaultBranchInput struct {
 }
 
 // setDefaultBranch repoints the default branch to the local repo's current
-// branch. Mints a fresh token — the create token is lexicon-scoped and won't
-// authorize setDefaultBranch.
-func setDefaultBranch(ctx context.Context, pds *atclient.APIClient, in setDefaultBranchInput) (string, error) {
+// branch. Mints a fresh token because the create token is lexicon-scoped.
+func setDefaultBranch(ctx context.Context, atClient *atproto.ATProto, in setDefaultBranchInput) (string, error) {
 	branch, err := gitutil.CurrentBranch(ctx, in.Dir)
 	if err != nil {
 		return "", err
 	}
-	token, err := atproto.GetServiceAuth(ctx, pds, "did:web:"+in.KnotHost, "sh.tangled.repo.setDefaultBranch")
+	token, err := atClient.GetServiceAuth(ctx, "did:web:"+in.KnotHost, "sh.tangled.repo.setDefaultBranch")
 	if err != nil {
 		return "", err
 	}
@@ -206,7 +202,6 @@ func setDefaultBranch(ctx context.Context, pds *atclient.APIClient, in setDefaul
 	return branch, nil
 }
 
-// ownerHandle resolves an owner DID to a handle, falling back to the DID.
 func ownerHandle(ctx context.Context, did string) string {
 	if ident, err := resolver.ResolveDID(ctx, did); err == nil {
 		return ident.Handle.String()
