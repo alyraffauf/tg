@@ -45,6 +45,10 @@ type ListRecordsOpts struct {
 	Reverse bool
 }
 
+// maxRecordPages caps how many pages ListAllRecords will follow, as a
+// safety net against a server that never returns an empty cursor.
+const maxRecordPages = 1000
+
 // PutRecord writes a record to the PDS, returning its at:// URI and CID.
 func (a *ATProto) PutRecord(ctx context.Context, in PutRecordInput) (uri, cid string, err error) {
 	var out struct {
@@ -89,4 +93,29 @@ func (a *ATProto) ListRecords(ctx context.Context, repo, collection string, opts
 		return nil, fmt.Errorf("list %s records for %q: %w", collection, repo, err)
 	}
 	return &out, nil
+}
+
+// ListAllRecords fetches every record in collection for repo, following
+// pagination cursors until the listing is exhausted. opts.Limit sets the
+// page size; opts.Cursor is ignored since pagination always starts from
+// the first page.
+func (a *ATProto) ListAllRecords(ctx context.Context, repo, collection string, opts ListRecordsOpts) ([]RecordItem, error) {
+	var all []RecordItem
+	cursor := ""
+
+	for range maxRecordPages {
+		opts.Cursor = cursor
+		out, err := a.ListRecords(ctx, repo, collection, opts)
+		if err != nil {
+			return nil, err
+		}
+		all = append(all, out.Records...)
+
+		if out.Cursor == nil || *out.Cursor == "" {
+			return all, nil
+		}
+		cursor = *out.Cursor
+	}
+
+	return nil, fmt.Errorf("exceeded %d pages listing %s records for %q", maxRecordPages, collection, repo)
 }

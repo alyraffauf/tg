@@ -44,10 +44,18 @@ type PatchBlob struct {
 	Size     int64          `json:"size"`
 }
 
+// ListPulls fetches every pull request for repoDid, following pagination
+// cursors until the listing is exhausted.
 func (t *Tangled) ListPulls(ctx context.Context, repoDid string, opts ListOpts) (*List, error) {
-	var out List
-	if err := t.Client.Get(ctx, syntax.NSID("sh.tangled.repo.listPulls"), opts.params(repoDid), &out); err != nil {
+	items, err := fetchAllPages(ctx, func(ctx context.Context, cursor string) ([]ListItem, *string, error) {
+		var page List
+		if err := t.Client.Get(ctx, syntax.NSID("sh.tangled.repo.listPulls"), opts.params(repoDid, cursor), &page); err != nil {
+			return nil, nil, err
+		}
+		return page.Items, page.Cursor, nil
+	})
+	if err != nil {
 		return nil, fmt.Errorf("list PRs for %q: %w", repoDid, err)
 	}
-	return &out, nil
+	return &List{Items: items}, nil
 }

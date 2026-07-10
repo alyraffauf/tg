@@ -1,6 +1,14 @@
 package tangled
 
-import "encoding/json"
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+)
+
+// maxPaginationPages caps how many pages fetchAllPages will follow, as a
+// safety net against a server that never returns an empty cursor.
+const maxPaginationPages = 1000
 
 // ListItem is one item in an issue or pull-request listing.
 type ListItem struct {
@@ -26,8 +34,9 @@ type ListOpts struct {
 	Order  string // "asc" or "desc"
 }
 
-// params builds the XRPC query parameters for subject.
-func (o ListOpts) params(subject string) map[string]any {
+// params builds the XRPC query parameters for subject, requesting the page
+// after cursor (the first page if cursor is empty).
+func (o ListOpts) params(subject, cursor string) map[string]any {
 	params := map[string]any{"subject": subject}
 	if o.Author != "" {
 		params["author"] = o.Author
@@ -43,5 +52,31 @@ func (o ListOpts) params(subject string) map[string]any {
 	if o.Order != "" {
 		params["order"] = o.Order
 	}
+	if cursor != "" {
+		params["cursor"] = cursor
+	}
 	return params
+}
+
+// fetchAllPages calls fetch for successive pages, advancing the cursor it
+// returns, until a page reports no further cursor. It returns every item
+// across all pages combined.
+func fetchAllPages[T any](ctx context.Context, fetch func(ctx context.Context, cursor string) (items []T, nextCursor *string, err error)) ([]T, error) {
+	var all []T
+	cursor := ""
+
+	for page := 0; page < maxPaginationPages; page++ {
+		items, nextCursor, err := fetch(ctx, cursor)
+		if err != nil {
+			return nil, err
+		}
+		all = append(all, items...)
+
+		if nextCursor == nil || *nextCursor == "" {
+			return all, nil
+		}
+		cursor = *nextCursor
+	}
+
+	return nil, fmt.Errorf("exceeded %d pages without reaching the end of the list", maxPaginationPages)
 }

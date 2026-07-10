@@ -36,12 +36,12 @@ If no argument is given, lists the authenticated user's keys
 		}
 
 		atClient := &atproto.ATProto{Client: &atclient.APIClient{Host: pdsURL}}
-		out, err := atClient.ListRecords(ctx, ident.DID.String(), "sh.tangled.publicKey", atproto.ListRecordsOpts{Limit: defaultListLimit})
+		records, err := atClient.ListAllRecords(ctx, ident.DID.String(), "sh.tangled.publicKey", atproto.ListRecordsOpts{Limit: defaultListLimit})
 		if err != nil {
 			return fmt.Errorf("list SSH keys for %q: %w", handle, err)
 		}
 
-		items := buildSSHKeyItems(out.Records)
+		items := buildSSHKeyItems(records)
 		return output(items, renderSSHKeyList)
 	},
 }
