@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/alyraffauf/tg/internal/gitutil"
 	"github.com/alyraffauf/tg/tangled"
@@ -34,17 +33,23 @@ Must be run from inside a cloned Tangled repository.`,
 			return err
 		}
 
-		pulls, err := client.ListPulls(ctx, repoDid, tangled.PullListOpts{
+		pulls, err := client.ListPulls(ctx, repoDid, tangled.ListOpts{
 			Limit: defaultListLimit,
 		})
 		if err != nil {
 			return fmt.Errorf("list pulls for %q: %w", repo, err)
 		}
 
-		pr, authorDID, err := findPullByRKey(pulls.Items, prRKey)
+		found, err := findByRKey(pulls.Items, prRKey, "pull request")
 		if err != nil {
 			return err
 		}
+		var pr tangled.PullRecord
+		if err := json.Unmarshal(found.Value, &pr); err != nil {
+			return fmt.Errorf("decode pull request %q: %w", prRKey, err)
+		}
+		authorDID := extractDID(found.URI)
+
 		if len(pr.Rounds) == 0 {
 			return fmt.Errorf("pull request %q has no rounds", prRKey)
 		}
@@ -86,19 +91,4 @@ Must be run from inside a cloned Tangled repository.`,
 			fmt.Printf("Checked out PR %s as detached HEAD in %s\n", checkout.Rkey, checkout.Directory)
 		})
 	},
-}
-
-func findPullByRKey(items []tangled.PullListItem, rkey string) (*tangled.PullRecord, string, error) {
-	for _, item := range items {
-		if !strings.HasSuffix(item.URI, "/"+rkey) {
-			continue
-		}
-
-		var pr tangled.PullRecord
-		if err := json.Unmarshal(item.Value, &pr); err != nil {
-			return nil, "", fmt.Errorf("decode pull record %q: %w", rkey, err)
-		}
-		return &pr, extractDID(item.URI), nil
-	}
-	return nil, "", fmt.Errorf("pull request %q not found", rkey)
 }

@@ -22,18 +22,9 @@ type author struct {
 	Handle string `json:"handle"`
 }
 
-type issueItem struct {
-	Rkey         string `json:"rkey"`
-	URI          string `json:"uri"`
-	Title        string `json:"title"`
-	State        string `json:"state"`
-	Author       author `json:"author"`
-	CreatedAt    string `json:"createdAt"`
-	UpdatedAt    string `json:"updatedAt,omitempty"`
-	CommentCount int64  `json:"commentCount"`
-}
-
-type pullItem struct {
+// item is a listing entry for an issue or a pull request. SourceBranch and
+// TargetBranch are only populated (and only emitted as JSON) for pulls.
+type item struct {
 	Rkey         string `json:"rkey"`
 	URI          string `json:"uri"`
 	Title        string `json:"title"`
@@ -43,7 +34,7 @@ type pullItem struct {
 	UpdatedAt    string `json:"updatedAt,omitempty"`
 	CommentCount int64  `json:"commentCount"`
 	SourceBranch string `json:"sourceBranch,omitempty"`
-	TargetBranch string `json:"targetBranch"`
+	TargetBranch string `json:"targetBranch,omitempty"`
 }
 
 type repoItem struct {
@@ -63,22 +54,16 @@ type sshKeyItem struct {
 	URI       string `json:"uri"`
 }
 
-type issueViewResult struct {
-	Rkey      string `json:"rkey"`
-	Title     string `json:"title"`
-	Body      string `json:"body,omitempty"`
-	Author    author `json:"author"`
-	CreatedAt string `json:"createdAt"`
-}
-
-type prViewResult struct {
+// viewResult is a single issue or pull request. SourceBranch and
+// TargetBranch are only populated (and only emitted as JSON) for pulls.
+type viewResult struct {
 	Rkey         string `json:"rkey"`
 	Title        string `json:"title"`
 	Body         string `json:"body,omitempty"`
 	Author       author `json:"author"`
 	CreatedAt    string `json:"createdAt"`
 	SourceBranch string `json:"sourceBranch,omitempty"`
-	TargetBranch string `json:"targetBranch"`
+	TargetBranch string `json:"targetBranch,omitempty"`
 }
 
 type repoCreateResult struct {

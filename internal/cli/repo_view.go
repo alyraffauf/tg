@@ -11,7 +11,7 @@ var repoViewCmd = &cobra.Command{
 	Use:   "view <handle/repo>",
 	Short: "View a Tangled repository",
 	Long:  `View details for a Tangled repository.`,
-	Args: cobra.ExactArgs(1),
+	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
 

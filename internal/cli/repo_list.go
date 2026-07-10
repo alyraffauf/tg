@@ -3,9 +3,7 @@ package cli
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
-	"text/tabwriter"
 
 	"github.com/alyraffauf/tg/internal/gitutil"
 	"github.com/alyraffauf/tg/tangled"
@@ -76,23 +74,23 @@ func resolveHandleOrSelf(ctx context.Context, args []string) (string, error) {
 func buildRepoItems(items []tangled.Repo, author string) []repoItem {
 	result := make([]repoItem, 0, len(items))
 
-	for _, item := range items {
-		name := item.Value.Name
+	for _, tangledRepo := range items {
+		name := tangledRepo.Value.Name
 		if name == "" {
 			// Fall back to the rkey segment of the at:// URI.
-			if idx := strings.LastIndex(item.URI, "/"); idx != -1 {
-				name = item.URI[idx+1:]
+			if idx := strings.LastIndex(tangledRepo.URI, "/"); idx != -1 {
+				name = tangledRepo.URI[idx+1:]
 			}
 		}
 
 		result = append(result, repoItem{
 			Name:        name,
-			URI:         item.URI,
+			URI:         tangledRepo.URI,
 			Author:      author,
-			Knot:        item.Value.Knot,
-			Description: item.Value.Description,
-			CreatedAt:   item.Value.CreatedAt,
-			RepoDid:     item.Value.RepoDid,
+			Knot:        tangledRepo.Value.Knot,
+			Description: tangledRepo.Value.Description,
+			CreatedAt:   tangledRepo.Value.CreatedAt,
+			RepoDid:     tangledRepo.Value.RepoDid,
 		})
 	}
 
@@ -100,16 +98,9 @@ func buildRepoItems(items []tangled.Repo, author string) []repoItem {
 }
 
 func renderRepoList(items []repoItem) {
-	if len(items) == 0 {
-		fmt.Println("No repositories found.")
-		return
+	rows := make([][]string, 0, len(items))
+	for _, repo := range items {
+		rows = append(rows, []string{repo.Name, repo.Knot, repo.Description, shortDate(repo.CreatedAt)})
 	}
-
-	tw := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', tabwriter.TabIndent)
-	fmt.Fprintln(tw, "NAME\tKNOT\tDESCRIPTION\tCREATED")
-
-	for _, item := range items {
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", item.Name, item.Knot, item.Description, shortDate(item.CreatedAt))
-	}
-	tw.Flush()
+	renderTable([]string{"NAME", "KNOT", "DESCRIPTION", "CREATED"}, rows, "No repositories found.")
 }

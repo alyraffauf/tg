@@ -1,9 +1,7 @@
 package cli
 
 import (
-	"encoding/json"
 	"fmt"
-	"strings"
 
 	"github.com/alyraffauf/tg/tangled"
 	"github.com/spf13/cobra"
@@ -37,26 +35,30 @@ directory's git origin remote.`,
 			return err
 		}
 
-		issues, err := client.ListIssues(ctx, repoDid, tangled.IssueListOpts{
+		issues, err := client.ListIssues(ctx, repoDid, tangled.ListOpts{
 			Limit: defaultListLimit,
 		})
 		if err != nil {
 			return fmt.Errorf("list issues for %s/%s: %w", handle, repo, err)
 		}
 
-		issue, authorDID, err := findIssueByRKey(issues.Items, rkey)
+		found, err := findByRKey(issues.Items, rkey, "issue")
 		if err != nil {
 			return err
 		}
-
-		result := issueViewResult{
-			Rkey:      rkey,
-			Title:     issue.Title,
-			Body:      issue.Body,
-			Author:    resolveAuthor(ctx, authorDID),
-			CreatedAt: issue.CreatedAt,
+		decoded, err := decodeIssue(found.Value)
+		if err != nil {
+			return fmt.Errorf("decode issue %q: %w", rkey, err)
 		}
-		return output(result, func(view issueViewResult) {
+
+		result := viewResult{
+			Rkey:      rkey,
+			Title:     decoded.Title,
+			Body:      decoded.Body,
+			Author:    resolveAuthor(ctx, extractDID(found.URI)),
+			CreatedAt: decoded.CreatedAt,
+		}
+		return output(result, func(view viewResult) {
 			fmt.Printf("Title:   %s\n", view.Title)
 			fmt.Printf("Author:  %s\n", view.Author.Handle)
 			fmt.Printf("Created: %s\n", view.CreatedAt)
@@ -69,18 +71,4 @@ directory's git origin remote.`,
 
 func init() {
 	issueViewCmd.Flags().StringVarP(&issueViewRepo, "repo", "R", "", "Target repository as handle/repo")
-}
-
-func findIssueByRKey(items []tangled.IssueListItem, rkey string) (*tangled.IssueRecord, string, error) {
-	for _, item := range items {
-		if !strings.HasSuffix(item.URI, "/"+rkey) {
-			continue
-		}
-		var issue tangled.IssueRecord
-		if err := json.Unmarshal(item.Value, &issue); err != nil {
-			return nil, "", fmt.Errorf("decode issue %q: %w", rkey, err)
-		}
-		return &issue, extractDID(item.URI), nil
-	}
-	return nil, "", fmt.Errorf("issue %q not found", rkey)
 }

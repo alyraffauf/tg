@@ -35,28 +35,32 @@ directory's git origin remote.`,
 			return err
 		}
 
-		pulls, err := client.ListPulls(ctx, repoDid, tangled.PullListOpts{
+		pulls, err := client.ListPulls(ctx, repoDid, tangled.ListOpts{
 			Limit: defaultListLimit,
 		})
 		if err != nil {
 			return fmt.Errorf("list PRs for %s/%s: %w", handle, repo, err)
 		}
 
-		pr, authorDID, err := findPullByRKey(pulls.Items, rkey)
+		found, err := findByRKey(pulls.Items, rkey, "pull request")
 		if err != nil {
 			return err
 		}
-
-		result := prViewResult{
-			Rkey:         rkey,
-			Title:        pr.Title,
-			Body:         pr.Body,
-			Author:       resolveAuthor(ctx, authorDID),
-			CreatedAt:    pr.CreatedAt,
-			SourceBranch: pr.Source.Branch,
-			TargetBranch: pr.Target.Branch,
+		decoded, err := decodePull(found.Value)
+		if err != nil {
+			return fmt.Errorf("decode pull request %q: %w", rkey, err)
 		}
-		return output(result, func(view prViewResult) {
+
+		result := viewResult{
+			Rkey:         rkey,
+			Title:        decoded.Title,
+			Body:         decoded.Body,
+			Author:       resolveAuthor(ctx, extractDID(found.URI)),
+			CreatedAt:    decoded.CreatedAt,
+			SourceBranch: decoded.SourceBranch,
+			TargetBranch: decoded.TargetBranch,
+		}
+		return output(result, func(view viewResult) {
 			fmt.Printf("Title:   %s\n", view.Title)
 			fmt.Printf("Author:  %s\n", view.Author.Handle)
 			fmt.Printf("Created: %s\n", view.CreatedAt)

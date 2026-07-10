@@ -1,12 +1,8 @@
 package cli
 
 import (
-	"context"
-	"encoding/json"
 	"fmt"
-	"strings"
 
-	"github.com/alyraffauf/tg/internal/gitutil"
 	"github.com/alyraffauf/tg/tangled"
 	"github.com/spf13/cobra"
 )
@@ -32,110 +28,16 @@ If no argument is given, the command detects the repository from the
 			return err
 		}
 
-		issues, err := client.ListIssues(ctx, repoDid, tangled.IssueListOpts{
+		issues, err := client.ListIssues(ctx, repoDid, tangled.ListOpts{
 			Limit: defaultListLimit,
 		})
 		if err != nil {
 			return fmt.Errorf("list issues for %q: %w", repo, err)
 		}
 
-		items := buildIssueItems(ctx, issues.Items)
-		return output(items, renderIssueList)
+		items := buildItems(ctx, issues.Items, decodeIssue)
+		return output(items, func(items []item) {
+			renderList(items, "No issues found.")
+		})
 	},
-}
-
-func parseHandleRepo(arg string) (string, string, error) {
-	parts := strings.SplitN(arg, "/", 2)
-	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-		return "", "", fmt.Errorf("expected handle/repo, got %q", arg)
-	}
-	return parts[0], parts[1], nil
-}
-
-// resolveTarget returns the handle and repo name from an explicit
-// "handle/repo" argument or by detecting the git remote in the CWD.
-func resolveTarget(ctx context.Context, args []string) (string, string, error) {
-	if len(args) == 1 {
-		return parseHandleRepo(args[0])
-	}
-
-	rc, err := gitutil.DetectRepoFromCWD(ctx)
-	if err != nil {
-		return "", "", fmt.Errorf("detect repo from current directory: %w", err)
-	}
-	return rc.Handle, rc.Repo, nil
-}
-
-// findRepoDid resolves handle/repo to the repo's repoDid, which listIssues is
-// keyed by. It looks the record up directly by name (current schema uses the
-// name as the rkey), falling back to a listing for legacy repos whose rkey is a
-// TID with the name in the body.
-func findRepoDid(ctx context.Context, handle, repo string) (string, error) {
-	ident, err := resolver.ResolveHandle(ctx, handle)
-	if err != nil {
-		return "", fmt.Errorf("resolve handle %q: %w", handle, err)
-	}
-
-	repoURI := fmt.Sprintf("at://%s/sh.tangled.repo/%s", ident.DID, repo)
-	if got, err := client.GetRepo(ctx, repoURI); err == nil {
-		return got.Value.RepoDid, nil
-	}
-
-	if repos, err := client.ListRepos(ctx, ident.DID.String()); err == nil {
-		for _, item := range repos.Items {
-			if item.Value.Name == repo || strings.HasSuffix(item.URI, "/"+repo) {
-				return item.Value.RepoDid, nil
-			}
-		}
-	}
-
-	return "", fmt.Errorf("repo %q not found for handle %q", repo, handle)
-}
-
-func buildIssueItems(ctx context.Context, items []tangled.IssueListItem) []issueItem {
-	result := make([]issueItem, 0, len(items))
-
-	for _, item := range items {
-		var record tangled.IssueRecord
-		if err := json.Unmarshal(item.Value, &record); err != nil {
-			continue
-		}
-
-		updated := item.StateUpdatedAt
-		if updated == "" {
-			updated = record.CreatedAt
-		}
-
-		title := record.Title
-		if title == "" {
-			title = "(no title)"
-		}
-
-		result = append(result, issueItem{
-			Rkey:         extractRKey(item.URI),
-			URI:          item.URI,
-			Title:        title,
-			State:        item.State,
-			Author:       resolveAuthor(ctx, extractDID(item.URI)),
-			CreatedAt:    record.CreatedAt,
-			UpdatedAt:    updated,
-			CommentCount: item.CommentCount,
-		})
-	}
-
-	return result
-}
-
-func renderIssueList(items []issueItem) {
-	rows := make([]listRow, 0, len(items))
-	for _, item := range items {
-		rows = append(rows, listRow{
-			rkey:    item.Rkey,
-			title:   item.Title,
-			state:   item.State,
-			author:  item.Author.Handle,
-			updated: shortDate(item.UpdatedAt),
-		})
-	}
-	renderRows(rows, "No issues found.")
 }

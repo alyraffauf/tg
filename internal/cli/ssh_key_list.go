@@ -3,8 +3,6 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
-	"os"
-	"text/tabwriter"
 
 	"github.com/alyraffauf/tg/atproto"
 	"github.com/bluesky-social/indigo/atproto/atclient"
@@ -70,16 +68,9 @@ func buildSSHKeyItems(records []atproto.RecordItem) []sshKeyItem {
 }
 
 func renderSSHKeyList(items []sshKeyItem) {
-	if len(items) == 0 {
-		fmt.Println("No SSH keys found.")
-		return
+	rows := make([][]string, 0, len(items))
+	for _, key := range items {
+		rows = append(rows, []string{key.Name, key.Key, shortDate(key.CreatedAt)})
 	}
-
-	tw := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', tabwriter.TabIndent)
-	fmt.Fprintln(tw, "NAME\tKEY\tADDED")
-
-	for _, item := range items {
-		fmt.Fprintf(tw, "%s\t%s\t%s\n", item.Name, item.Key, shortDate(item.CreatedAt))
-	}
-	tw.Flush()
+	renderTable([]string{"NAME", "KEY", "ADDED"}, rows, "No SSH keys found.")
 }
