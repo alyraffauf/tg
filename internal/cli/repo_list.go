@@ -38,7 +38,7 @@ remote URL of the git repository in the current directory.`,
 			return fmt.Errorf("list repos for %q: %w", handle, err)
 		}
 
-		items := buildRepoItems(repos.Items)
+		items := buildRepoItems(repos.Items, handle)
 		return output(items, renderRepoList)
 	},
 }
@@ -73,7 +73,7 @@ func resolveHandleOrSelf(ctx context.Context, args []string) (string, error) {
 	return ident.Handle.String(), nil
 }
 
-func buildRepoItems(items []tangled.Repo) []repoItem {
+func buildRepoItems(items []tangled.Repo, author string) []repoItem {
 	result := make([]repoItem, 0, len(items))
 
 	for _, item := range items {
@@ -88,6 +88,7 @@ func buildRepoItems(items []tangled.Repo) []repoItem {
 		result = append(result, repoItem{
 			Name:        name,
 			URI:         item.URI,
+			Author:      author,
 			Knot:        item.Value.Knot,
 			Description: item.Value.Description,
 			CreatedAt:   item.Value.CreatedAt,

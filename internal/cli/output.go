@@ -49,6 +49,7 @@ type pullItem struct {
 type repoItem struct {
 	Name        string `json:"name"`
 	URI         string `json:"uri"`
+	Author      string `json:"author"`
 	Knot        string `json:"knot"`
 	Description string `json:"description,omitempty"`
 	CreatedAt   string `json:"createdAt"`

@@ -57,6 +57,7 @@ func init() {
 	prCmd.AddCommand(prViewCmd)
 
 	rootCmd.AddCommand(repoCmd)
+	repoCmd.AddCommand(repoViewCmd)
 	repoCmd.AddCommand(repoCloneCmd)
 	repoCmd.AddCommand(repoCreateCmd)
 	repoCmd.AddCommand(repoListCmd)
