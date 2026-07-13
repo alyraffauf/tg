@@ -16,9 +16,25 @@ import (
 
 var ErrNotAuthenticated = errors.New("not authenticated")
 
-// DefaultScopes are requested for a CLI session. transition:generic grants
-// broad repository write access equivalent to an app password.
-var DefaultScopes = []string{"atproto", "transition:generic"}
+// DefaultScopes are requested for a CLI session. Rather than the broad
+// transition:generic scope (equivalent to an app password), we request
+// granular permissions scoped to all Tangled collections preemptively,
+// so future features don't require re-authentication. The rpc scopes are
+// needed for the PDS to mint service-auth JWTs for knot procedures.
+var DefaultScopes = []string{
+	"atproto",
+	"repo:sh.tangled.actor.profile",
+	"repo:sh.tangled.feed.comment",
+	"repo:sh.tangled.feed.star",
+	"repo:sh.tangled.graph.follow",
+	"repo:sh.tangled.graph.vouch",
+	"repo:sh.tangled.publicKey",
+	"repo:sh.tangled.repo",
+	"repo:sh.tangled.repo.issue",
+	"repo:sh.tangled.repo.pull",
+	"rpc:sh.tangled.repo.create?aud=*",
+	"rpc:sh.tangled.repo.setDefaultBranch?aud=*",
+}
 
 type AuthManager struct {
 	App       *oauth.ClientApp
