@@ -16,11 +16,9 @@ import (
 
 var ErrNotAuthenticated = errors.New("not authenticated")
 
-// DefaultScopes are requested for a CLI session. Rather than the broad
-// transition:generic scope (equivalent to an app password), we request
-// granular permissions scoped to all Tangled collections preemptively,
-// so future features don't require re-authentication. The rpc scopes are
-// needed for the PDS to mint service-auth JWTs for knot procedures.
+// DefaultScopes are requested for a CLI session. The rpc scopes are
+// needed for the PDS to mint service-auth JWTs for knot procedures. The
+// blob scope is required for uploading PR patch blobs to the PDS.
 var DefaultScopes = []string{
 	"atproto",
 	"repo:sh.tangled.actor.profile",
@@ -35,6 +33,7 @@ var DefaultScopes = []string{
 	"repo:sh.tangled.repo",
 	"repo:sh.tangled.repo.issue",
 	"repo:sh.tangled.repo.pull",
+	"blob:application/gzip",
 	"rpc:sh.tangled.repo.create?aud=*",
 	"rpc:sh.tangled.repo.delete?aud=*",
 	"rpc:sh.tangled.repo.merge?aud=*",
