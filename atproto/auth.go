@@ -24,7 +24,10 @@ var ErrNotAuthenticated = errors.New("not authenticated")
 var DefaultScopes = []string{
 	"atproto",
 	"repo:sh.tangled.actor.profile",
-	"repo:sh.tangled.feed.comment",
+	"repo:sh.tangled.repo.issue.comment",
+	"repo:sh.tangled.repo.issue.state",
+	"repo:sh.tangled.repo.pull.comment",
+	"repo:sh.tangled.repo.pull.status",
 	"repo:sh.tangled.feed.star",
 	"repo:sh.tangled.graph.follow",
 	"repo:sh.tangled.graph.vouch",
@@ -33,6 +36,8 @@ var DefaultScopes = []string{
 	"repo:sh.tangled.repo.issue",
 	"repo:sh.tangled.repo.pull",
 	"rpc:sh.tangled.repo.create?aud=*",
+	"rpc:sh.tangled.repo.delete?aud=*",
+	"rpc:sh.tangled.repo.merge?aud=*",
 	"rpc:sh.tangled.repo.setDefaultBranch?aud=*",
 }
 
