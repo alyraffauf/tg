@@ -86,12 +86,6 @@ type sshKeyAddResult struct {
 	URI  string `json:"uri"`
 }
 
-type prCheckoutResult struct {
-	Rkey      string `json:"rkey"`
-	Branch    string `json:"branch"`
-	Directory string `json:"directory"`
-}
-
 type authStatusResult struct {
 	Authenticated bool   `json:"authenticated"`
 	DID           string `json:"did,omitempty"`
