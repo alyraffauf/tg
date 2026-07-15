@@ -13,7 +13,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const patchMimeType = "application/vnd.git.patch+gzip"
+const patchMimeType = "application/gzip"
 
 var (
 	prCreateTitle    string
@@ -85,12 +85,12 @@ var prCreateCmd = &cobra.Command{
 		}
 
 		uri, err := createPullRecord(ctx, atClient, auth.CurrentDID().String(), prCreateRecord{
-			Title:      prCreateTitle,
-			Body:       body,
-			TargetRepo: target.URI,
-			Base:       base,
-			Head:       head,
-			Patch:      blob,
+			Title:   prCreateTitle,
+			Body:    body,
+			RepoDid: target.Value.RepoDid,
+			Base:    base,
+			Head:    head,
+			Patch:   blob,
 		})
 		if err != nil {
 			return err
@@ -113,12 +113,12 @@ func init() {
 }
 
 type prCreateRecord struct {
-	Title      string
-	Body       string
-	TargetRepo string
-	Base       string
-	Head       string
-	Patch      *atproto.Blob
+	Title   string
+	Body    string
+	RepoDid string
+	Base    string
+	Head    string
+	Patch   *atproto.Blob
 }
 
 // pullRecord is the sh.tangled.repo.pull lexicon shape used for record writes.
@@ -133,12 +133,15 @@ type pullRecord struct {
 }
 
 type pullTarget struct {
-	Repo   string `json:"repo"`
-	Branch string `json:"branch"`
+	Repo    string `json:"repo"`
+	RepoDid string `json:"repoDid"`
+	Branch  string `json:"branch"`
 }
 
 type pullSource struct {
-	Branch string `json:"branch"`
+	Repo    string `json:"repo"`
+	RepoDid string `json:"repoDid"`
+	Branch  string `json:"branch"`
 }
 
 type pullRound struct {
@@ -182,8 +185,16 @@ func createPullRecord(ctx context.Context, atClient *atproto.ATProto, did string
 		Title:     input.Title,
 		Body:      input.Body,
 		CreatedAt: now,
-		Target:    pullTarget{Repo: input.TargetRepo, Branch: input.Base},
-		Source:    pullSource{Branch: input.Head},
+		Target: pullTarget{
+			Repo:    input.RepoDid,
+			RepoDid: input.RepoDid,
+			Branch:  input.Base,
+		},
+		Source: pullSource{
+			Repo:    input.RepoDid,
+			RepoDid: input.RepoDid,
+			Branch:  input.Head,
+		},
 		Rounds: []pullRound{{
 			CreatedAt: now,
 			PatchBlob: input.Patch,
