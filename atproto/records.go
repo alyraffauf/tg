@@ -1,8 +1,12 @@
 package atproto
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 
 	"github.com/bluesky-social/indigo/atproto/atclient"
 	"github.com/bluesky-social/indigo/atproto/syntax"
@@ -19,6 +23,20 @@ type PutRecordInput struct {
 	Collection string `json:"collection"`
 	Rkey       string `json:"rkey"`
 	Record     any    `json:"record"`
+}
+
+type DeleteRecordInput struct {
+	Repo       string `json:"repo"`
+	Collection string `json:"collection"`
+	Rkey       string `json:"rkey"`
+}
+
+// Blob is the blob reference returned by com.atproto.repo.uploadBlob.
+type Blob struct {
+	Type     string `json:"$type"`
+	Ref      any    `json:"ref"`
+	MimeType string `json:"mimeType"`
+	Size     int64  `json:"size"`
 }
 
 type GetRecordOutput struct {
@@ -59,6 +77,44 @@ func (a *ATProto) PutRecord(ctx context.Context, in PutRecordInput) (uri, cid st
 		return "", "", fmt.Errorf("put %s/%s record: %w", in.Collection, in.Rkey, err)
 	}
 	return out.URI, out.CID, nil
+}
+
+// DeleteRecord removes a record from the authenticated user's repository.
+func (a *ATProto) DeleteRecord(ctx context.Context, in DeleteRecordInput) error {
+	if err := a.Client.Post(ctx, syntax.NSID("com.atproto.repo.deleteRecord"), in, nil); err != nil {
+		return fmt.Errorf("delete %s/%s record: %w", in.Collection, in.Rkey, err)
+	}
+	return nil
+}
+
+// UploadBlob stores data in the authenticated user's PDS and returns its blob
+// reference for embedding in a record.
+func (a *ATProto) UploadBlob(ctx context.Context, data []byte, mimeType string) (*Blob, error) {
+	req := atclient.NewAPIRequest(http.MethodPost, syntax.NSID("com.atproto.repo.uploadBlob"), bytes.NewReader(data))
+	req.Headers.Set("Accept", "application/json")
+	req.Headers.Set("Content-Type", mimeType)
+
+	resp, err := a.Client.Do(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("upload blob: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		body, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			return nil, fmt.Errorf("upload blob: PDS returned HTTP %d", resp.StatusCode)
+		}
+		return nil, fmt.Errorf("upload blob: PDS returned HTTP %d: %s", resp.StatusCode, string(body))
+	}
+
+	var out struct {
+		Blob Blob `json:"blob"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return nil, fmt.Errorf("decode uploaded blob: %w", err)
+	}
+	return &out.Blob, nil
 }
 
 func (a *ATProto) GetRecord(ctx context.Context, repo, collection, rkey string) (*GetRecordOutput, error) {
