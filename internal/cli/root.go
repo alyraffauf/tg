@@ -20,17 +20,28 @@ const (
 var (
 	resolver = &atproto.Resolver{Directory: identity.DefaultDirectory()}
 	client   = &tangled.Tangled{
-		Client: &atclient.APIClient{Host: "https://bobbin.klbr.net"},
+		Client: &atclient.APIClient{Host: appviewHost()},
 		Logger: slog.Default(),
 	}
 	auth *atproto.AuthManager
 
 	jsonOutput bool
+	appview    string
 )
+
+func appviewHost() string {
+	if host := os.Getenv("TG_APPVIEW"); host != "" {
+		return host
+	}
+	return "https://bobbin.klbr.net"
+}
 
 var rootCmd = &cobra.Command{
 	Use:   "tg",
 	Short: "A CLI for Tangled",
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		client.Client.Host = appview
+	},
 }
 
 func Execute() error {
@@ -39,6 +50,7 @@ func Execute() error {
 
 func init() {
 	rootCmd.PersistentFlags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
+	rootCmd.PersistentFlags().StringVar(&appview, "appview", appviewHost(), "Appview host URL (overrides the TG_APPVIEW environment variable)")
 
 	initAuth()
 
