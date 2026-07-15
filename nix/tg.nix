@@ -1,6 +1,8 @@
 {
   buildGoModule,
   lib,
+  makeWrapper,
+  git,
 }:
 buildGoModule {
   pname = "tg";
@@ -9,6 +11,12 @@ buildGoModule {
   vendorHash = "sha256-4e3RU0z5rh8cDSW7fQSfQM8sqeD53PA0BYGTTjtF23E=";
   subPackages = ["cmd/tg"];
   env.CGO_ENABLED = "0";
+
+  nativeBuildInputs = [makeWrapper];
+
+  postInstall = ''
+    wrapProgram $out/bin/tg --prefix PATH : ${lib.makeBinPath [git]}
+  '';
 
   ldflags = [
     "-s"
