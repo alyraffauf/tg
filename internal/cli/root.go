@@ -46,25 +46,46 @@ func init() {
 	authCmd.AddCommand(authLoginCmd)
 	authCmd.AddCommand(authLogoutCmd)
 	authCmd.AddCommand(authStatusCmd)
+	authCmd.AddCommand(authTokenCmd)
 
 	rootCmd.AddCommand(issueCmd)
 	issueCmd.AddCommand(issueListCmd)
 	issueCmd.AddCommand(issueViewCmd)
+	issueCmd.AddCommand(issueCreateCmd)
+	issueCmd.AddCommand(issueCommentCmd)
+	issueCmd.AddCommand(issueCloseCmd)
+	issueCmd.AddCommand(issueReopenCmd)
+	issueCmd.AddCommand(issueEditCmd)
 
 	rootCmd.AddCommand(prCmd)
 	prCmd.AddCommand(prListCmd)
-	prCmd.AddCommand(prCheckoutCmd)
 	prCmd.AddCommand(prViewCmd)
+	prCmd.AddCommand(prCreateCmd)
+	prCmd.AddCommand(prCommentCmd)
+	prCmd.AddCommand(prDiffCmd)
+	prCmd.AddCommand(prCloseCmd)
+	prCmd.AddCommand(prReopenCmd)
+	prCmd.AddCommand(prEditCmd)
+	prCmd.AddCommand(prMergeCmd)
 
 	rootCmd.AddCommand(repoCmd)
 	repoCmd.AddCommand(repoViewCmd)
 	repoCmd.AddCommand(repoCloneCmd)
 	repoCmd.AddCommand(repoCreateCmd)
 	repoCmd.AddCommand(repoListCmd)
+	repoCmd.AddCommand(repoEditCmd)
+	repoCmd.AddCommand(repoSetDefaultBranchCmd)
+	repoCmd.AddCommand(repoDeleteCmd)
+	repoCmd.AddCommand(repoForkCmd)
 
 	rootCmd.AddCommand(sshKeyCmd)
 	sshKeyCmd.AddCommand(sshKeyAddCmd)
 	sshKeyCmd.AddCommand(sshKeyListCmd)
+	sshKeyCmd.AddCommand(sshKeyDeleteCmd)
+
+	rootCmd.AddCommand(browseCmd)
+	rootCmd.AddCommand(completionCmd)
+	rootCmd.AddCommand(apiCmd)
 }
 
 func initAuth() {
