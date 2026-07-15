@@ -3,7 +3,6 @@ package cli
 import (
 	"context"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/alyraffauf/tg/atproto"
@@ -17,30 +16,11 @@ type issueCommentRecord struct {
 	CreatedAt string `json:"createdAt"`
 }
 
-func commandBody(body, bodyFile string) (string, error) {
-	if bodyFile == "" {
-		return body, nil
-	}
-	if body != "" {
-		return "", fmt.Errorf("--body and --body-file cannot be used together")
-	}
-	data, err := os.ReadFile(bodyFile)
-	if err != nil {
-		return "", fmt.Errorf("read body file: %w", err)
-	}
-	return string(data), nil
-}
-
 type pullCommentRecord struct {
 	Type      string `json:"$type"`
 	Pull      string `json:"pull"`
 	Body      string `json:"body"`
 	CreatedAt string `json:"createdAt"`
-}
-
-type createdRecordResult struct {
-	Rkey string `json:"rkey"`
-	URI  string `json:"uri"`
 }
 
 func createIssueComment(ctx context.Context, issueURI, body string) (createdRecordResult, error) {
