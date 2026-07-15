@@ -63,6 +63,7 @@ func init() {
 	prCmd.AddCommand(prCreateCmd)
 	prCmd.AddCommand(prCommentCmd)
 	prCmd.AddCommand(prDiffCmd)
+	prCmd.AddCommand(prCheckoutCmd)
 	prCmd.AddCommand(prCloseCmd)
 	prCmd.AddCommand(prReopenCmd)
 	prCmd.AddCommand(prEditCmd)

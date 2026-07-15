@@ -67,6 +67,7 @@ tg pr list
 
 # Create, comment on, inspect, and update pull requests
 tg pr create --title "Add feature" --base main
+tg pr checkout <rkey>
 tg pr diff <rkey>
 tg pr comment <rkey> --body "Looks good"
 tg pr close <rkey>
@@ -77,16 +78,6 @@ tg pr merge <rkey>
 
 `tg repo edit`, `tg repo set-default-branch`, `tg repo delete --yes`, `tg repo fork`,
 `tg ssh-key delete`, `tg browse`, `tg completion`, `tg auth token`, and `tg api` are available.
-
-Changing scopes requires existing users to run `tg auth login` again.
-
-## Platform limits
-
-Tangled currently has no API for releases, gists, workflows/runs, repository archive/sync/rename,
-PR checks, projects, codespaces, a status dashboard, or global text search. `tg pr checkout` is
-deferred until PRs expose an immutable base commit/ref, allowing a safe isolated-worktree
-implementation. `auth switch` is deferred because the local auth store currently supports one
-account.
 
 ## Architecture
 

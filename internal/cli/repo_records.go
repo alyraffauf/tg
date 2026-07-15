@@ -2,12 +2,9 @@ package cli
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"net/http"
 
 	"github.com/alyraffauf/tg/tangled"
-	"github.com/bluesky-social/indigo/atproto/atclient"
 )
 
 // resolveRepoRecord finds a repository record, including legacy records whose
@@ -24,8 +21,6 @@ func resolveRepoRecord(ctx context.Context, handle, name string) (*tangled.Repo,
 			repo.URI = recordURI
 		}
 		return repo, nil
-	} else if !isNotFoundError(err) {
-		return nil, fmt.Errorf("get repository %q: %w", name, err)
 	}
 
 	repos, err := client.ListRepos(ctx, ident.DID.String())
@@ -39,11 +34,6 @@ func resolveRepoRecord(ctx context.Context, handle, name string) (*tangled.Repo,
 		}
 	}
 	return nil, fmt.Errorf("repo %q not found for handle %q", name, handle)
-}
-
-func isNotFoundError(err error) bool {
-	var apiError *atclient.APIError
-	return errors.As(err, &apiError) && apiError.StatusCode == http.StatusNotFound
 }
 
 func requireOwnedRepo(ctx context.Context, handle, name, did string) (*tangled.Repo, error) {
