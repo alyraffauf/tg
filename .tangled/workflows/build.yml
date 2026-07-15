@@ -12,4 +12,4 @@ dependencies:
 
 steps:
   - name: "Build tg"
-    command: "nix build .#tg"
+    command: "nix --extra-experimental-features 'nix-command flakes' build .#tg"
