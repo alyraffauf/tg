@@ -67,6 +67,7 @@ tg pr list
 
 # Create, comment on, inspect, and update pull requests
 tg pr create --title "Add feature" --base main
+# Reconstruct the latest round on the current remote target branch
 tg pr checkout <rkey>
 tg pr diff <rkey>
 tg pr comment <rkey> --body "Looks good"

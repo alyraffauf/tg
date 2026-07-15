@@ -2,13 +2,17 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/http"
+	"strings"
 
 	"github.com/alyraffauf/tg/tangled"
+	"github.com/bluesky-social/indigo/atproto/atclient"
 )
 
-// resolveRepoRecord finds a repository record, including legacy records whose
-// rkey does not match the repository name.
+// resolveRepoRecord finds a repository record even when its rkey does not
+// match the repository name.
 func resolveRepoRecord(ctx context.Context, handle, name string) (*tangled.Repo, error) {
 	ident, err := resolver.ResolveHandle(ctx, handle)
 	if err != nil {
@@ -21,6 +25,8 @@ func resolveRepoRecord(ctx context.Context, handle, name string) (*tangled.Repo,
 			repo.URI = recordURI
 		}
 		return repo, nil
+	} else if !shouldListRepoRecords(err) {
+		return nil, fmt.Errorf("get repository %q: %w", name, err)
 	}
 
 	repos, err := client.ListRepos(ctx, ident.DID.String())
@@ -34,6 +40,22 @@ func resolveRepoRecord(ctx context.Context, handle, name string) (*tangled.Repo,
 		}
 	}
 	return nil, fmt.Errorf("repo %q not found for handle %q", name, handle)
+}
+
+func shouldListRepoRecords(err error) bool {
+	var apiError *atclient.APIError
+	if !errors.As(err, &apiError) {
+		return false
+	}
+	if apiError.StatusCode == http.StatusNotFound {
+		return true
+	}
+
+	// Bobbin wraps an upstream PDS 400 as a 502 when no record exists at the
+	// name-derived rkey. Listing is required to find the record's actual rkey.
+	return apiError.StatusCode == http.StatusBadGateway &&
+		apiError.Name == "UpstreamFailed" &&
+		strings.Contains(apiError.Message, "upstream returned status 400 Bad Request")
 }
 
 func requireOwnedRepo(ctx context.Context, handle, name, did string) (*tangled.Repo, error) {

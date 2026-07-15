@@ -8,6 +8,7 @@ import (
 	"strings"
 )
 
+// CheckoutPatchParams configures a local branch reconstructed from a patch.
 type CheckoutPatchParams struct {
 	RepoDir      string
 	Branch       string

@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 
@@ -19,71 +18,65 @@ var (
 var prCheckoutCmd = &cobra.Command{
 	Use:   "checkout <rkey>",
 	Short: "Check out a pull request in Git",
+	Long:  "Check out the latest pull request round on the current remote target branch.",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
+		rkey := args[0]
 		repoDir, err := os.Getwd()
 		if err != nil {
 			return fmt.Errorf("get current directory: %w", err)
 		}
-		local, err := gitutil.DetectRepoFromCWD(ctx)
+		localRepo, err := gitutil.DetectRepoFromCWD(ctx)
 		if err != nil {
 			return fmt.Errorf("detect local repository: %w", err)
 		}
-		localRecord, err := resolveRepoRecord(ctx, local.Handle, local.Repo)
+		localRecord, err := resolveRepoRecord(ctx, localRepo.Handle, localRepo.Repo)
 		if err != nil {
 			return err
 		}
 
-		handle, name := local.Handle, local.Repo
+		handle, repoName := localRepo.Handle, localRepo.Repo
 		if prCheckoutRepo != "" {
-			handle, name, err = parseHandleRepo(prCheckoutRepo)
+			handle, repoName, err = parseHandleRepo(prCheckoutRepo)
 			if err != nil {
 				return err
 			}
 		}
 		targetRecord := localRecord
-		if handle != local.Handle || name != local.Repo {
-			targetRecord, err = resolveRepoRecord(ctx, handle, name)
+		if handle != localRepo.Handle || repoName != localRepo.Repo {
+			targetRecord, err = resolveRepoRecord(ctx, handle, repoName)
 			if err != nil {
 				return err
 			}
 		}
 		if targetRecord.Value.RepoDid != localRecord.Value.RepoDid {
-			return fmt.Errorf("pull request target %s/%s does not match the current repository", handle, name)
+			return fmt.Errorf("pull request target %s/%s does not match the current repository", handle, repoName)
 		}
 
 		pulls, err := client.ListPulls(ctx, targetRecord.Value.RepoDid, tangled.ListOpts{Limit: defaultListLimit})
 		if err != nil {
-			return fmt.Errorf("list PRs for %s/%s: %w", handle, name, err)
+			return fmt.Errorf("list PRs for %s/%s: %w", handle, repoName, err)
 		}
-		pull, err := findByRKey(pulls.Items, args[0], "pull request")
+		pull, err := findByRKey(pulls.Items, rkey, "pull request")
 		if err != nil {
 			return err
 		}
-		var record tangled.PullRecord
-		if err := json.Unmarshal(pull.Value, &record); err != nil {
-			return fmt.Errorf("decode pull request %q: %w", args[0], err)
-		}
-		if len(record.Rounds) == 0 {
-			return fmt.Errorf("pull request %q has no rounds", args[0])
+		record, patchCID, err := latestPullPatch(pull, rkey)
+		if err != nil {
+			return err
 		}
 		if record.Target.Branch == "" {
-			return fmt.Errorf("pull request %q has no target branch", args[0])
+			return fmt.Errorf("pull request %q has no target branch", rkey)
 		}
 
-		latestRound := record.Rounds[len(record.Rounds)-1]
-		cid := latestRound.PatchBlob.Ref.String()
-		if cid == "" {
-			return fmt.Errorf("pull request %q has no patch blob", args[0])
-		}
-		patch, err := downloadPullPatch(ctx, extractDID(pull.URI), cid)
+		patch, err := downloadPullPatch(ctx, extractDID(pull.URI), patchCID)
 		if err != nil {
 			return err
 		}
 		branch := prCheckoutBranch
 		if branch == "" {
-			branch = "pr-" + args[0]
+			branch = "pr-" + rkey
 		}
 
 		if err := gitutil.CheckoutPatch(ctx, gitutil.CheckoutPatchParams{
@@ -95,7 +88,7 @@ var prCheckoutCmd = &cobra.Command{
 		}); err != nil {
 			return err
 		}
-		result := prCheckoutResult{Rkey: args[0], Branch: branch}
+		result := prCheckoutResult{Rkey: rkey, Branch: branch}
 		return output(result, func(result prCheckoutResult) {
 			fmt.Printf("Checked out pull request %s as branch %s\n", result.Rkey, result.Branch)
 		})

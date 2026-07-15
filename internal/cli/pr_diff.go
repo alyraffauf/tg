@@ -44,28 +44,38 @@ var prDiffCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		var record tangled.PullRecord
-		if err := json.Unmarshal(pull.Value, &record); err != nil {
-			return fmt.Errorf("decode pull request %q: %w", args[0], err)
-		}
-		if len(record.Rounds) == 0 {
-			return fmt.Errorf("pull request %q has no rounds", args[0])
-		}
-		cid := record.Rounds[len(record.Rounds)-1].PatchBlob.Ref.String()
-		if cid == "" {
-			return fmt.Errorf("pull request %q has no patch blob", args[0])
-		}
-		patch, err := downloadPullPatch(ctx, extractDID(pull.URI), cid)
+		_, patchCID, err := latestPullPatch(pull, args[0])
 		if err != nil {
 			return err
 		}
-		_, err = os.Stdout.Write(patch)
-		return err
+		patch, err := downloadPullPatch(ctx, extractDID(pull.URI), patchCID)
+		if err != nil {
+			return err
+		}
+		if _, err := os.Stdout.Write(patch); err != nil {
+			return fmt.Errorf("write patch: %w", err)
+		}
+		return nil
 	},
 }
 
 func init() {
 	prDiffCmd.Flags().StringVarP(&prDiffRepo, "repo", "R", "", "Target repository as handle/repo")
+}
+
+func latestPullPatch(pull *tangled.ListItem, rkey string) (tangled.PullRecord, string, error) {
+	var record tangled.PullRecord
+	if err := json.Unmarshal(pull.Value, &record); err != nil {
+		return record, "", fmt.Errorf("decode pull request %q: %w", rkey, err)
+	}
+	if len(record.Rounds) == 0 {
+		return record, "", fmt.Errorf("pull request %q has no rounds", rkey)
+	}
+	patchCID := record.Rounds[len(record.Rounds)-1].PatchBlob.Ref.String()
+	if patchCID == "" {
+		return record, "", fmt.Errorf("pull request %q has no patch blob", rkey)
+	}
+	return record, patchCID, nil
 }
 
 func downloadPullPatch(ctx context.Context, authorDID, cid string) ([]byte, error) {
