@@ -1,6 +1,6 @@
 # tg
 
-`tg` is a command-line client for [Tangled](https://tangled.org), the git forge built on atproto. It is an analogue to the GitHub CLI (`gh`), (for now) built against the read-only [Bobbin](https://docs.tangled.org/bobbin) XRPC API.
+`tg` is a command-line client for [Tangled](https://tangled.org), the git forge built on atproto. It is an analogue to the GitHub CLI (`gh`), using Bobbin for reads and authenticated PDS/knot writes.
 
 ## Installation
 
@@ -50,6 +50,13 @@ tg issue list
 
 # List issues for an explicit repository
 tg issue list microcosm.blue/microcosm-rs
+
+# Create, comment on, and update an issue
+tg issue create --repo microcosm.blue/microcosm-rs --body "Details" "Bug report"
+tg issue comment <rkey> --body "I can reproduce this"
+tg issue close <rkey>
+tg issue reopen <rkey>
+tg issue edit <rkey> --title "Updated title"
 ```
 
 ### Pull Requests
@@ -58,9 +65,28 @@ tg issue list microcosm.blue/microcosm-rs
 # List pull requests
 tg pr list
 
-# Check out a pull request as detached HEAD
-tg pr checkout 3mporttfqez22
+# Create, comment on, inspect, and update pull requests
+tg pr create --title "Add feature" --base main
+tg pr diff <rkey>
+tg pr comment <rkey> --body "Looks good"
+tg pr close <rkey>
+tg pr merge <rkey>
 ```
+
+### Other commands
+
+`tg repo edit`, `tg repo set-default-branch`, `tg repo delete --yes`, `tg repo fork`,
+`tg ssh-key delete`, `tg browse`, `tg completion`, `tg auth token`, and `tg api` are available.
+
+Changing scopes requires existing users to run `tg auth login` again.
+
+## Platform limits
+
+Tangled currently has no API for releases, gists, workflows/runs, repository archive/sync/rename,
+PR checks, projects, codespaces, a status dashboard, or global text search. `tg pr checkout` is
+deferred until PRs expose an immutable base commit/ref, allowing a safe isolated-worktree
+implementation. `auth switch` is deferred because the local auth store currently supports one
+account.
 
 ## Architecture
 
