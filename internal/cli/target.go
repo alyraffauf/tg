@@ -31,27 +31,11 @@ func resolveTarget(ctx context.Context, args []string) (string, string, error) {
 }
 
 // findRepoDid resolves handle/repo to the repo's repoDid, which listIssues is
-// keyed by. It looks the record up directly by name (current schema uses the
-// name as the rkey), falling back to a listing for legacy repos whose rkey is a
-// TID with the name in the body.
+// keyed by.
 func findRepoDid(ctx context.Context, handle, repo string) (string, error) {
-	ident, err := resolver.ResolveHandle(ctx, handle)
+	record, err := resolveRepoRecord(ctx, handle, repo)
 	if err != nil {
-		return "", fmt.Errorf("resolve handle %q: %w", handle, err)
+		return "", err
 	}
-
-	repoURI := fmt.Sprintf("at://%s/sh.tangled.repo/%s", ident.DID, repo)
-	if got, err := client.GetRepo(ctx, repoURI); err == nil {
-		return got.Value.RepoDid, nil
-	}
-
-	if repos, err := client.ListRepos(ctx, ident.DID.String()); err == nil {
-		for _, candidate := range repos.Items {
-			if candidate.Value.Name == repo || strings.HasSuffix(candidate.URI, "/"+repo) {
-				return candidate.Value.RepoDid, nil
-			}
-		}
-	}
-
-	return "", fmt.Errorf("repo %q not found for handle %q", repo, handle)
+	return record.Value.RepoDid, nil
 }

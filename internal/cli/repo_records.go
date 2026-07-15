@@ -25,7 +25,7 @@ func resolveRepoRecord(ctx context.Context, handle, name string) (*tangled.Repo,
 		}
 		return repo, nil
 	} else if !isNotFoundError(err) {
-		return nil, err
+		return nil, fmt.Errorf("get repository %q: %w", name, err)
 	}
 
 	repos, err := client.ListRepos(ctx, ident.DID.String())

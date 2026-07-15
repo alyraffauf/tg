@@ -9,7 +9,6 @@ import (
 
 	"github.com/alyraffauf/tg/atproto"
 	"github.com/alyraffauf/tg/internal/gitutil"
-	"github.com/alyraffauf/tg/tangled"
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	"github.com/spf13/cobra"
 )
@@ -50,7 +49,7 @@ var prCreateCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		body, err := prBody()
+		body, err := commandBody(prCreateBody, prCreateBodyFile)
 		if err != nil {
 			return err
 		}
@@ -63,7 +62,7 @@ var prCreateCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		target, err := findTargetRepo(ctx, handle, repo)
+		target, err := resolveRepoRecord(ctx, handle, repo)
 		if err != nil {
 			return err
 		}
@@ -174,48 +173,6 @@ func prTargetBranch(ctx context.Context, repoDir string) (string, error) {
 		return "", fmt.Errorf("determine target branch; set --base explicitly: %w", err)
 	}
 	return branch, nil
-}
-
-func prBody() (string, error) {
-	if prCreateBodyFile == "" {
-		return prCreateBody, nil
-	}
-	if prCreateBody != "" {
-		return "", fmt.Errorf("--body and --body-file cannot be used together")
-	}
-	body, err := os.ReadFile(prCreateBodyFile)
-	if err != nil {
-		return "", fmt.Errorf("read pull request body: %w", err)
-	}
-	return string(body), nil
-}
-
-func findTargetRepo(ctx context.Context, handle, name string) (*tangled.Repo, error) {
-	ident, err := resolver.ResolveHandle(ctx, handle)
-	if err != nil {
-		return nil, fmt.Errorf("resolve handle %q: %w", handle, err)
-	}
-
-	uri := fmt.Sprintf("at://%s/sh.tangled.repo/%s", ident.DID, name)
-	if repo, err := client.GetRepo(ctx, uri); err == nil {
-		if repo.URI == "" {
-			repo.URI = uri
-		}
-		return repo, nil
-	} else if !isNotFoundError(err) {
-		return nil, fmt.Errorf("get repository %q: %w", name, err)
-	}
-
-	repos, err := client.ListRepos(ctx, ident.DID.String())
-	if err != nil {
-		return nil, fmt.Errorf("list repositories for %q: %w", handle, err)
-	}
-	for _, repo := range repos.Items {
-		if repo.Value.Name == name || strings.HasSuffix(repo.URI, "/"+name) {
-			return &repo, nil
-		}
-	}
-	return nil, fmt.Errorf("repo %q not found for handle %q", name, handle)
 }
 
 func createPullRecord(ctx context.Context, atClient *atproto.ATProto, did string, input prCreateRecord) (string, error) {
