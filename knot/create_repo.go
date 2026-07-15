@@ -11,6 +11,7 @@ import (
 type CreateRepoInput struct {
 	Name          string `json:"name"`
 	Rkey          string `json:"rkey"`
+	Source        string `json:"source,omitempty"`
 	DefaultBranch string `json:"defaultBranch,omitempty"`
 }
 
