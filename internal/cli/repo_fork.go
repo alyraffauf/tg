@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/alyraffauf/tg/atproto"
@@ -48,7 +49,7 @@ var repoForkCmd = &cobra.Command{
 		repoDID, err := knot.New(source.Knot, token).CreateRepo(ctx, knot.CreateRepoInput{
 			Name:   name,
 			Rkey:   name,
-			Source: source.URI,
+			Source: forkSourceURL(source.Knot, source.RepoDID),
 		})
 		if err != nil {
 			return err
@@ -63,6 +64,7 @@ var repoForkCmd = &cobra.Command{
 				Knot:      source.Knot,
 				CreatedAt: time.Now().UTC().Format(time.RFC3339),
 				RepoDid:   repoDID,
+				Source:    source.URI,
 			},
 		})
 		if err != nil {
@@ -91,8 +93,17 @@ func deleteFork(ctx context.Context, atClient *atproto.ATProto, knotHost, did, n
 }
 
 type forkSource struct {
-	URI  string
-	Knot string
+	URI     string
+	Knot    string
+	RepoDID string
+}
+
+func forkSourceURL(knotHost, repoDID string) string {
+	base := strings.TrimRight(knotHost, "/")
+	if !strings.HasPrefix(base, "http://") && !strings.HasPrefix(base, "https://") {
+		base = "https://" + base
+	}
+	return base + "/" + repoDID
 }
 
 func getForkSource(ctx context.Context, handle, name string) (forkSource, error) {
@@ -108,10 +119,13 @@ func getForkSource(ctx context.Context, handle, name string) (forkSource, error)
 	if repo.Value.Knot == "" {
 		return forkSource{}, fmt.Errorf("source repository %s/%s has no knot", handle, name)
 	}
+	if repo.Value.RepoDid == "" {
+		return forkSource{}, fmt.Errorf("source repository %s/%s has no repo DID", handle, name)
+	}
 	if repo.URI != "" {
 		uri = repo.URI
 	}
-	return forkSource{URI: uri, Knot: repo.Value.Knot}, nil
+	return forkSource{URI: uri, Knot: repo.Value.Knot, RepoDID: repo.Value.RepoDid}, nil
 }
 
 type repoForkResult struct {

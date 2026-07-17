@@ -3,29 +3,38 @@ package cli
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"os/exec"
 	"runtime"
+	"strings"
 
 	"github.com/spf13/cobra"
 )
 
+var authLoginPasswordStdin bool
+
 var authLoginCmd = &cobra.Command{
-	Use:   "login [handle]",
-	Short: "Log in to atproto via OAuth",
-	Long:  `Log in to atproto via OAuth using a local browser callback.`,
-	Args:  cobra.MaximumNArgs(1),
+	Use:   "login <handle> [app-password]",
+	Short: "Log in to atproto via OAuth or an app password",
+	Long:  `Log in with OAuth, or use an app password as the second argument for headless login.`,
+	Args:  cobra.RangeArgs(1, 2),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if auth == nil {
 			return fmt.Errorf("auth is not available")
 		}
 
-		identifier := ""
-		if len(args) == 1 {
-			identifier = args[0]
+		identifier := args[0]
+		password, usePassword, err := loginPassword(args, authLoginPasswordStdin, cmd.InOrStdin())
+		if err != nil {
+			return err
 		}
-		if identifier == "" {
-			return fmt.Errorf("handle or DID required")
+		if usePassword {
+			if err := auth.LoginWithPassword(cmd.Context(), identifier, password); err != nil {
+				return err
+			}
+			fmt.Printf("Logged in as %s\n", auth.CurrentDID())
+			return nil
 		}
 
 		server, resultChannel, err := runCallbackServer()
@@ -56,6 +65,31 @@ var authLoginCmd = &cobra.Command{
 			return ctx.Err()
 		}
 	},
+}
+
+func init() {
+	authLoginCmd.Flags().BoolVar(&authLoginPasswordStdin, "password-stdin", false, "Read the app password from standard input")
+}
+
+func loginPassword(args []string, fromStdin bool, stdin io.Reader) (string, bool, error) {
+	if !fromStdin {
+		if len(args) < 2 {
+			return "", false, nil
+		}
+		return args[1], true, nil
+	}
+	if len(args) == 2 {
+		return "", false, fmt.Errorf("app password argument and --password-stdin cannot be used together")
+	}
+	data, err := io.ReadAll(stdin)
+	if err != nil {
+		return "", false, fmt.Errorf("read app password from stdin: %w", err)
+	}
+	password := strings.TrimSpace(string(data))
+	if password == "" {
+		return "", false, fmt.Errorf("app password from stdin is empty")
+	}
+	return password, true, nil
 }
 
 // runCallbackServer starts the local HTTP server that receives the OAuth

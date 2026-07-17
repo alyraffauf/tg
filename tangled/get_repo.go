@@ -17,6 +17,7 @@ type RepoRecord struct {
 	Owner       string   `json:"owner,omitempty"`
 	AddedAt     string   `json:"addedAt,omitempty"`
 	RepoDid     string   `json:"repoDid,omitempty"`
+	Source      string   `json:"source,omitempty"`
 	Spindle     string   `json:"spindle,omitempty"`
 	Website     string   `json:"website,omitempty"`
 	Labels      []string `json:"labels,omitempty"`

@@ -11,6 +11,7 @@ import (
 
 	"github.com/bluesky-social/indigo/atproto/atclient"
 	"github.com/bluesky-social/indigo/atproto/auth/oauth"
+	"github.com/bluesky-social/indigo/atproto/identity"
 	"github.com/bluesky-social/indigo/atproto/syntax"
 )
 
@@ -41,15 +42,18 @@ var DefaultScopes = []string{
 }
 
 type AuthManager struct {
-	App       *oauth.ClientApp
-	Store     *FileStore
-	state     authState
-	statePath string
+	App             *oauth.ClientApp
+	Store           *FileStore
+	state           authState
+	statePath       string
+	passwordPath    string
+	passwordSession *atclient.PasswordSessionData
 }
 
 type authState struct {
 	CurrentDID     string `json:"current_did,omitempty"`
 	CurrentSession string `json:"current_session,omitempty"`
+	Method         string `json:"method,omitempty"`
 }
 
 // ConfigDir returns the configuration directory for tg.
@@ -76,14 +80,103 @@ func NewAuthManager(callbackURL string, dir string) (*AuthManager, error) {
 
 	store := NewFileStore(filepath.Join(dir, "oauth"))
 	manager := &AuthManager{
-		App:       oauth.NewClientApp(&config, store),
-		Store:     store,
-		statePath: filepath.Join(dir, "auth.json"),
+		App:          oauth.NewClientApp(&config, store),
+		Store:        store,
+		statePath:    filepath.Join(dir, "auth.json"),
+		passwordPath: filepath.Join(dir, "password-session.json"),
 	}
 	if err := manager.loadState(); err != nil {
 		return nil, fmt.Errorf("load auth state: %w", err)
 	}
+	if manager.state.Method == "password" {
+		data, err := os.ReadFile(manager.passwordPath)
+		if err != nil {
+			manager.state = authState{}
+			if err := manager.saveState(); err != nil {
+				return nil, fmt.Errorf("clear unusable password auth state: %w", err)
+			}
+			return manager, nil
+		}
+		var session atclient.PasswordSessionData
+		if err := json.Unmarshal(data, &session); err != nil {
+			if removeErr := os.Remove(manager.passwordPath); removeErr != nil && !os.IsNotExist(removeErr) {
+				return nil, fmt.Errorf("remove unusable password session: %w", removeErr)
+			}
+			manager.state = authState{}
+			if err := manager.saveState(); err != nil {
+				return nil, fmt.Errorf("clear unusable password auth state: %w", err)
+			}
+			return manager, nil
+		}
+		if session.AccountDID == "" || session.Host == "" || session.RefreshToken == "" {
+			if err := os.Remove(manager.passwordPath); err != nil && !os.IsNotExist(err) {
+				return nil, fmt.Errorf("remove incomplete password session: %w", err)
+			}
+			manager.state = authState{}
+			if err := manager.saveState(); err != nil {
+				return nil, fmt.Errorf("clear incomplete password auth state: %w", err)
+			}
+			return manager, nil
+		}
+		manager.passwordSession = &session
+	}
 	return manager, nil
+}
+
+// LoginWithPassword authenticates with an atproto app password and persists
+// the resulting access/refresh token pair for subsequent invocations.
+func (m *AuthManager) LoginWithPassword(ctx context.Context, identifier, password string) error {
+	atid, err := syntax.ParseAtIdentifier(identifier)
+	if err != nil {
+		return err
+	}
+	persistSession := func(_ context.Context, data atclient.PasswordSessionData) {
+		_ = m.savePasswordSession(&data)
+	}
+	client, err := atclient.LoginWithPassword(
+		ctx,
+		identity.DefaultDirectory(),
+		atid,
+		password,
+		"",
+		persistSession,
+	)
+	if err != nil {
+		return err
+	}
+	if client.Auth == nil {
+		return errors.New("password login returned no auth session")
+	}
+	passwordAuth, ok := client.Auth.(*atclient.PasswordAuth)
+	if !ok {
+		return errors.New("password login returned an unexpected auth type")
+	}
+	if m.IsAuthenticated() {
+		if err := m.Logout(ctx); err != nil {
+			return fmt.Errorf("replace current login: %w", err)
+		}
+	}
+	if err := m.savePasswordSession(&passwordAuth.Session); err != nil {
+		return err
+	}
+	m.state = authState{
+		CurrentDID: passwordAuth.Session.AccountDID.String(),
+		Method:     "password",
+	}
+	return m.saveState()
+}
+
+func (m *AuthManager) savePasswordSession(session *atclient.PasswordSessionData) error {
+	snapshot := *session
+	m.passwordSession = &snapshot
+	if err := os.MkdirAll(filepath.Dir(m.passwordPath), 0o700); err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(&snapshot, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(m.passwordPath, data, 0o600)
 }
 
 func (m *AuthManager) StartLogin(ctx context.Context, identifier string) (string, error) {
@@ -95,9 +188,25 @@ func (m *AuthManager) FinishLogin(ctx context.Context, query url.Values) error {
 	if err != nil {
 		return err
 	}
+	if m.IsAuthenticated() {
+		if err := m.Logout(ctx); err != nil {
+			return fmt.Errorf("replace current login: %w", err)
+		}
+	}
 
-	m.state.CurrentDID = session.AccountDID.String()
-	m.state.CurrentSession = session.SessionID
+	return m.activateOAuthSession(session.AccountDID.String(), session.SessionID)
+}
+
+func (m *AuthManager) activateOAuthSession(did, sessionID string) error {
+	if err := os.Remove(m.passwordPath); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("remove previous password session: %w", err)
+	}
+	m.passwordSession = nil
+	m.state = authState{
+		CurrentDID:     did,
+		CurrentSession: sessionID,
+		Method:         "oauth",
+	}
 	return m.saveState()
 }
 
@@ -113,7 +222,7 @@ func (m *AuthManager) CurrentDID() syntax.DID {
 }
 
 func (m *AuthManager) IsAuthenticated() bool {
-	return m.state.CurrentDID != "" && m.state.CurrentSession != ""
+	return m.state.CurrentDID != "" && (m.state.CurrentSession != "" || m.passwordSession != nil)
 }
 
 func (m *AuthManager) CurrentSession(ctx context.Context) (*oauth.ClientSession, error) {
@@ -124,6 +233,12 @@ func (m *AuthManager) CurrentSession(ctx context.Context) (*oauth.ClientSession,
 }
 
 func (m *AuthManager) APIClient(ctx context.Context) (*atclient.APIClient, error) {
+	if m.state.Method == "password" && m.passwordSession != nil {
+		persistSession := func(_ context.Context, data atclient.PasswordSessionData) {
+			_ = m.savePasswordSession(&data)
+		}
+		return atclient.ResumePasswordSession(*m.passwordSession, persistSession), nil
+	}
 	session, err := m.CurrentSession(ctx)
 	if err != nil {
 		return nil, err
@@ -134,6 +249,22 @@ func (m *AuthManager) APIClient(ctx context.Context) (*atclient.APIClient, error
 func (m *AuthManager) Logout(ctx context.Context) error {
 	if !m.IsAuthenticated() {
 		return nil
+	}
+	if m.state.Method == "password" {
+		client := atclient.ResumePasswordSession(*m.passwordSession, nil)
+		passwordAuth, ok := client.Auth.(*atclient.PasswordAuth)
+		if !ok {
+			return errors.New("password session has an unexpected auth type")
+		}
+		if err := passwordAuth.Logout(ctx, client.Client); err != nil {
+			return fmt.Errorf("revoke password session: %w", err)
+		}
+		if err := os.Remove(m.passwordPath); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("remove password session: %w", err)
+		}
+		m.passwordSession = nil
+		m.state = authState{}
+		return m.saveState()
 	}
 	if err := m.App.Logout(ctx, m.CurrentDID(), m.state.CurrentSession); err != nil {
 		return err
