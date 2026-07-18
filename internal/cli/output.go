@@ -54,6 +54,24 @@ type sshKeyItem struct {
 	URI       string `json:"uri"`
 }
 
+type stringItem struct {
+	Rkey        string `json:"rkey"`
+	URI         string `json:"uri"`
+	Filename    string `json:"filename"`
+	Description string `json:"description,omitempty"`
+	CreatedAt   string `json:"createdAt"`
+}
+
+type stringViewResult struct {
+	Rkey        string `json:"rkey"`
+	URI         string `json:"uri"`
+	Filename    string `json:"filename"`
+	Author      author `json:"author"`
+	Description string `json:"description,omitempty"`
+	Contents    string `json:"contents"`
+	CreatedAt   string `json:"createdAt"`
+}
+
 // viewResult is a single issue or pull request. SourceBranch and
 // TargetBranch are only populated (and only emitted as JSON) for pulls.
 type viewResult struct {

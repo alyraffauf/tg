@@ -101,6 +101,27 @@ tg pr close <rkey>
 tg pr merge <rkey>
 ```
 
+### Strings
+
+```bash
+# Create a string from a file
+tg string create hello.md --description "A greeting"
+
+# Create from standard input (requires --filename)
+printf '# hello\n' | tg string create --filename hello.md
+
+# List your strings, or another user's
+tg string list
+tg string list microcosm.blue
+
+# View one of your strings, or another user's
+tg string view <rkey>
+tg string view <rkey> microcosm.blue
+
+# Delete one of your strings
+tg string delete <rkey>
+```
+
 ### Other commands
 
 `tg repo edit`, `tg repo set-default-branch`, `tg repo delete --yes`, `tg repo fork`,

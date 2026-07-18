@@ -91,6 +91,12 @@ func init() {
 	sshKeyCmd.AddCommand(sshKeyListCmd)
 	sshKeyCmd.AddCommand(sshKeyDeleteCmd)
 
+	rootCmd.AddCommand(stringCmd)
+	stringCmd.AddCommand(stringCreateCmd)
+	stringCmd.AddCommand(stringListCmd)
+	stringCmd.AddCommand(stringViewCmd)
+	stringCmd.AddCommand(stringDeleteCmd)
+
 	rootCmd.AddCommand(browseCmd)
 	rootCmd.AddCommand(completionCmd)
 	rootCmd.AddCommand(manCmd)

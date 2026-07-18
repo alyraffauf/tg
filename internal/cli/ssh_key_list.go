@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/alyraffauf/tg/atproto"
-	"github.com/bluesky-social/indigo/atproto/atclient"
 	"github.com/spf13/cobra"
 )
 
@@ -25,18 +24,12 @@ If no argument is given, lists the authenticated user's keys
 			return err
 		}
 
-		ident, err := resolver.ResolveHandle(ctx, handle)
+		atClient, did, err := publicAccountReader(ctx, handle)
 		if err != nil {
-			return fmt.Errorf("resolve handle %q: %w", handle, err)
+			return err
 		}
 
-		pdsURL, err := resolver.ResolvePDS(ctx, ident.DID.String())
-		if err != nil {
-			return fmt.Errorf("resolve PDS for %q: %w", handle, err)
-		}
-
-		atClient := &atproto.ATProto{Client: &atclient.APIClient{Host: pdsURL}}
-		records, err := atClient.ListAllRecords(ctx, ident.DID.String(), "sh.tangled.publicKey", atproto.ListRecordsOpts{Limit: defaultListLimit})
+		records, err := atClient.ListAllRecords(ctx, did, "sh.tangled.publicKey", atproto.ListRecordsOpts{Limit: defaultListLimit})
 		if err != nil {
 			return fmt.Errorf("list SSH keys for %q: %w", handle, err)
 		}
