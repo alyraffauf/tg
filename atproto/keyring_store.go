@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/bluesky-social/indigo/atproto/atclient"
 	"github.com/bluesky-social/indigo/atproto/auth/oauth"
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	"github.com/zalando/go-keyring"
@@ -55,6 +56,8 @@ func NewKeyringStore() *KeyringStore {
 }
 
 const currentSessionKey = "session:current"
+
+const currentPasswordKey = "password:current"
 
 func requestKey(state string) string {
 	return "request:" + state
@@ -108,6 +111,28 @@ func (s *KeyringStore) DeleteSession(_ context.Context, _ syntax.DID, _ string) 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.deleteSecret(currentSessionKey)
+}
+
+func (s *KeyringStore) GetPasswordSession(_ context.Context) (*atclient.PasswordSessionData, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var session atclient.PasswordSessionData
+	if err := s.getSecret(currentPasswordKey, &session); err != nil {
+		return nil, err
+	}
+	return &session, nil
+}
+
+func (s *KeyringStore) SavePasswordSession(_ context.Context, session atclient.PasswordSessionData) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.saveSecret(currentPasswordKey, session)
+}
+
+func (s *KeyringStore) DeletePasswordSession(_ context.Context) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.deleteSecret(currentPasswordKey)
 }
 
 func (s *KeyringStore) GetAuthRequestInfo(_ context.Context, state string) (*oauth.AuthRequestData, error) {

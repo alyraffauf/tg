@@ -16,20 +16,21 @@ import (
 const patchMimeType = "application/gzip"
 
 var (
-	prCreateTitle    string
-	prCreateBody     string
-	prCreateBodyFile string
-	prCreateBase     string
-	prCreateHead     string
-	prCreateRepo     string
+	prCreateTitle      string
+	prCreateBody       string
+	prCreateBodyFile   string
+	prCreateBase       string
+	prCreateHead       string
+	prCreateRepo       string
+	prCreateSourceRepo string
 )
 
 var prCreateCmd = &cobra.Command{
 	Use:   "create",
 	Short: "Create a pull request from the current branch",
 	Long: "Create a pull request by uploading a gzipped git patch and writing a sh.tangled.repo.pull record. " +
-		"The source and target repository are the same. By default, the current branch is the source and " +
-		"origin's default branch is the target. Use --repo to target a different Tangled repository.",
+		"By default, the current repository and branch are both the source and target repository, and origin's " +
+		"default branch is the target branch. Use --repo and --source-repo for a fork-based pull request.",
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
@@ -70,6 +71,20 @@ var prCreateCmd = &cobra.Command{
 		if !strings.HasPrefix(target.URI, "at://") {
 			return fmt.Errorf("target repository %q has no strong at:// URI", repo)
 		}
+		source := target
+		if prCreateSourceRepo != "" {
+			sourceHandle, sourceName, err := parseHandleRepo(prCreateSourceRepo)
+			if err != nil {
+				return err
+			}
+			source, err = resolveRepoRecord(ctx, sourceHandle, sourceName)
+			if err != nil {
+				return fmt.Errorf("resolve source repository: %w", err)
+			}
+		}
+		if source.Value.RepoDid == "" {
+			return fmt.Errorf("source repository has no repo DID")
+		}
 
 		patch, err := gitutil.GeneratePatch(ctx, repoDir, base, head)
 		if err != nil {
@@ -81,12 +96,13 @@ var prCreateCmd = &cobra.Command{
 		}
 
 		uri, err := createPullRecord(ctx, atClient, did, prCreateRecord{
-			Title:   prCreateTitle,
-			Body:    body,
-			RepoDid: target.Value.RepoDid,
-			Base:    base,
-			Head:    head,
-			Patch:   blob,
+			Title:         prCreateTitle,
+			Body:          body,
+			TargetRepoDid: target.Value.RepoDid,
+			SourceRepoDid: source.Value.RepoDid,
+			Base:          base,
+			Head:          head,
+			Patch:         blob,
 		})
 		if err != nil {
 			return err
@@ -105,16 +121,18 @@ func init() {
 	prCreateCmd.Flags().StringVarP(&prCreateBase, "base", "B", "", "Target branch (default: origin's default branch)")
 	prCreateCmd.Flags().StringVarP(&prCreateHead, "head", "H", "", "Source branch (default: current branch)")
 	prCreateCmd.Flags().StringVarP(&prCreateRepo, "repo", "R", "", "Target repository as handle/repo")
+	prCreateCmd.Flags().StringVar(&prCreateSourceRepo, "source-repo", "", "Source repository as handle/repo (for fork-based pull requests)")
 	prCreateCmd.MarkFlagRequired("title")
 }
 
 type prCreateRecord struct {
-	Title   string
-	Body    string
-	RepoDid string
-	Base    string
-	Head    string
-	Patch   *atproto.Blob
+	Title         string
+	Body          string
+	TargetRepoDid string
+	SourceRepoDid string
+	Base          string
+	Head          string
+	Patch         *atproto.Blob
 }
 
 // pullRecord is the sh.tangled.repo.pull lexicon shape used for record writes.
@@ -129,15 +147,13 @@ type pullRecord struct {
 }
 
 type pullTarget struct {
-	Repo    string `json:"repo"`
-	RepoDid string `json:"repoDid"`
-	Branch  string `json:"branch"`
+	Repo   string `json:"repo"`
+	Branch string `json:"branch"`
 }
 
 type pullSource struct {
-	Repo    string `json:"repo"`
-	RepoDid string `json:"repoDid"`
-	Branch  string `json:"branch"`
+	Repo   string `json:"repo,omitempty"`
+	Branch string `json:"branch"`
 }
 
 type pullRound struct {
@@ -175,27 +191,7 @@ func prTargetBranch(ctx context.Context, repoDir string) (string, error) {
 }
 
 func createPullRecord(ctx context.Context, atClient *atproto.ATProto, did string, input prCreateRecord) (string, error) {
-	now := time.Now().UTC().Format(time.RFC3339)
-	record := pullRecord{
-		Type:      "sh.tangled.repo.pull",
-		Title:     input.Title,
-		Body:      input.Body,
-		CreatedAt: now,
-		Target: pullTarget{
-			Repo:    input.RepoDid,
-			RepoDid: input.RepoDid,
-			Branch:  input.Base,
-		},
-		Source: pullSource{
-			Repo:    input.RepoDid,
-			RepoDid: input.RepoDid,
-			Branch:  input.Head,
-		},
-		Rounds: []pullRound{{
-			CreatedAt: now,
-			PatchBlob: input.Patch,
-		}},
-	}
+	record := newPullRecord(input, time.Now().UTC())
 	uri, _, err := atClient.PutRecord(ctx, atproto.PutRecordInput{
 		Repo:       did,
 		Collection: "sh.tangled.repo.pull",
@@ -206,4 +202,26 @@ func createPullRecord(ctx context.Context, atClient *atproto.ATProto, did string
 		return "", fmt.Errorf("create pull request record: %w", err)
 	}
 	return uri, nil
+}
+
+func newPullRecord(input prCreateRecord, createdAt time.Time) pullRecord {
+	now := createdAt.Format(time.RFC3339)
+	return pullRecord{
+		Type:      "sh.tangled.repo.pull",
+		Title:     input.Title,
+		Body:      input.Body,
+		CreatedAt: now,
+		Target: pullTarget{
+			Repo:   input.TargetRepoDid,
+			Branch: input.Base,
+		},
+		Source: pullSource{
+			Repo:   input.SourceRepoDid,
+			Branch: input.Head,
+		},
+		Rounds: []pullRound{{
+			CreatedAt: now,
+			PatchBlob: input.Patch,
+		}},
+	}
 }

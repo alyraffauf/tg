@@ -18,6 +18,32 @@ go install github.com/alyraffauf/tg/cmd/tg@latest
 
 ## Usage
 
+### Authentication
+
+Log in interactively with OAuth:
+
+```bash
+tg auth login alice.example.com
+```
+
+For headless use, pass an atproto app password as the second argument:
+
+```bash
+tg auth login alice.example.com xxxx-xxxx-xxxx-xxxx
+```
+
+To avoid exposing the app password in shell history, pass it on standard input:
+
+```bash
+printf '%s\n' "$ATPROTO_APP_PASSWORD" | tg auth login alice.example.com --password-stdin
+```
+
+Authentication is persisted locally. The current account is recorded in
+`~/.config/tg/auth.json` (or `$XDG_CONFIG_HOME/tg/auth.json`); OAuth session
+credentials are stored under `~/.config/tg/oauth/`, and app-password sessions
+are stored in `~/.config/tg/password-session.json`. These files are created
+with user-only permissions. Use `tg auth logout` to remove the active login.
+
 `tg` auto-detects the repository from the `origin` remote when run inside a cloned Tangled repo. For now, only ssh origins are supported. You can also pass a fully-qualified `handle/repo` argument.
 
 ### Repositories

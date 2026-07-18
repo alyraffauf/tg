@@ -3,11 +3,13 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
 
+	"github.com/alyraffauf/tg/atproto"
 	"github.com/bluesky-social/indigo/atproto/atclient"
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	"github.com/spf13/cobra"
@@ -39,11 +41,14 @@ var apiCmd = &cobra.Command{
 			return fmt.Errorf("method must be GET or POST, got %q", apiMethod)
 		}
 
-		session, err := requireAuthSession(cmd.Context())
+		client, _, err := auth.APIClient(cmd.Context())
 		if err != nil {
-			return err
+			if errors.Is(err, atproto.ErrNotAuthenticated) {
+				return fmt.Errorf("not logged in; run \"tg auth login\" first")
+			}
+			return fmt.Errorf("resume auth session: %w", err)
 		}
-		response, err := doAPIRequest(cmd, session.APIClient(), endpoint, method, fields)
+		response, err := doAPIRequest(cmd, client, endpoint, method, fields)
 		if err != nil {
 			return err
 		}
