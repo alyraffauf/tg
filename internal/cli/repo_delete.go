@@ -35,31 +35,34 @@ var repoDeleteCmd = &cobra.Command{
 			return fmt.Errorf("repo %q has no knot", handle+"/"+name)
 		}
 		rkey := extractRKey(repo.URI)
-		existingRecord, err := atClient.GetRecord(ctx, did, "sh.tangled.repo", rkey)
-		if err != nil {
-			return fmt.Errorf("get repository record: %w", err)
-		}
+		existingRecord, getErr := atClient.GetRecord(ctx, did, "sh.tangled.repo", rkey)
+		// getErr is non-fatal: the record may already be deleted. Only
+		// call DeleteRecord if it still exists.
 
 		token, err := atClient.GetServiceAuth(ctx, "did:web:"+repo.Value.Knot, "sh.tangled.repo.delete")
 		if err != nil {
 			return fmt.Errorf("get knot authorization: %w", err)
 		}
-		if err := atClient.DeleteRecord(ctx, atproto.DeleteRecordInput{
-			Repo:       did,
-			Collection: "sh.tangled.repo",
-			Rkey:       rkey,
-		}); err != nil {
-			return fmt.Errorf("delete repository record: %w", err)
+		if getErr == nil {
+			if err := atClient.DeleteRecord(ctx, atproto.DeleteRecordInput{
+				Repo:       did,
+				Collection: "sh.tangled.repo",
+				Rkey:       rkey,
+			}); err != nil {
+				return fmt.Errorf("delete repository record: %w", err)
+			}
 		}
 		if err := knot.New(repo.Value.Knot, token).DeleteRepo(ctx, knot.DeleteRepoInput{
 			DID:  did,
 			Name: name,
 			Rkey: rkey,
 		}); err != nil {
-			if _, _, restoreErr := atClient.PutRecord(ctx, atproto.PutRecordInput{
-				Repo: did, Collection: "sh.tangled.repo", Rkey: rkey, Record: existingRecord.Value,
-			}); restoreErr != nil {
-				return fmt.Errorf("delete knot repository: %w; restore repository record: %v", err, restoreErr)
+			if getErr == nil {
+				if _, _, restoreErr := atClient.PutRecord(ctx, atproto.PutRecordInput{
+					Repo: did, Collection: "sh.tangled.repo", Rkey: rkey, Record: existingRecord.Value,
+				}); restoreErr != nil {
+					return fmt.Errorf("delete knot repository: %w; restore repository record: %v", err, restoreErr)
+				}
 			}
 			return err
 		}
