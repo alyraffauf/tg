@@ -10,9 +10,8 @@ buildGoModule {
   pname = "tg";
   version = "dev";
   src = ../.;
-  vendorHash = "sha256-NKfVkBe863hXwjY1Jic+0rTnRD6v25pbzDx9W4W5OqU=";
+  vendorHash = "sha256-vAjC3nyJvXVvsBj+JXPN7dNPAdhwY64lqHLsOhTuVKc=";
   subPackages = ["cmd/tg"];
-  env.CGO_ENABLED = "0";
 
   nativeBuildInputs = [
     installShellFiles
@@ -23,6 +22,12 @@ buildGoModule {
     wrapProgram $out/bin/tg --prefix PATH : ${lib.makeBinPath [git]}
   ''
   + lib.optionalString (stdenv.buildPlatform.canExecute stdenv.hostPlatform) ''
+    # Man page dates stay reproducible because stdenv sets SOURCE_DATE_EPOCH,
+    # which cobra/doc reads when GenManHeader.Date is unset.
+    manPageDir=$(mktemp -d)
+    $out/bin/tg man "$manPageDir"
+    installManPage "$manPageDir"/*
+
     installShellCompletion --cmd tg \
       --bash <($out/bin/tg completion bash) \
       --fish <($out/bin/tg completion fish) \

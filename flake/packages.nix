@@ -1,7 +1,10 @@
 _: {
-  perSystem = {pkgs, ...}: {
+  perSystem = {pkgs, ...}: let
+    tg = pkgs.callPackage ../nix/tg.nix {};
+  in {
     packages = {
-      tg = pkgs.callPackage ../nix/tg.nix {};
+      inherit tg;
+      default = tg;
     };
   };
 }

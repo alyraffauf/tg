@@ -93,5 +93,6 @@ func init() {
 
 	rootCmd.AddCommand(browseCmd)
 	rootCmd.AddCommand(completionCmd)
+	rootCmd.AddCommand(manCmd)
 	rootCmd.AddCommand(apiCmd)
 }
