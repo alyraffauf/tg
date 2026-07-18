@@ -25,8 +25,9 @@ Requires authentication (run "tg auth login" first).`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
 
-		if auth == nil || !auth.IsAuthenticated() {
-			return fmt.Errorf("not logged in; run \"tg auth login\" first")
+		atClient, did, err := authenticatedATProto(ctx)
+		if err != nil {
+			return err
 		}
 
 		keyPath := "~/.ssh/id_ed25519.pub"
@@ -54,13 +55,6 @@ Requires authentication (run "tg auth login" first).`,
 		if title == "" {
 			title = filepath.Base(keyPath)
 		}
-
-		pds, err := auth.APIClient(ctx)
-		if err != nil {
-			return fmt.Errorf("get auth client: %w", err)
-		}
-		atClient := &atproto.ATProto{Client: pds}
-		did := auth.CurrentDID().String()
 
 		uri, _, err := atClient.PutRecord(ctx, atproto.PutRecordInput{
 			Repo:       did,

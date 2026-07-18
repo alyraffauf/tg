@@ -1,8 +1,10 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 
+	"github.com/alyraffauf/tg/atproto"
 	"github.com/spf13/cobra"
 )
 
@@ -12,13 +14,17 @@ var authStatusCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
 
-		if auth == nil || !auth.IsAuthenticated() {
+		did, err := auth.CurrentDID(ctx)
+		if err != nil {
+			if !errors.Is(err, atproto.ErrNotAuthenticated) {
+				return fmt.Errorf("resume OAuth session: %w", err)
+			}
 			return output(authStatusResult{}, func(_ authStatusResult) {
 				fmt.Println("Not logged in.")
 			})
 		}
 
-		author := resolveAuthor(ctx, auth.CurrentDID().String())
+		author := resolveAuthor(ctx, did.String())
 		result := authStatusResult{
 			Authenticated: true,
 			DID:           author.DID,

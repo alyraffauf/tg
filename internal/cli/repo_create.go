@@ -39,16 +39,10 @@ Requires authentication (run "tg auth login" first).`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
 
-		if auth == nil || !auth.IsAuthenticated() {
-			return fmt.Errorf("not logged in; run \"tg auth login\" first")
-		}
-
-		pds, err := auth.APIClient(ctx)
+		atClient, did, err := authenticatedATProto(ctx)
 		if err != nil {
-			return fmt.Errorf("get auth client: %w", err)
+			return err
 		}
-		atClient := &atproto.ATProto{Client: pds}
-		did := auth.CurrentDID().String()
 
 		knotHost := repoCreateKnot
 		if knotHost == "" {

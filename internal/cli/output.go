@@ -91,3 +91,9 @@ type authStatusResult struct {
 	DID           string `json:"did,omitempty"`
 	Handle        string `json:"handle,omitempty"`
 }
+
+type authLogoutResult struct {
+	// WasLoggedIn reports whether a session existed and was cleared. It is false
+	// when there was nothing to log out (not a failure; the command still exits 0).
+	WasLoggedIn bool `json:"wasLoggedIn"`
+}

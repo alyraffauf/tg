@@ -80,13 +80,26 @@ tg pr merge <rkey>
 `tg repo edit`, `tg repo set-default-branch`, `tg repo delete --yes`, `tg repo fork`,
 `tg ssh-key delete`, `tg browse`, `tg completion`, `tg auth token`, and `tg api` are available.
 
+### Authentication & token storage
+
+`tg` stores a single OAuth session in the system keyring: macOS Keychain or
+the Secret Service on Linux (GNOME Keyring / KWallet). The keyring unlocks
+with your login session, so no separate passphrase is needed.
+
+Logging in again replaces the current session. The keyring is accessed on
+first use (not at startup), so authentication only fails once you run a
+command that needs a session. On Linux this requires a Secret Service
+provider to be running; on a headless system without a D-Bus session bus
+(e.g. a server or container), install and start `gnome-keyring-daemon` or
+`kwalletd`, or set `DBUS_SESSION_BUS_ADDRESS`.
+
 ## Architecture
 
 - `cmd/tg/` — CLI entry point
 - `internal/cli/` — Cobra command tree (`repo`, `issue`, `pr`)
 - `internal/gitutil/` — Git operations (clone, fetch, patch apply)
 - `tangled/` — Typed client for the Bobbin API (`api.tangled.org`)
-- `atproto/` — Identity resolution (handle ↔ DID, PDS discovery)
+- `atproto/` — Identity resolution (handle ↔ DID, PDS discovery); OAuth session storage (system keyring)
 
 ## Dependencies
 
@@ -94,6 +107,7 @@ tg pr merge <rkey>
 - `git` and `ssh` (for clone and PR checkout)
 - [`github.com/bluesky-social/indigo`](https://github.com/bluesky-social/indigo) — atproto SDK
 - [`github.com/spf13/cobra`](https://github.com/spf13/cobra) — CLI framework
+- [`github.com/zalando/go-keyring`](https://github.com/zalando/go-keyring) — platform keyring access
 
 ## License
 

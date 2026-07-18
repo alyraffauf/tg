@@ -11,13 +11,9 @@ var authTokenCmd = &cobra.Command{
 	Short: "Print the current OAuth access token",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
-		if auth == nil || !auth.IsAuthenticated() {
-			return fmt.Errorf("not logged in; run \"tg auth login\" first")
-		}
-
-		session, err := auth.CurrentSession(cmd.Context())
+		session, err := requireAuthSession(cmd.Context())
 		if err != nil {
-			return fmt.Errorf("resume OAuth session: %w", err)
+			return err
 		}
 		token, _ := session.GetHostAccessData()
 		if token == "" {

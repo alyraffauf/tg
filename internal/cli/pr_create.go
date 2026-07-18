@@ -33,8 +33,9 @@ var prCreateCmd = &cobra.Command{
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
-		if auth == nil || !auth.IsAuthenticated() {
-			return fmt.Errorf("not logged in; run \"tg auth login\" first")
+		atClient, did, err := authenticatedATProto(ctx)
+		if err != nil {
+			return err
 		}
 
 		repoDir, err := os.Getwd()
@@ -74,17 +75,12 @@ var prCreateCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("generate pull request patch: %w", err)
 		}
-		pds, err := auth.APIClient(ctx)
-		if err != nil {
-			return fmt.Errorf("get auth client: %w", err)
-		}
-		atClient := &atproto.ATProto{Client: pds}
 		blob, err := atClient.UploadBlob(ctx, patch, patchMimeType)
 		if err != nil {
 			return err
 		}
 
-		uri, err := createPullRecord(ctx, atClient, auth.CurrentDID().String(), prCreateRecord{
+		uri, err := createPullRecord(ctx, atClient, did, prCreateRecord{
 			Title:   prCreateTitle,
 			Body:    body,
 			RepoDid: target.Value.RepoDid,

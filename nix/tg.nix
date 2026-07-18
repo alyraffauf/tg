@@ -8,7 +8,7 @@ buildGoModule {
   pname = "tg";
   version = "dev";
   src = ../.;
-  vendorHash = "sha256-4e3RU0z5rh8cDSW7fQSfQM8sqeD53PA0BYGTTjtF23E=";
+  vendorHash = "sha256-WDM1O622yKsP6qifLSh796qph5HzrJR42F8OpJwNzJQ=";
   subPackages = ["cmd/tg"];
   env.CGO_ENABLED = "0";
 

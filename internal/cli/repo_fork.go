@@ -16,8 +16,10 @@ var repoForkCmd = &cobra.Command{
 	Short: "Fork a Tangled repository",
 	Args:  cobra.RangeArgs(1, 2),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if auth == nil || !auth.IsAuthenticated() {
-			return fmt.Errorf("not logged in; run \"tg auth login\" first")
+		ctx := cmd.Context()
+		atClient, ownerDID, err := authenticatedATProto(ctx)
+		if err != nil {
+			return err
 		}
 
 		handle, sourceName, err := parseHandleRepo(args[0])
@@ -29,18 +31,10 @@ var repoForkCmd = &cobra.Command{
 			name = args[1]
 		}
 
-		ctx := cmd.Context()
 		source, err := getForkSource(ctx, handle, sourceName)
 		if err != nil {
 			return err
 		}
-		pds, err := auth.APIClient(ctx)
-		if err != nil {
-			return fmt.Errorf("get auth client: %w", err)
-		}
-		atClient := &atproto.ATProto{Client: pds}
-		ownerDID := auth.CurrentDID().String()
-
 		token, err := atClient.GetServiceAuth(ctx, "did:web:"+source.Knot, "sh.tangled.repo.create")
 		if err != nil {
 			return fmt.Errorf("get knot service auth: %w", err)

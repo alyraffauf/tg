@@ -2,23 +2,19 @@ package atproto
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"fmt"
 	"net/url"
-	"os"
-	"path/filepath"
 
-	"github.com/bluesky-social/indigo/atproto/atclient"
 	"github.com/bluesky-social/indigo/atproto/auth/oauth"
 	"github.com/bluesky-social/indigo/atproto/syntax"
+	"github.com/zalando/go-keyring"
 )
 
 var ErrNotAuthenticated = errors.New("not authenticated")
 
-// DefaultScopes are requested for a CLI session. The rpc scopes are
-// needed for the PDS to mint service-auth JWTs for knot procedures. The
-// blob scope is required for uploading PR patch blobs to the PDS.
+// DefaultScopes are requested for a CLI session. The rpc scopes are needed for the
+// PDS to mint service-auth JWTs for knot procedures. The blob scope is
+// required for uploading PR patch blobs to the PDS.
 var DefaultScopes = []string{
 	"atproto",
 	"repo:sh.tangled.actor.profile",
@@ -41,127 +37,71 @@ var DefaultScopes = []string{
 }
 
 type AuthManager struct {
-	App       *oauth.ClientApp
-	Store     *FileStore
-	state     authState
-	statePath string
+	app   *oauth.ClientApp
+	store *KeyringStore
 }
 
-type authState struct {
-	CurrentDID     string `json:"current_did,omitempty"`
-	CurrentSession string `json:"current_session,omitempty"`
-}
-
-// ConfigDir returns the configuration directory for tg.
-//
-// It respects the XDG Base Directory Specification: if XDG_CONFIG_HOME is set,
-// it uses that directory; otherwise it falls back to ~/.config/tg.
-func ConfigDir() (string, error) {
-	if dir := os.Getenv("XDG_CONFIG_HOME"); dir != "" {
-		return filepath.Join(dir, "tg"), nil
-	}
-
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(home, ".config", "tg"), nil
-}
-
-// NewAuthManager creates an AuthManager. callbackURL must be reachable by the
-// user's browser during login.
-func NewAuthManager(callbackURL string, dir string) (*AuthManager, error) {
+func NewAuthManager(callbackURL string) *AuthManager {
 	config := oauth.NewLocalhostConfig(callbackURL, DefaultScopes)
 	config.UserAgent = "tg"
-
-	store := NewFileStore(filepath.Join(dir, "oauth"))
-	manager := &AuthManager{
-		App:       oauth.NewClientApp(&config, store),
-		Store:     store,
-		statePath: filepath.Join(dir, "auth.json"),
+	store := NewKeyringStore()
+	return &AuthManager{
+		app:   oauth.NewClientApp(&config, store),
+		store: store,
 	}
-	if err := manager.loadState(); err != nil {
-		return nil, fmt.Errorf("load auth state: %w", err)
-	}
-	return manager, nil
 }
 
 func (m *AuthManager) StartLogin(ctx context.Context, identifier string) (string, error) {
-	return m.App.StartAuthFlow(ctx, identifier)
+	return m.app.StartAuthFlow(ctx, identifier)
 }
 
 func (m *AuthManager) FinishLogin(ctx context.Context, query url.Values) error {
-	session, err := m.App.ProcessCallback(ctx, query)
-	if err != nil {
-		return err
-	}
-
-	m.state.CurrentDID = session.AccountDID.String()
-	m.state.CurrentSession = session.SessionID
-	return m.saveState()
+	_, err := m.app.ProcessCallback(ctx, query)
+	return err
 }
 
-func (m *AuthManager) CurrentDID() syntax.DID {
-	if m.state.CurrentDID == "" {
-		return syntax.DID("")
-	}
-	did, err := syntax.ParseDID(m.state.CurrentDID)
-	if err != nil {
-		return syntax.DID("")
-	}
-	return did
+// CancelLogin cleans up any pending auth request written by StartLogin when the
+// login flow is abandoned (e.g. the user closes the browser before the
+// callback). It is safe to call after a completed login.
+func (m *AuthManager) CancelLogin() {
+	_ = m.store.DeletePendingAuthRequest()
 }
 
-func (m *AuthManager) IsAuthenticated() bool {
-	return m.state.CurrentDID != "" && m.state.CurrentSession != ""
+func (m *AuthManager) CurrentDID(ctx context.Context) (syntax.DID, error) {
+	session, err := m.CurrentSession(ctx)
+	if err != nil {
+		return "", err
+	}
+	return session.Data.AccountDID, nil
 }
 
 func (m *AuthManager) CurrentSession(ctx context.Context) (*oauth.ClientSession, error) {
-	if !m.IsAuthenticated() {
-		return nil, ErrNotAuthenticated
-	}
-	return m.App.ResumeSession(ctx, m.CurrentDID(), m.state.CurrentSession)
-}
-
-func (m *AuthManager) APIClient(ctx context.Context) (*atclient.APIClient, error) {
-	session, err := m.CurrentSession(ctx)
+	session, err := m.app.ResumeSession(ctx, "", "")
 	if err != nil {
+		if errors.Is(err, keyring.ErrNotFound) {
+			return nil, ErrNotAuthenticated
+		}
 		return nil, err
 	}
-	return session.APIClient(), nil
+	return session, nil
 }
 
 func (m *AuthManager) Logout(ctx context.Context) error {
-	if !m.IsAuthenticated() {
+	err := m.app.Logout(ctx, "", "")
+	if err == nil {
 		return nil
 	}
-	if err := m.App.Logout(ctx, m.CurrentDID(), m.state.CurrentSession); err != nil {
-		return err
+	if errors.Is(err, keyring.ErrNotFound) {
+		return ErrNotAuthenticated
 	}
-
-	m.state = authState{}
-	return m.saveState()
-}
-
-func (m *AuthManager) loadState() error {
-	data, err := os.ReadFile(m.statePath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil
-		}
-		return err
+	// Logout failed partway — most commonly because the session entry is
+	// corrupt or the keyring is transiently unavailable. The upstream Logout
+	// aborts before DeleteSession in that case, so the bad entry would
+	// otherwise be unrecoverable short of manual keyring surgery. Best-effort
+	// clear it so the user can re-login; if that also fails, surface the
+	// original error.
+	if deleteErr := m.store.DeleteSession(ctx, "", ""); deleteErr == nil {
+		return nil
 	}
-	return json.Unmarshal(data, &m.state)
-}
-
-func (m *AuthManager) saveState() error {
-	if err := os.MkdirAll(filepath.Dir(m.statePath), 0o700); err != nil {
-		return err
-	}
-
-	data, err := json.MarshalIndent(m.state, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(m.statePath, data, 0o600)
+	return err
 }

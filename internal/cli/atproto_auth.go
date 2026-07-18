@@ -2,19 +2,28 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/alyraffauf/tg/atproto"
+	"github.com/bluesky-social/indigo/atproto/auth/oauth"
 )
 
-func authenticatedATProto(ctx context.Context) (*atproto.ATProto, string, error) {
-	if auth == nil || !auth.IsAuthenticated() {
-		return nil, "", fmt.Errorf("not logged in; run \"tg auth login\" first")
-	}
-
-	pds, err := auth.APIClient(ctx)
+func requireAuthSession(ctx context.Context) (*oauth.ClientSession, error) {
+	session, err := auth.CurrentSession(ctx)
 	if err != nil {
-		return nil, "", fmt.Errorf("get auth client: %w", err)
+		if errors.Is(err, atproto.ErrNotAuthenticated) {
+			return nil, fmt.Errorf("not logged in; run \"tg auth login\" first")
+		}
+		return nil, fmt.Errorf("resume OAuth session: %w", err)
 	}
-	return &atproto.ATProto{Client: pds}, auth.CurrentDID().String(), nil
+	return session, nil
+}
+
+func authenticatedATProto(ctx context.Context) (*atproto.ATProto, string, error) {
+	session, err := requireAuthSession(ctx)
+	if err != nil {
+		return nil, "", err
+	}
+	return &atproto.ATProto{Client: session.APIClient()}, session.Data.AccountDID.String(), nil
 }

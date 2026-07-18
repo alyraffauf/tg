@@ -2,9 +2,11 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
+	"github.com/alyraffauf/tg/atproto"
 	"github.com/alyraffauf/tg/internal/gitutil"
 	"github.com/alyraffauf/tg/tangled"
 	"github.com/spf13/cobra"
@@ -61,10 +63,14 @@ func resolveHandleOrSelf(ctx context.Context, args []string) (string, error) {
 	if len(args) == 1 {
 		return args[0], nil
 	}
-	if auth == nil || !auth.IsAuthenticated() {
-		return "", fmt.Errorf("not logged in; provide a handle or run \"tg auth login\"")
+	did, err := auth.CurrentDID(ctx)
+	if err != nil {
+		if errors.Is(err, atproto.ErrNotAuthenticated) {
+			return "", fmt.Errorf("not logged in; provide a handle or run \"tg auth login\"")
+		}
+		return "", fmt.Errorf("resume OAuth session: %w", err)
 	}
-	ident, err := resolver.ResolveDID(ctx, auth.CurrentDID().String())
+	ident, err := resolver.ResolveDID(ctx, did.String())
 	if err != nil {
 		return "", fmt.Errorf("resolve your DID: %w", err)
 	}

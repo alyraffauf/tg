@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"fmt"
 	"log/slog"
 	"os"
 
@@ -23,7 +22,7 @@ var (
 		Client: &atclient.APIClient{Host: appviewHost()},
 		Logger: slog.Default(),
 	}
-	auth *atproto.AuthManager
+	auth = atproto.NewAuthManager(oauthCallbackURL)
 
 	jsonOutput bool
 	appview    string
@@ -39,6 +38,8 @@ func appviewHost() string {
 var rootCmd = &cobra.Command{
 	Use:   "tg",
 	Short: "A CLI for Tangled",
+	// Errors such as "not logged in" are expected and shouldn't dump usage.
+	SilenceUsage: true,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		client.Client.Host = appview
 	},
@@ -51,8 +52,6 @@ func Execute() error {
 func init() {
 	rootCmd.PersistentFlags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
 	rootCmd.PersistentFlags().StringVar(&appview, "appview", appviewHost(), "Appview host URL (overrides the TG_APPVIEW environment variable)")
-
-	initAuth()
 
 	rootCmd.AddCommand(authCmd)
 	authCmd.AddCommand(authLoginCmd)
@@ -99,17 +98,4 @@ func init() {
 	rootCmd.AddCommand(browseCmd)
 	rootCmd.AddCommand(completionCmd)
 	rootCmd.AddCommand(apiCmd)
-}
-
-func initAuth() {
-	dir, err := atproto.ConfigDir()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "warning: could not determine config dir: %v\n", err)
-		return
-	}
-
-	auth, err = atproto.NewAuthManager(oauthCallbackURL, dir)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "warning: auth initialization failed: %v\n", err)
-	}
 }

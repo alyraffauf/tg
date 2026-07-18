@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
 	"os/exec"
 	"runtime"
 
@@ -16,10 +17,6 @@ var authLoginCmd = &cobra.Command{
 	Long:  `Log in to atproto via OAuth using a local browser callback.`,
 	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if auth == nil {
-			return fmt.Errorf("auth is not available")
-		}
-
 		identifier := ""
 		if len(args) == 1 {
 			identifier = args[0]
@@ -37,8 +34,10 @@ var authLoginCmd = &cobra.Command{
 		ctx := cmd.Context()
 		loginURL, err := auth.StartLogin(ctx, identifier)
 		if err != nil {
+			auth.CancelLogin()
 			return err
 		}
+		defer auth.CancelLogin()
 
 		fmt.Println("Opening browser to complete login...")
 		if err := openBrowser(loginURL); err != nil {
@@ -50,7 +49,12 @@ var authLoginCmd = &cobra.Command{
 			if err != nil {
 				return err
 			}
-			fmt.Printf("Logged in as %s\n", auth.CurrentDID())
+			did, err := auth.CurrentDID(ctx)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "Login completed but session could not be confirmed.")
+				return err
+			}
+			fmt.Printf("Logged in as %s\n", did)
 			return nil
 		case <-ctx.Done():
 			return ctx.Err()
@@ -58,8 +62,6 @@ var authLoginCmd = &cobra.Command{
 	},
 }
 
-// runCallbackServer starts the local HTTP server that receives the OAuth
-// redirect after the user approves the login in their browser.
 func runCallbackServer() (*http.Server, <-chan error, error) {
 	resultChannel := make(chan error, 1)
 
@@ -88,7 +90,6 @@ func runCallbackServer() (*http.Server, <-chan error, error) {
 	return server, resultChannel, nil
 }
 
-// openBrowser launches the user's default browser to url.
 func openBrowser(url string) error {
 	var cmd string
 	var args []string

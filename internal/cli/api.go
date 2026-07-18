@@ -23,10 +23,6 @@ var apiCmd = &cobra.Command{
 	Short: "Call an authenticated XRPC endpoint",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if auth == nil || !auth.IsAuthenticated() {
-			return fmt.Errorf("not logged in; run \"tg auth login\" first")
-		}
-
 		endpoint, err := syntax.ParseNSID(args[0])
 		if err != nil {
 			return fmt.Errorf("parse NSID: %w", err)
@@ -43,11 +39,11 @@ var apiCmd = &cobra.Command{
 			return fmt.Errorf("method must be GET or POST, got %q", apiMethod)
 		}
 
-		client, err := auth.APIClient(cmd.Context())
+		session, err := requireAuthSession(cmd.Context())
 		if err != nil {
-			return fmt.Errorf("get auth client: %w", err)
+			return err
 		}
-		response, err := doAPIRequest(cmd, client, endpoint, method, fields)
+		response, err := doAPIRequest(cmd, session.APIClient(), endpoint, method, fields)
 		if err != nil {
 			return err
 		}
