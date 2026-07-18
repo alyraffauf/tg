@@ -119,10 +119,47 @@ provider to be running; on a headless system without a D-Bus session bus
 (e.g. a server or container), install and start `gnome-keyring-daemon` or
 `kwalletd`, or set `DBUS_SESSION_BUS_ADDRESS`.
 
+## Configuration
+
+`tg` resolves configuration values from the following sources, in increasing
+precedence (later sources override earlier ones):
+
+1. **Defaults** — `appview` is `https://bobbin.klbr.net`
+2. **Config file** — `$XDG_CONFIG_HOME/tg/config.toml` (or `~/.config/tg/config.toml`)
+3. **Environment variables** — prefixed `TG_` (e.g. `TG_APPVIEW`)
+4. **Command-line flags** — e.g. `--appview`
+
+The config file is optional; a missing file is not an error.
+
+### Config file
+
+```toml
+# ~/.config/tg/config.toml
+appview = "https://bobbin.klbr.net"
+```
+
+Override the config file location with `--config /path/to/config.toml`.
+
+### Environment variables
+
+| Variable      | Config key | Purpose           |
+|---------------|------------|-------------------|
+| `TG_APPVIEW`  | `appview`  | Appview host URL  |
+
+Keys containing `.` or `-` map to `TG_`-prefixed underscore-separated names
+(e.g. `foo.bar` → `TG_FOO_BAR`).
+
+### Flags
+
+| Flag        | Purpose                                                          |
+|-------------|------------------------------------------------------------------|
+| `--config`  | Path to config file                                              |
+| `--appview` | Appview host URL (overrides config file and `TG_APPVIEW`)       |
+
 ## Architecture
 
 - `cmd/tg/` — CLI entry point
-- `internal/cli/` — Cobra command tree (`repo`, `issue`, `pr`)
+- `internal/cli/` — Cobra command tree (`repo`, `issue`, `pr`); Viper-backed configuration
 - `internal/gitutil/` — Git operations (clone, fetch, patch apply)
 - `tangled/` — Typed client for the Bobbin API (`api.tangled.org`)
 - `atproto/` — Identity resolution (handle ↔ DID, PDS discovery); OAuth session storage (system keyring)
@@ -133,6 +170,7 @@ provider to be running; on a headless system without a D-Bus session bus
 - `git` and `ssh` (for clone and PR checkout)
 - [`github.com/bluesky-social/indigo`](https://github.com/bluesky-social/indigo) — atproto SDK
 - [`github.com/spf13/cobra`](https://github.com/spf13/cobra) — CLI framework
+- [`github.com/spf13/viper`](https://github.com/spf13/viper) — configuration
 - [`github.com/zalando/go-keyring`](https://github.com/zalando/go-keyring) — platform keyring access
 
 ## License

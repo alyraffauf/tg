@@ -2,7 +2,6 @@ package cli
 
 import (
 	"log/slog"
-	"os"
 
 	"github.com/alyraffauf/tg/atproto"
 	"github.com/alyraffauf/tg/tangled"
@@ -19,21 +18,13 @@ const (
 var (
 	resolver = &atproto.Resolver{Directory: identity.DefaultDirectory()}
 	client   = &tangled.Tangled{
-		Client: &atclient.APIClient{Host: appviewHost()},
+		Client: &atclient.APIClient{Host: defaultAppview},
 		Logger: slog.Default(),
 	}
 	auth = atproto.NewAuthManager(oauthCallbackURL)
 
 	jsonOutput bool
-	appview    string
 )
-
-func appviewHost() string {
-	if host := os.Getenv("TG_APPVIEW"); host != "" {
-		return host
-	}
-	return "https://bobbin.klbr.net"
-}
 
 var rootCmd = &cobra.Command{
 	Use:   "tg",
@@ -41,7 +32,7 @@ var rootCmd = &cobra.Command{
 	// Errors such as "not logged in" are expected and shouldn't dump usage.
 	SilenceUsage: true,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
-		client.Client.Host = appview
+		client.Client.Host = config.GetString("appview")
 	},
 }
 
@@ -50,8 +41,13 @@ func Execute() error {
 }
 
 func init() {
+	cobra.OnInitialize(initConfig)
+
+	rootCmd.PersistentFlags().StringVar(&configPath, "config", "", "Path to config file (default: $XDG_CONFIG_HOME/tg/config.toml)")
 	rootCmd.PersistentFlags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
-	rootCmd.PersistentFlags().StringVar(&appview, "appview", appviewHost(), "Appview host URL (overrides the TG_APPVIEW environment variable)")
+	rootCmd.PersistentFlags().String("appview", defaultAppview, "Appview host URL (overrides config file and TG_APPVIEW)")
+
+	config.BindPFlag("appview", rootCmd.PersistentFlags().Lookup("appview"))
 
 	rootCmd.AddCommand(authCmd)
 	authCmd.AddCommand(authLoginCmd)
