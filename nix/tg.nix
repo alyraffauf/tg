@@ -1,7 +1,9 @@
 {
   buildGoModule,
   lib,
+  installShellFiles,
   makeWrapper,
+  stdenv,
   git,
 }:
 buildGoModule {
@@ -12,10 +14,19 @@ buildGoModule {
   subPackages = ["cmd/tg"];
   env.CGO_ENABLED = "0";
 
-  nativeBuildInputs = [makeWrapper];
+  nativeBuildInputs = [
+    installShellFiles
+    makeWrapper
+  ];
 
   postInstall = ''
     wrapProgram $out/bin/tg --prefix PATH : ${lib.makeBinPath [git]}
+  ''
+  + lib.optionalString (stdenv.buildPlatform.canExecute stdenv.hostPlatform) ''
+    installShellCompletion --cmd tg \
+      --bash <($out/bin/tg completion bash) \
+      --fish <($out/bin/tg completion fish) \
+      --zsh <($out/bin/tg completion zsh)
   '';
 
   ldflags = [
