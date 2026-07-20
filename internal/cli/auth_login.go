@@ -141,9 +141,26 @@ func openBrowser(url string) error {
 		cmd = "cmd"
 		args = []string{"/c", "start", url}
 	default:
-		cmd = "xdg-open"
-		args = []string{url}
+		if isWSL() {
+			cmd = "powershell.exe"
+			args = []string{"-NoProfile", "-Command", fmt.Sprintf("Start-Process '%s'", url)}
+		} else {
+			cmd = "xdg-open"
+			args = []string{url}
+		}
 	}
 
 	return exec.Command(cmd, args...).Start()
+}
+
+func isWSL() bool {
+	if os.Getenv("WSL_DISTRO_NAME") != "" {
+		return true
+	}
+	data, err := os.ReadFile("/proc/sys/kernel/osrelease")
+	if err != nil {
+		return false
+	}
+	s := strings.ToLower(string(data))
+	return strings.Contains(s, "microsoft") || strings.Contains(s, "wsl")
 }
