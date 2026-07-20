@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/bluesky-social/indigo/atproto/atclient"
@@ -272,5 +273,172 @@ func TestLogoutAllRevokesEveryAccount(t *testing.T) {
 	}
 	if len(accounts) != 0 || active != "" {
 		t.Fatalf("accounts after logout = %#v active %q", accounts, active)
+	}
+}
+
+func TestPasswordLogoutClearsLocalOn401(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		w.Write([]byte(`{"error":"AuthenticationFailed","message":"Authentication failed"}`))
+	}))
+	defer server.Close()
+
+	store := testKeyringStore(newFakeKeyring())
+	manager := newAuthManagerForTest("http://127.0.0.1:8095/callback", store)
+	ctx := context.Background()
+	did := mustDID(t, "did:plc:aaaabbbbccccddddeeeeffff")
+
+	if err := store.SavePasswordSession(ctx, samplePasswordSession(did, server.URL)); err != nil {
+		t.Fatalf("SavePasswordSession: %v", err)
+	}
+
+	if err := manager.Logout(ctx); err != nil {
+		t.Fatalf("Logout should clear local state despite 401, got: %v", err)
+	}
+	if _, err := store.GetPasswordSession(ctx, did); !errors.Is(err, keyring.ErrNotFound) {
+		t.Errorf("password session should have been cleared, got: %v", err)
+	}
+}
+
+func TestPasswordLogoutClearsLocalOn500(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	store := testKeyringStore(newFakeKeyring())
+	manager := newAuthManagerForTest("http://127.0.0.1:8095/callback", store)
+	ctx := context.Background()
+	did := mustDID(t, "did:plc:aaaabbbbccccddddeeeeffff")
+
+	if err := store.SavePasswordSession(ctx, samplePasswordSession(did, server.URL)); err != nil {
+		t.Fatalf("SavePasswordSession: %v", err)
+	}
+
+	if err := manager.Logout(ctx); err != nil {
+		t.Fatalf("Logout should clear local state despite 500, got: %v", err)
+	}
+	if _, err := store.GetPasswordSession(ctx, did); !errors.Is(err, keyring.ErrNotFound) {
+		t.Errorf("password session should have been cleared, got: %v", err)
+	}
+}
+
+func TestPasswordLogoutFailsWhenLocalClearErrors(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	backend := newFakeKeyring()
+	store := testKeyringStore(backend)
+	manager := newAuthManagerForTest("http://127.0.0.1:8095/callback", store)
+	ctx := context.Background()
+	did := mustDID(t, "did:plc:aaaabbbbccccddddeeeeffff")
+
+	if err := store.SavePasswordSession(ctx, samplePasswordSession(did, server.URL)); err != nil {
+		t.Fatalf("SavePasswordSession: %v", err)
+	}
+
+	backend.deleteErr = errors.New("keyring daemon unavailable")
+	err := manager.Logout(ctx)
+	if err == nil {
+		t.Fatal("expected error when local clear fails, got nil")
+	}
+	if !strings.Contains(err.Error(), "clear local session") {
+		t.Errorf("error = %q, want substring %q", err, "clear local session")
+	}
+	if !strings.Contains(err.Error(), "keyring daemon unavailable") {
+		t.Errorf("error = %q, want substring %q", err, "keyring daemon unavailable")
+	}
+}
+
+func TestLogoutAllClearsAllDespiteServerFailures(t *testing.T) {
+	var requests int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		if requests == 2 {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnauthorized)
+			w.Write([]byte(`{"error":"AuthenticationFailed","message":"Authentication failed"}`))
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	store := testKeyringStore(newFakeKeyring())
+	manager := newAuthManagerForTest("http://127.0.0.1:8095/callback", store)
+	ctx := context.Background()
+	first := mustDID(t, "did:plc:firstfirstfirstfirstfirst")
+	second := mustDID(t, "did:plc:secondsecondsecondsecond")
+	if err := store.SavePasswordSession(ctx, samplePasswordSession(first, server.URL)); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SavePasswordSession(ctx, samplePasswordSession(second, server.URL)); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := manager.LogoutAll(ctx); err != nil {
+		t.Fatalf("LogoutAll should clear all locals despite server failures, got: %v", err)
+	}
+	if _, err := store.GetPasswordSession(ctx, first); !errors.Is(err, keyring.ErrNotFound) {
+		t.Errorf("first session should have been cleared, got: %v", err)
+	}
+	if _, err := store.GetPasswordSession(ctx, second); !errors.Is(err, keyring.ErrNotFound) {
+		t.Errorf("second session should have been cleared, got: %v", err)
+	}
+}
+
+func TestOAuthLogoutClearsLocalOnServerError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	store := testKeyringStore(newFakeKeyring())
+	manager := newAuthManagerForTest("http://127.0.0.1:8095/callback", store)
+	ctx := context.Background()
+	did := mustDID(t, "did:plc:aaaabbbbccccddddeeeeffff")
+
+	session := sampleSession(did)
+	session.DPoPPrivateKeyMultibase = mustGenerateDpopKey(t)
+	session.HostURL = server.URL
+	if err := store.SaveSession(ctx, session); err != nil {
+		t.Fatalf("SaveSession: %v", err)
+	}
+
+	if err := manager.Logout(ctx); err != nil {
+		t.Fatalf("Logout should clear local state despite server error, got: %v", err)
+	}
+	if _, err := store.GetSession(ctx, did, ""); !errors.Is(err, keyring.ErrNotFound) {
+		t.Errorf("OAuth session should have been cleared, got: %v", err)
+	}
+}
+
+// TestPasswordLogoutClearsAccountWithMissingSession verifies that Logout
+// removes the account from the index even when the session secret is already
+// gone, so the user is never locked out by a stale index entry.
+func TestPasswordLogoutClearsAccountWithMissingSession(t *testing.T) {
+	backend := newFakeKeyring()
+	store := testKeyringStore(backend)
+	manager := newAuthManagerForTest("http://127.0.0.1:8095/callback", store)
+	ctx := context.Background()
+	did := mustDID(t, "did:plc:aaaabbbbccccddddeeeeffff")
+
+	if err := store.SavePasswordSession(ctx, samplePasswordSession(did, "https://pds.example")); err != nil {
+		t.Fatalf("SavePasswordSession: %v", err)
+	}
+	delete(backend.secrets, backendKey(keyringService, passwordKey(did.String())))
+
+	if err := manager.Logout(ctx); err != nil {
+		t.Fatalf("Logout should clear account despite missing session, got: %v", err)
+	}
+	accounts, _, err := store.Accounts()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(accounts) != 0 {
+		t.Errorf("account should have been removed from index, got: %v", accounts)
 	}
 }

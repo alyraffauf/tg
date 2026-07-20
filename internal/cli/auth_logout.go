@@ -13,6 +13,7 @@ var authLogoutAll bool
 var authLogoutCmd = &cobra.Command{
 	Use:   "logout",
 	Short: "Log out of your AT Protocol account",
+	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		var err error
 		if authLogoutAll {

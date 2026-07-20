@@ -260,6 +260,10 @@ func (m *AuthManager) APIClient(ctx context.Context) (*atclient.APIClient, synta
 	return client, passwordSession.AccountDID, nil
 }
 
+// Logout removes the active account's credentials from the local keyring.
+// Server-side revocation is best-effort; the local entry is removed even
+// if the PDS rejects the revoke request. Returns ErrNotAuthenticated when
+// there is no active account.
 func (m *AuthManager) Logout(ctx context.Context) error {
 	account, err := m.activeAccount()
 	if err != nil {
@@ -269,37 +273,30 @@ func (m *AuthManager) Logout(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if account.Method == AuthMethodOAuth {
-		err := m.app.Logout(ctx, did, "")
-		if err == nil {
-			return nil
+	switch account.Method {
+	case AuthMethodOAuth:
+		_ = m.app.Logout(ctx, did, "")
+		if err := m.store.DeleteSession(ctx, did, ""); err != nil {
+			return fmt.Errorf("clear local session: %w", err)
 		}
-		// Corrupt or transient OAuth failure — force clear so the user can
-		// re-login instead of being locked out.
-		if deleteErr := m.store.DeleteSession(ctx, did, ""); deleteErr == nil {
-			return nil
+	case AuthMethodPassword:
+		passwordSession, err := m.store.GetPasswordSession(ctx, did)
+		if err != nil && !errors.Is(err, keyring.ErrNotFound) {
+			return err
 		}
-		return err
-	}
-
-	passwordSession, err := m.store.GetPasswordSession(ctx, did)
-	if err != nil {
-		if errors.Is(err, keyring.ErrNotFound) {
-			return ErrNotAuthenticated
+		if passwordSession != nil {
+			client := atclient.ResumePasswordSession(*passwordSession, nil)
+			if passwordAuth, ok := client.Auth.(*atclient.PasswordAuth); ok {
+				_ = passwordAuth.Logout(ctx, client.Client)
+			}
 		}
-		return err
+		if err := m.store.DeletePasswordSession(ctx, did); err != nil {
+			return fmt.Errorf("clear local session: %w", err)
+		}
+	default:
+		return fmt.Errorf("unsupported auth method %q", account.Method)
 	}
-	client := atclient.ResumePasswordSession(*passwordSession, nil)
-	passwordAuth, ok := client.Auth.(*atclient.PasswordAuth)
-	if !ok {
-		// Corrupt password session — force clear.
-		_ = m.store.DeletePasswordSession(ctx, did)
-		return nil
-	}
-	if err := passwordAuth.Logout(ctx, client.Client); err != nil {
-		return fmt.Errorf("revoke password session: %w", err)
-	}
-	return m.store.DeletePasswordSession(ctx, did)
+	return nil
 }
 
 func (m *AuthManager) LogoutAll(ctx context.Context) error {
