@@ -38,11 +38,11 @@ To avoid exposing the app password in shell history, pass it on standard input:
 printf '%s\n' "$ATPROTO_APP_PASSWORD" | tg auth login alice.example.com --password-stdin
 ```
 
-Authentication is persisted locally. The current account is recorded in
-`~/.config/tg/auth.json` (or `$XDG_CONFIG_HOME/tg/auth.json`); OAuth session
-credentials are stored under `~/.config/tg/oauth/`, and app-password sessions
-are stored in `~/.config/tg/password-session.json`. These files are created
-with user-only permissions. Use `tg auth logout` to remove the active login.
+Authentication is persisted in the system keyring. Multiple accounts can be
+stored at once; use `tg auth list` and `tg auth switch <handle-or-did>` to select
+the default account, or `--account <handle-or-did>` for a one-command override.
+Use `tg auth logout` to remove the selected account or `tg auth logout --all`
+to remove every account.
 
 `tg` auto-detects the repository from the `origin` remote when run inside a cloned Tangled repo. For now, only ssh origins are supported. You can also pass a fully-qualified `handle/repo` argument.
 
@@ -129,11 +129,11 @@ tg string delete <rkey>
 
 ### Authentication & token storage
 
-`tg` stores a single OAuth session in the system keyring: macOS Keychain or
+`tg` stores OAuth and app-password sessions in the system keyring: macOS Keychain or
 the Secret Service on Linux (GNOME Keyring / KWallet). The keyring unlocks
 with your login session, so no separate passphrase is needed.
 
-Logging in again replaces the current session. The keyring is accessed on
+Logging in adds or replaces that account and selects it. The keyring is accessed on
 first use (not at startup), so authentication only fails once you run a
 command that needs a session. On Linux this requires a Secret Service
 provider to be running; on a headless system without a D-Bus session bus
@@ -163,9 +163,10 @@ Override the config file location with `--config /path/to/config.toml`.
 
 ### Environment variables
 
-| Variable      | Config key | Purpose           |
-|---------------|------------|-------------------|
-| `TG_APPVIEW`  | `appview`  | Appview host URL  |
+| Variable     | Config key | Purpose               |
+|--------------|------------|-----------------------|
+| `TG_APPVIEW` | `appview`  | Appview host URL      |
+| `TG_ACCOUNT` | `account`  | Account handle or DID |
 
 Keys containing `.` or `-` map to `TG_`-prefixed underscore-separated names
 (e.g. `foo.bar` → `TG_FOO_BAR`).
@@ -175,7 +176,8 @@ Keys containing `.` or `-` map to `TG_`-prefixed underscore-separated names
 | Flag        | Purpose                                                          |
 |-------------|------------------------------------------------------------------|
 | `--config`  | Path to config file                                              |
-| `--appview` | Appview host URL (overrides config file and `TG_APPVIEW`)       |
+| `--appview` | Appview host URL (overrides config file and `TG_APPVIEW`)        |
+| `--account` | Account handle or DID for this command                           |
 
 ## Architecture
 

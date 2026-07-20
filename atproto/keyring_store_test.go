@@ -2,7 +2,9 @@ package atproto
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"reflect"
 	"strings"
 	"sync"
@@ -142,7 +144,7 @@ func TestKeyringStore_DeleteSession(t *testing.T) {
 	}
 }
 
-func TestKeyringStore_SaveOverwritesPrevious(t *testing.T) {
+func TestKeyringStore_SavesMultipleAccounts(t *testing.T) {
 	store := testKeyringStore(newFakeKeyring())
 	ctx := context.Background()
 	first := mustDID(t, "did:plc:firstfirstfirstfirstfirst")
@@ -159,8 +161,143 @@ func TestKeyringStore_SaveOverwritesPrevious(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetSession: %v", err)
 	}
+	if got.AccountDID != first {
+		t.Errorf("AccountDID = %q, want %q", got.AccountDID, first)
+	}
+	got, err = store.GetSession(ctx, second, "")
+	if err != nil {
+		t.Fatalf("GetSession second: %v", err)
+	}
 	if got.AccountDID != second {
-		t.Errorf("AccountDID = %q, want %q (second DID)", got.AccountDID, second)
+		t.Errorf("AccountDID = %q, want %q", got.AccountDID, second)
+	}
+}
+
+func TestKeyringStore_SelectAccountByHandleOrDID(t *testing.T) {
+	store := testKeyringStore(newFakeKeyring())
+	ctx := context.Background()
+	first := mustDID(t, "did:plc:firstfirstfirstfirstfirst")
+	second := mustDID(t, "did:plc:secondsecondsecondsecond")
+	if err := store.SaveSession(ctx, sampleSession(first)); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetAccountHandle(first.String(), "first.example"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SaveSession(ctx, sampleSession(second)); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetAccountHandle(second.String(), "second.example"); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := store.SelectAccount("SECOND.EXAMPLE"); err != nil {
+		t.Fatalf("SelectAccount by handle: %v", err)
+	}
+	_, active, err := store.Accounts()
+	if err != nil || active != second.String() {
+		t.Fatalf("active = %q, err = %v", active, err)
+	}
+	if _, err := store.SelectAccount(first.String()); err != nil {
+		t.Fatalf("SelectAccount by DID: %v", err)
+	}
+}
+
+func TestKeyringStore_SelectAccountRejectsStaleIndex(t *testing.T) {
+	backend := newFakeKeyring()
+	store := testKeyringStore(backend)
+	ctx := context.Background()
+	first := mustDID(t, "did:plc:firstfirstfirstfirstfirst")
+	second := mustDID(t, "did:plc:secondsecondsecondsecond")
+	if err := store.SaveSession(ctx, sampleSession(first)); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SaveSession(ctx, sampleSession(second)); err != nil {
+		t.Fatal(err)
+	}
+	delete(backend.secrets, backendKey(keyringService, sessionKey(second.String())))
+	if _, err := store.SelectAccount(second.String()); !errors.Is(err, keyring.ErrNotFound) {
+		t.Fatalf("SelectAccount = %v, want keyring.ErrNotFound", err)
+	}
+	_, active, err := store.Accounts()
+	if err != nil || active != first.String() {
+		t.Fatalf("active changed after failed switch: %q, err %v", active, err)
+	}
+}
+
+func TestKeyringStore_RefreshDoesNotChangeActiveAccount(t *testing.T) {
+	store := testKeyringStore(newFakeKeyring())
+	ctx := context.Background()
+	first := mustDID(t, "did:plc:firstfirstfirstfirstfirst")
+	second := mustDID(t, "did:plc:secondsecondsecondsecond")
+	if err := store.SaveSession(ctx, sampleSession(first)); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SaveSession(ctx, sampleSession(second)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.SelectAccount(first.String()); err != nil {
+		t.Fatal(err)
+	}
+	refreshed := sampleSession(second)
+	refreshed.AccessToken = "rotated"
+	if err := store.SaveSession(ctx, refreshed); err != nil {
+		t.Fatal(err)
+	}
+	_, active, err := store.Accounts()
+	if err != nil || active != first.String() {
+		t.Fatalf("active after refresh = %q, want %q (err %v)", active, first, err)
+	}
+}
+
+func TestKeyringStore_MethodReplacementIsPerAccount(t *testing.T) {
+	backend := newFakeKeyring()
+	store := testKeyringStore(backend)
+	ctx := context.Background()
+	first := mustDID(t, "did:plc:firstfirstfirstfirstfirst")
+	second := mustDID(t, "did:plc:secondsecondsecondsecond")
+	if err := store.SaveSession(ctx, sampleSession(first)); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SaveSession(ctx, sampleSession(second)); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SavePasswordSession(ctx, samplePasswordSession(first, "https://pds.example")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.GetSession(ctx, first, ""); !errors.Is(err, keyring.ErrNotFound) {
+		t.Fatalf("replaced OAuth session still available: %v", err)
+	}
+	if _, err := store.GetPasswordSession(ctx, first); err != nil {
+		t.Fatalf("password session unavailable: %v", err)
+	}
+	if _, err := store.GetSession(ctx, second, ""); err != nil {
+		t.Fatalf("other account was affected: %v", err)
+	}
+}
+
+func TestKeyringStore_MigratesLegacySingleton(t *testing.T) {
+	backend := newFakeKeyring()
+	store := testKeyringStore(backend)
+	did := mustDID(t, "did:plc:aaaabbbbccccddddeeeeffff")
+	legacy, err := json.Marshal(sampleSession(did))
+	if err != nil {
+		t.Fatal(err)
+	}
+	backend.secrets[backendKey(keyringService, currentSessionKey)] = string(legacy)
+
+	accounts, active, err := store.Accounts()
+	if err != nil {
+		t.Fatalf("Accounts: %v", err)
+	}
+	if len(accounts) != 1 || accounts[0].DID != did.String() || active != did.String() {
+		t.Fatalf("migration result = %#v active %q", accounts, active)
+	}
+	if _, ok := backend.secrets[backendKey(keyringService, currentSessionKey)]; ok {
+		t.Fatal("legacy entry was not deleted")
+	}
+	if _, err := store.GetSession(context.Background(), did, ""); err != nil {
+		t.Fatalf("migrated session unavailable: %v", err)
 	}
 }
 
@@ -186,7 +323,6 @@ func TestKeyringStore_AuthRequestRoundTrip(t *testing.T) {
 
 func TestKeyringStore_DeleteSessionPropagatesError(t *testing.T) {
 	backend := newFakeKeyring()
-	backend.deleteErr = errors.New("keyring daemon unavailable")
 	store := testKeyringStore(backend)
 	ctx := context.Background()
 	did := mustDID(t, "did:plc:aaaabbbbccccddddeeeeffff")
@@ -194,6 +330,7 @@ func TestKeyringStore_DeleteSessionPropagatesError(t *testing.T) {
 	if err := store.SaveSession(ctx, sampleSession(did)); err != nil {
 		t.Fatalf("SaveSession: %v", err)
 	}
+	backend.deleteErr = errors.New("keyring daemon unavailable")
 
 	err := store.DeleteSession(ctx, did, "")
 	if err == nil {
@@ -301,6 +438,31 @@ func TestKeyringStore_SessionRoundTrip_FullyPopulated(t *testing.T) {
 	}
 }
 
+func TestKeyringStore_CompressesOversizedSecrets(t *testing.T) {
+	backend := newFakeKeyring()
+	store := testKeyringStore(backend)
+	did := mustDID(t, "did:plc:aaaabbbbccccddddeeeeffff")
+	session := fullyPopulatedSession(t, did)
+	session.Scopes = make([]string, 300)
+	for i := range session.Scopes {
+		session.Scopes[i] = fmt.Sprintf("repo:sh.tangled.collection.%03d", i)
+	}
+	if err := store.SaveSession(context.Background(), session); err != nil {
+		t.Fatalf("SaveSession: %v", err)
+	}
+	raw := backend.secrets[backendKey(keyringService, sessionKey(did.String()))]
+	if !strings.HasPrefix(raw, compressedSecretPrefix) {
+		t.Fatalf("oversized secret was not compressed")
+	}
+	got, err := store.GetSession(context.Background(), did, "")
+	if err != nil {
+		t.Fatalf("GetSession: %v", err)
+	}
+	if !reflect.DeepEqual(*got, session) {
+		t.Fatal("compressed session did not round-trip")
+	}
+}
+
 // TestKeyringStore_SessionRoundTrip_EmptyScopesAndRevocation verifies the
 // omitempty/empty-slice edge cases (empty scopes slice, empty revocation
 // endpoint) round-trip without losing the distinction that matters.
@@ -374,11 +536,7 @@ func TestKeyringStore_AuthRequestRoundTrip_FullyPopulated(t *testing.T) {
 	}
 }
 
-// TestKeyringStore_GetSessionIgnoresDID verifies the singleton contract the
-// codebase relies on: the did and sessionID arguments are ignored, and the
-// stored session is returned regardless of what is requested. This nails down
-// the design so a future multi-session refactor is caught.
-func TestKeyringStore_GetSessionIgnoresDID(t *testing.T) {
+func TestKeyringStore_GetSessionUsesDID(t *testing.T) {
 	store := testKeyringStore(newFakeKeyring())
 	ctx := context.Background()
 	savedDID := mustDID(t, "did:plc:aaaabbbbccccddddeeeeffff")
@@ -387,12 +545,9 @@ func TestKeyringStore_GetSessionIgnoresDID(t *testing.T) {
 	}
 
 	otherDID := mustDID(t, "did:plc:zzzzzzzzzzzzzzzzzzzzzzzz")
-	got, err := store.GetSession(ctx, otherDID, "nonexistent-session")
-	if err != nil {
-		t.Fatalf("GetSession with different DID: %v", err)
-	}
-	if got.AccountDID != savedDID {
-		t.Errorf("AccountDID = %q, want %q (singleton ignores requested DID)", got.AccountDID, savedDID)
+	_, err := store.GetSession(ctx, otherDID, "nonexistent-session")
+	if !errors.Is(err, keyring.ErrNotFound) {
+		t.Fatalf("GetSession with different DID = %v, want keyring.ErrNotFound", err)
 	}
 }
 
@@ -402,10 +557,13 @@ func TestKeyringStore_GetSessionIgnoresDID(t *testing.T) {
 func TestKeyringStore_GetSessionMalformedJSON(t *testing.T) {
 	backend := newFakeKeyring()
 	store := testKeyringStore(backend)
-	// Seed a corrupt entry directly under the session key.
-	backend.secrets[backendKey(keyringService, currentSessionKey)] = "not-json{"
+	did := mustDID(t, "did:plc:aaaabbbbccccddddeeeeffff")
+	index := accountIndex{ActiveDID: did.String(), Accounts: []Account{{DID: did.String(), Method: AuthMethodOAuth}}}
+	data, _ := json.Marshal(index)
+	backend.secrets[backendKey(keyringService, accountIndexKey)] = string(data)
+	backend.secrets[backendKey(keyringService, sessionKey(did.String()))] = "not-json{"
 
-	_, err := store.GetSession(context.Background(), syntax.DID(""), "")
+	_, err := store.GetSession(context.Background(), did, "")
 	if err == nil {
 		t.Fatal("expected error for corrupt session, got nil")
 	}

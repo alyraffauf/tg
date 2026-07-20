@@ -8,11 +8,18 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var authLogoutAll bool
+
 var authLogoutCmd = &cobra.Command{
 	Use:   "logout",
 	Short: "Log out of your AT Protocol account",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		err := auth.Logout(cmd.Context())
+		var err error
+		if authLogoutAll {
+			err = auth.LogoutAll(cmd.Context())
+		} else {
+			err = auth.Logout(cmd.Context())
+		}
 		wasLoggedIn := true
 		if err != nil {
 			if errors.Is(err, atproto.ErrNotAuthenticated) {
@@ -29,4 +36,8 @@ var authLogoutCmd = &cobra.Command{
 			}
 		})
 	},
+}
+
+func init() {
+	authLogoutCmd.Flags().BoolVar(&authLogoutAll, "all", false, "Log out all accounts")
 }

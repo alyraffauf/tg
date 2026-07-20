@@ -115,3 +115,10 @@ type authLogoutResult struct {
 	// when there was nothing to log out (not a failure; the command still exits 0).
 	WasLoggedIn bool `json:"wasLoggedIn"`
 }
+
+type authAccountResult struct {
+	Active bool   `json:"active"`
+	DID    string `json:"did"`
+	Handle string `json:"handle"`
+	Method string `json:"method"`
+}

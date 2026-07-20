@@ -73,8 +73,30 @@ var DefaultScopes = []string{
 }
 
 type AuthManager struct {
-	app   *oauth.ClientApp
-	store *KeyringStore
+	app               *oauth.ClientApp
+	store             *KeyringStore
+	selector          string
+	pendingIdentifier string
+}
+
+func (m *AuthManager) SetAccount(selector string) {
+	m.selector = selector
+}
+
+func (m *AuthManager) Accounts() ([]Account, string, error) {
+	return m.store.Accounts()
+}
+
+func (m *AuthManager) SelectAccount(selector string) (Account, error) {
+	return m.store.SelectAccount(selector)
+}
+
+func (m *AuthManager) activeAccount() (Account, error) {
+	account, err := m.store.Account(m.selector)
+	if errors.Is(err, keyring.ErrNotFound) {
+		return Account{}, ErrNotAuthenticated
+	}
+	return account, err
 }
 
 func NewAuthManager(callbackURL string) *AuthManager {
@@ -89,7 +111,7 @@ func NewAuthManager(callbackURL string) *AuthManager {
 
 // LoginWithPassword authenticates with an atproto app password and stores the
 // resulting session in the keyring. Any existing OAuth session is cleared so
-// only one auth method is active at a time.
+// only one auth method is active for this account.
 func (m *AuthManager) LoginWithPassword(ctx context.Context, identifier, password string) error {
 	parsedIdentifier, err := syntax.ParseAtIdentifier(identifier)
 	if err != nil {
@@ -106,40 +128,71 @@ func (m *AuthManager) LoginWithPassword(ctx context.Context, identifier, passwor
 	if !ok {
 		return errors.New("password login returned an unexpected auth type")
 	}
-	_ = m.store.DeleteSession(ctx, "", "")
-	return m.store.SavePasswordSession(ctx, passwordAuth.Session)
+	if err := m.store.SavePasswordSession(ctx, passwordAuth.Session); err != nil {
+		return err
+	}
+	did := passwordAuth.Session.AccountDID.String()
+	if err := m.store.SetAccountHandle(did, identifier); err != nil {
+		return err
+	}
+	_, err = m.store.SelectAccount(did)
+	return err
 }
 
 func (m *AuthManager) StartLogin(ctx context.Context, identifier string) (string, error) {
-	return m.app.StartAuthFlow(ctx, identifier)
+	loginURL, err := m.app.StartAuthFlow(ctx, identifier)
+	if err == nil {
+		m.pendingIdentifier = identifier
+	}
+	return loginURL, err
 }
 
 func (m *AuthManager) FinishLogin(ctx context.Context, query url.Values) error {
-	_, err := m.app.ProcessCallback(ctx, query)
+	session, err := m.app.ProcessCallback(ctx, query)
 	if err != nil {
 		return err
 	}
-	// Clear any existing password session so only one auth method is active.
-	_ = m.store.DeletePasswordSession(ctx)
-	return nil
+	handle := m.pendingIdentifier
+	if handle == "" {
+		handle = session.AccountDID.String()
+	}
+	m.pendingIdentifier = ""
+	did := session.AccountDID.String()
+	if err := m.store.SetAccountHandle(did, handle); err != nil {
+		return err
+	}
+	_, err = m.store.SelectAccount(did)
+	return err
 }
 
 // CancelLogin cleans up any pending auth request written by StartLogin when the
 // login flow is abandoned (e.g. the user closes the browser before the
 // callback). It is safe to call after a completed login.
 func (m *AuthManager) CancelLogin() {
+	m.pendingIdentifier = ""
 	_ = m.store.DeletePendingAuthRequest()
 }
 
 func (m *AuthManager) CurrentDID(ctx context.Context) (syntax.DID, error) {
-	session, err := m.app.ResumeSession(ctx, "", "")
-	if err == nil {
-		return session.Data.AccountDID, nil
-	}
-	if !errors.Is(err, keyring.ErrNotFound) {
+	account, err := m.activeAccount()
+	if err != nil {
 		return "", err
 	}
-	passwordSession, err := m.store.GetPasswordSession(ctx)
+	did, err := syntax.ParseDID(account.DID)
+	if err != nil {
+		return "", err
+	}
+	if account.Method == AuthMethodOAuth {
+		session, err := m.app.ResumeSession(ctx, did, "")
+		if err != nil {
+			if errors.Is(err, keyring.ErrNotFound) {
+				return "", ErrNotAuthenticated
+			}
+			return "", err
+		}
+		return session.Data.AccountDID, nil
+	}
+	passwordSession, err := m.store.GetPasswordSession(ctx, did)
 	if err != nil {
 		if errors.Is(err, keyring.ErrNotFound) {
 			return "", ErrNotAuthenticated
@@ -150,7 +203,18 @@ func (m *AuthManager) CurrentDID(ctx context.Context) (syntax.DID, error) {
 }
 
 func (m *AuthManager) CurrentSession(ctx context.Context) (*oauth.ClientSession, error) {
-	session, err := m.app.ResumeSession(ctx, "", "")
+	account, err := m.activeAccount()
+	if err != nil {
+		return nil, err
+	}
+	if account.Method != AuthMethodOAuth {
+		return nil, ErrNotAuthenticated
+	}
+	did, err := syntax.ParseDID(account.DID)
+	if err != nil {
+		return nil, err
+	}
+	session, err := m.app.ResumeSession(ctx, did, "")
 	if err != nil {
 		if errors.Is(err, keyring.ErrNotFound) {
 			return nil, ErrNotAuthenticated
@@ -164,14 +228,25 @@ func (m *AuthManager) CurrentSession(ctx context.Context) (*oauth.ClientSession,
 // whether OAuth or app-password. Token refreshes are persisted back to the
 // keyring.
 func (m *AuthManager) APIClient(ctx context.Context) (*atclient.APIClient, syntax.DID, error) {
-	session, err := m.app.ResumeSession(ctx, "", "")
-	if err == nil {
-		return session.APIClient(), session.Data.AccountDID, nil
-	}
-	if !errors.Is(err, keyring.ErrNotFound) {
+	account, err := m.activeAccount()
+	if err != nil {
 		return nil, "", err
 	}
-	passwordSession, err := m.store.GetPasswordSession(ctx)
+	did, err := syntax.ParseDID(account.DID)
+	if err != nil {
+		return nil, "", err
+	}
+	if account.Method == AuthMethodOAuth {
+		session, err := m.app.ResumeSession(ctx, did, "")
+		if err != nil {
+			if errors.Is(err, keyring.ErrNotFound) {
+				return nil, "", ErrNotAuthenticated
+			}
+			return nil, "", err
+		}
+		return session.APIClient(), session.Data.AccountDID, nil
+	}
+	passwordSession, err := m.store.GetPasswordSession(ctx, did)
 	if err != nil {
 		if errors.Is(err, keyring.ErrNotFound) {
 			return nil, "", ErrNotAuthenticated
@@ -186,22 +261,28 @@ func (m *AuthManager) APIClient(ctx context.Context) (*atclient.APIClient, synta
 }
 
 func (m *AuthManager) Logout(ctx context.Context) error {
-	err := m.app.Logout(ctx, "", "")
-	switch {
-	case err == nil:
-		return nil
-	case errors.Is(err, keyring.ErrNotFound):
-		// No OAuth session; continue to password logout below.
-	default:
+	account, err := m.activeAccount()
+	if err != nil {
+		return err
+	}
+	did, err := syntax.ParseDID(account.DID)
+	if err != nil {
+		return err
+	}
+	if account.Method == AuthMethodOAuth {
+		err := m.app.Logout(ctx, did, "")
+		if err == nil {
+			return nil
+		}
 		// Corrupt or transient OAuth failure — force clear so the user can
 		// re-login instead of being locked out.
-		if deleteErr := m.store.DeleteSession(ctx, "", ""); deleteErr == nil {
+		if deleteErr := m.store.DeleteSession(ctx, did, ""); deleteErr == nil {
 			return nil
 		}
 		return err
 	}
 
-	passwordSession, err := m.store.GetPasswordSession(ctx)
+	passwordSession, err := m.store.GetPasswordSession(ctx, did)
 	if err != nil {
 		if errors.Is(err, keyring.ErrNotFound) {
 			return ErrNotAuthenticated
@@ -212,11 +293,31 @@ func (m *AuthManager) Logout(ctx context.Context) error {
 	passwordAuth, ok := client.Auth.(*atclient.PasswordAuth)
 	if !ok {
 		// Corrupt password session — force clear.
-		_ = m.store.DeletePasswordSession(ctx)
+		_ = m.store.DeletePasswordSession(ctx, did)
 		return nil
 	}
 	if err := passwordAuth.Logout(ctx, client.Client); err != nil {
 		return fmt.Errorf("revoke password session: %w", err)
 	}
-	return m.store.DeletePasswordSession(ctx)
+	return m.store.DeletePasswordSession(ctx, did)
+}
+
+func (m *AuthManager) LogoutAll(ctx context.Context) error {
+	accounts, _, err := m.store.Accounts()
+	if err != nil {
+		return err
+	}
+	if len(accounts) == 0 {
+		return ErrNotAuthenticated
+	}
+	originalSelector := m.selector
+	defer func() { m.selector = originalSelector }()
+	var errs []error
+	for _, account := range accounts {
+		m.selector = account.DID
+		if err := m.Logout(ctx); err != nil {
+			errs = append(errs, fmt.Errorf("logout %s: %w", account.DID, err))
+		}
+	}
+	return errors.Join(errs...)
 }

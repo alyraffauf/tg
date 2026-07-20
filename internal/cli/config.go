@@ -38,6 +38,7 @@ func initConfig() {
 	config.SetEnvKeyReplacer(strings.NewReplacer(".", "_", "-", "_"))
 	config.AutomaticEnv()
 	config.SetDefault("appview", defaultAppview)
+	config.SetDefault("account", "")
 
 	if err := config.ReadInConfig(); err != nil {
 		if _, ok := errors.AsType[viper.ConfigFileNotFoundError](err); ok {

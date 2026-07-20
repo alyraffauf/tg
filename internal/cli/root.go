@@ -33,6 +33,7 @@ var rootCmd = &cobra.Command{
 	SilenceUsage: true,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		client.Client.Host = config.GetString("appview")
+		auth.SetAccount(config.GetString("account"))
 	},
 }
 
@@ -46,14 +47,18 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&configPath, "config", "", "Path to config file (default: $XDG_CONFIG_HOME/tg/config.toml)")
 	rootCmd.PersistentFlags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
 	rootCmd.PersistentFlags().String("appview", defaultAppview, "Appview host URL (overrides config file and TG_APPVIEW)")
+	rootCmd.PersistentFlags().String("account", "", "Account handle or DID to use (overrides the active account and TG_ACCOUNT)")
 
 	config.BindPFlag("appview", rootCmd.PersistentFlags().Lookup("appview"))
+	config.BindPFlag("account", rootCmd.PersistentFlags().Lookup("account"))
 
 	rootCmd.AddCommand(authCmd)
 	authCmd.AddCommand(authLoginCmd)
 	authCmd.AddCommand(authLogoutCmd)
 	authCmd.AddCommand(authStatusCmd)
 	authCmd.AddCommand(authTokenCmd)
+	authCmd.AddCommand(authListCmd)
+	authCmd.AddCommand(authSwitchCmd)
 
 	rootCmd.AddCommand(issueCmd)
 	issueCmd.AddCommand(issueListCmd)
