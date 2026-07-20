@@ -106,6 +106,7 @@ type sshKeyAddResult struct {
 
 type authStatusResult struct {
 	Authenticated bool   `json:"authenticated"`
+	Status        string `json:"status,omitempty"`
 	DID           string `json:"did,omitempty"`
 	Handle        string `json:"handle,omitempty"`
 }

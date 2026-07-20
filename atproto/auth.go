@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"net/url"
+	"strings"
 
 	"github.com/bluesky-social/indigo/atproto/atclient"
 	"github.com/bluesky-social/indigo/atproto/auth/oauth"
@@ -14,6 +16,12 @@ import (
 )
 
 var ErrNotAuthenticated = errors.New("not authenticated")
+
+const (
+	SessionStatusActive  = "active"
+	SessionStatusExpired = "expired"
+	SessionStatusUnknown = "unknown"
+)
 
 // DefaultScopes are requested for a CLI session. The rpc scopes are needed for
 // the PDS to mint service-auth JWTs for knot procedures. The blob scope is
@@ -258,6 +266,30 @@ func (m *AuthManager) APIClient(ctx context.Context) (*atclient.APIClient, synta
 	}
 	client := atclient.ResumePasswordSession(*passwordSession, persist)
 	return client, passwordSession.AccountDID, nil
+}
+
+// SessionStatus probes the server to verify the active session. The probe
+// refreshes the access token if needed. Returns ErrNotAuthenticated when
+// there is no active account.
+func (m *AuthManager) SessionStatus(ctx context.Context) (string, syntax.DID, error) {
+	client, did, err := m.APIClient(ctx)
+	if err != nil {
+		return "", "", err
+	}
+	err = client.Get(ctx, syntax.NSID("com.atproto.server.getSession"), nil, nil)
+	if err == nil {
+		return SessionStatusActive, did, nil
+	}
+	var apiError *atclient.APIError
+	if errors.As(err, &apiError) && apiError.StatusCode == http.StatusUnauthorized {
+		return SessionStatusExpired, did, nil
+	}
+	// OAuth wraps refresh failures in fmt.Errorf, not APIError. A failed
+	// refresh means the refresh token is dead.
+	if strings.Contains(err.Error(), "failed to refresh OAuth tokens") {
+		return SessionStatusExpired, did, nil
+	}
+	return SessionStatusUnknown, did, nil
 }
 
 // Logout removes the active account's credentials from the local keyring.

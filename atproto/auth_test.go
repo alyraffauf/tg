@@ -442,3 +442,224 @@ func TestPasswordLogoutClearsAccountWithMissingSession(t *testing.T) {
 		t.Errorf("account should have been removed from index, got: %v", accounts)
 	}
 }
+
+func TestSessionStatusNotAuthenticated(t *testing.T) {
+	manager := newAuthManagerForTest("http://127.0.0.1:8095/callback", testKeyringStore(newFakeKeyring()))
+	_, _, err := manager.SessionStatus(context.Background())
+	if !errors.Is(err, ErrNotAuthenticated) {
+		t.Errorf("SessionStatus = %v, want ErrNotAuthenticated", err)
+	}
+}
+
+func TestSessionStatusActivePassword(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/xrpc/com.atproto.server.getSession" {
+			t.Errorf("unexpected path %q", r.URL.Path)
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	store := testKeyringStore(newFakeKeyring())
+	manager := newAuthManagerForTest("http://127.0.0.1:8095/callback", store)
+	ctx := context.Background()
+	did := mustDID(t, "did:plc:aaaabbbbccccddddeeeeffff")
+
+	if err := store.SavePasswordSession(ctx, samplePasswordSession(did, server.URL)); err != nil {
+		t.Fatalf("SavePasswordSession: %v", err)
+	}
+
+	status, gotDID, err := manager.SessionStatus(ctx)
+	if err != nil {
+		t.Fatalf("SessionStatus: %v", err)
+	}
+	if status != SessionStatusActive {
+		t.Errorf("status = %q, want %q", status, SessionStatusActive)
+	}
+	if gotDID != did {
+		t.Errorf("DID = %q, want %q", gotDID, did)
+	}
+}
+
+func TestSessionStatusExpiredPassword(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		w.Write([]byte(`{"error":"AuthenticationFailed","message":"Authentication failed"}`))
+	}))
+	defer server.Close()
+
+	store := testKeyringStore(newFakeKeyring())
+	manager := newAuthManagerForTest("http://127.0.0.1:8095/callback", store)
+	ctx := context.Background()
+	did := mustDID(t, "did:plc:aaaabbbbccccddddeeeeffff")
+
+	if err := store.SavePasswordSession(ctx, samplePasswordSession(did, server.URL)); err != nil {
+		t.Fatalf("SavePasswordSession: %v", err)
+	}
+
+	status, _, err := manager.SessionStatus(ctx)
+	if err != nil {
+		t.Fatalf("SessionStatus: %v", err)
+	}
+	if status != SessionStatusExpired {
+		t.Errorf("status = %q, want %q", status, SessionStatusExpired)
+	}
+}
+
+func TestSessionStatusExpiredPasswordRefreshDead(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/xrpc/com.atproto.server.getSession" {
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte(`{"error":"ExpiredToken","message":"access token expired"}`))
+			return
+		}
+		if r.URL.Path == "/xrpc/com.atproto.server.refreshSession" {
+			w.WriteHeader(http.StatusUnauthorized)
+			w.Write([]byte(`{"error":"AuthenticationFailed","message":"Authentication failed"}`))
+			return
+		}
+		t.Errorf("unexpected path %q", r.URL.Path)
+	}))
+	defer server.Close()
+
+	store := testKeyringStore(newFakeKeyring())
+	manager := newAuthManagerForTest("http://127.0.0.1:8095/callback", store)
+	ctx := context.Background()
+	did := mustDID(t, "did:plc:aaaabbbbccccddddeeeeffff")
+
+	if err := store.SavePasswordSession(ctx, samplePasswordSession(did, server.URL)); err != nil {
+		t.Fatalf("SavePasswordSession: %v", err)
+	}
+
+	status, _, err := manager.SessionStatus(ctx)
+	if err != nil {
+		t.Fatalf("SessionStatus: %v", err)
+	}
+	if status != SessionStatusExpired {
+		t.Errorf("status = %q, want %q", status, SessionStatusExpired)
+	}
+}
+
+func TestSessionStatusUnknownPassword(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	server.Close()
+
+	store := testKeyringStore(newFakeKeyring())
+	manager := newAuthManagerForTest("http://127.0.0.1:8095/callback", store)
+	ctx := context.Background()
+	did := mustDID(t, "did:plc:aaaabbbbccccddddeeeeffff")
+
+	if err := store.SavePasswordSession(ctx, samplePasswordSession(did, server.URL)); err != nil {
+		t.Fatalf("SavePasswordSession: %v", err)
+	}
+
+	status, _, err := manager.SessionStatus(ctx)
+	if err != nil {
+		t.Fatalf("SessionStatus: %v", err)
+	}
+	if status != SessionStatusUnknown {
+		t.Errorf("status = %q, want %q", status, SessionStatusUnknown)
+	}
+}
+
+func TestSessionStatusActiveOAuth(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/xrpc/com.atproto.server.getSession" {
+			t.Errorf("unexpected path %q", r.URL.Path)
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	store := testKeyringStore(newFakeKeyring())
+	manager := newAuthManagerForTest("http://127.0.0.1:8095/callback", store)
+	ctx := context.Background()
+	did := mustDID(t, "did:plc:aaaabbbbccccddddeeeeffff")
+
+	session := sampleSession(did)
+	session.DPoPPrivateKeyMultibase = mustGenerateDpopKey(t)
+	session.HostURL = server.URL
+	if err := store.SaveSession(ctx, session); err != nil {
+		t.Fatalf("SaveSession: %v", err)
+	}
+
+	status, gotDID, err := manager.SessionStatus(ctx)
+	if err != nil {
+		t.Fatalf("SessionStatus: %v", err)
+	}
+	if status != SessionStatusActive {
+		t.Errorf("status = %q, want %q", status, SessionStatusActive)
+	}
+	if gotDID != did {
+		t.Errorf("DID = %q, want %q", gotDID, did)
+	}
+}
+
+func TestSessionStatusExpiredOAuth(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		w.Write([]byte(`{"error":"AuthenticationFailed","message":"Authentication failed"}`))
+	}))
+	defer server.Close()
+
+	store := testKeyringStore(newFakeKeyring())
+	manager := newAuthManagerForTest("http://127.0.0.1:8095/callback", store)
+	ctx := context.Background()
+	did := mustDID(t, "did:plc:aaaabbbbccccddddeeeeffff")
+
+	session := sampleSession(did)
+	session.DPoPPrivateKeyMultibase = mustGenerateDpopKey(t)
+	session.HostURL = server.URL
+	if err := store.SaveSession(ctx, session); err != nil {
+		t.Fatalf("SaveSession: %v", err)
+	}
+
+	status, _, err := manager.SessionStatus(ctx)
+	if err != nil {
+		t.Fatalf("SessionStatus: %v", err)
+	}
+	if status != SessionStatusExpired {
+		t.Errorf("status = %q, want %q", status, SessionStatusExpired)
+	}
+}
+
+func TestSessionStatusExpiredOAuthRefreshDead(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/xrpc/com.atproto.server.getSession":
+			w.Header().Set("WWW-Authenticate", `Bearer error="invalid_token"`)
+			w.WriteHeader(http.StatusUnauthorized)
+		case "/token":
+			w.WriteHeader(http.StatusUnauthorized)
+		default:
+			t.Errorf("unexpected path %q", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	store := testKeyringStore(newFakeKeyring())
+	manager := newAuthManagerForTest("http://127.0.0.1:8095/callback", store)
+	ctx := context.Background()
+	did := mustDID(t, "did:plc:aaaabbbbccccddddeeeeffff")
+
+	session := sampleSession(did)
+	session.DPoPPrivateKeyMultibase = mustGenerateDpopKey(t)
+	session.HostURL = server.URL
+	session.AuthServerTokenEndpoint = server.URL + "/token"
+	if err := store.SaveSession(ctx, session); err != nil {
+		t.Fatalf("SaveSession: %v", err)
+	}
+
+	status, _, err := manager.SessionStatus(ctx)
+	if err != nil {
+		t.Fatalf("SessionStatus: %v", err)
+	}
+	if status != SessionStatusExpired {
+		t.Errorf("status = %q, want %q", status, SessionStatusExpired)
+	}
+}
