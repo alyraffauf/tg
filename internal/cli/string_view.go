@@ -62,13 +62,13 @@ If no handle is given, views the authenticated user's string
 
 // decodeStringRecord decodes a record value into a stringRecord.
 func decodeStringRecord(value any) (stringRecord, error) {
-data, err := json.Marshal(value)
-if err != nil {
-	return stringRecord{}, fmt.Errorf("encode record: %w", err)
-}
-var record stringRecord
-if err := json.Unmarshal(data, &record); err != nil {
-	return stringRecord{}, fmt.Errorf("decode record: %w", err)
-}
-return record, nil
+	data, err := json.Marshal(value)
+	if err != nil {
+		return stringRecord{}, fmt.Errorf("encode record: %w", err)
+	}
+	var record stringRecord
+	if err := json.Unmarshal(data, &record); err != nil {
+		return stringRecord{}, fmt.Errorf("decode record: %w", err)
+	}
+	return record, nil
 }

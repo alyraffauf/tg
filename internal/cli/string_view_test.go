@@ -31,9 +31,9 @@ func TestDecodeStringRecord(t *testing.T) {
 		{
 			name: "record without description",
 			value: map[string]any{
-				"$type":    "sh.tangled.string",
-				"filename": "bare.md",
-				"contents": "no description",
+				"$type":     "sh.tangled.string",
+				"filename":  "bare.md",
+				"contents":  "no description",
 				"createdAt": "2026-07-18T12:00:00Z",
 			},
 			want: stringRecord{
@@ -46,9 +46,9 @@ func TestDecodeStringRecord(t *testing.T) {
 		{
 			name: "empty filename",
 			value: map[string]any{
-				"$type":    "sh.tangled.string",
-				"filename": "",
-				"contents": "empty filename",
+				"$type":     "sh.tangled.string",
+				"filename":  "",
+				"contents":  "empty filename",
 				"createdAt": "2026-07-18T12:00:00Z",
 			},
 			want: stringRecord{

@@ -12,7 +12,6 @@ buildGoModule {
   vendorHash = "sha256-vAjC3nyJvXVvsBj+JXPN7dNPAdhwY64lqHLsOhTuVKc=";
   subPackages = ["cmd/tg"];
 
-
   nativeBuildInputs = [installShellFiles];
   nativeCheckInputs = [git];
   doCheck = true;
