@@ -1,0 +1,14 @@
+when:
+  - event: ["push", "pull_request"]
+    branch: ["master"]
+
+engine: "nixery"
+
+dependencies:
+  # go.mod requires Go 1.26+; unstable tracks the latest Go release.
+  nixpkgs/nixpkgs-unstable:
+    - go
+
+steps:
+  - name: "Run tests"
+    command: "go test ./..."
