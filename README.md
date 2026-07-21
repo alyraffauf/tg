@@ -16,185 +16,33 @@ nix profile add github:alyraffauf/tg
 go install github.com/alyraffauf/tg/cmd/tg@latest
 ```
 
-## Usage
-
-### Authentication
-
-Log in interactively with OAuth:
+## Quick start
 
 ```bash
+# Log in (OAuth, or pass an app password for headless use)
 tg auth login alice.example.com
-```
-
-For headless use, pass an atproto app password as the second argument:
-
-```bash
-tg auth login alice.example.com xxxx-xxxx-xxxx-xxxx
-```
-
-To avoid exposing the app password in shell history, pass it on standard input:
-
-```bash
-printf '%s\n' "$ATPROTO_APP_PASSWORD" | tg auth login alice.example.com --password-stdin
-```
-
-Authentication is persisted in the system keyring. Multiple accounts can be
-stored at once; use `tg auth list` and `tg auth switch <handle-or-did>` to select
-the default account, or `--account <handle-or-did>` for a one-command override.
-Use `tg auth logout` to remove the selected account or `tg auth logout --all`
-to remove every account.
-
-`tg` auto-detects the repository from the `origin` remote when run inside a cloned Tangled repo. For now, only ssh origins are supported. You can also pass a fully-qualified `handle/repo` argument.
-
-### Repositories
-
-```bash
-# List repositories for a user
-tg repo list microcosm.blue
-
-# Create a repository (requires `tg auth login`)
-tg repo create my-tool --description "A small tool"
-
-# Create and clone it into the current directory
-tg repo create my-tool --clone
-
-# Create and push an existing local repo (at the given path) to the new remote
-tg repo create my-tool --push=.
 
 # Clone a repository
 tg repo clone microcosm.blue/microcosm-rs
 
-# Clone into a custom directory
-tg repo clone microcosm.blue/microcosm-rs my-fork
-```
-
-### Issues
-
-```bash
-# List issues for the current repository
+# Work with issues and pull requests
 tg issue list
-
-# List issues for an explicit repository
-tg issue list microcosm.blue/microcosm-rs
-
-# Create, comment on, and update an issue
-tg issue create --repo microcosm.blue/microcosm-rs --body "Details" "Bug report"
-tg issue comment <rkey> --body "I can reproduce this"
-tg issue close <rkey>
-tg issue reopen <rkey>
-tg issue edit <rkey> --title "Updated title"
-```
-
-### Pull Requests
-
-```bash
-# List pull requests
-tg pr list
-
-# Create, comment on, inspect, and update pull requests
+tg issue create --body "Details" "Bug report"
 tg pr create --title "Add feature" --base main
-# Reconstruct the latest round on the current remote target branch
-tg pr checkout <rkey>
-tg pr diff <rkey>
-tg pr comment <rkey> --body "Looks good"
-tg pr close <rkey>
 tg pr merge <rkey>
 ```
 
-### Strings
+`tg` auto-detects the repository from the `origin` remote when run inside a cloned Tangled repo. For now, only ssh origins are supported. You can also pass a fully-qualified `handle/repo` argument.
 
-```bash
-# Create a string from a file
-tg string create hello.md --description "A greeting"
+## Documentation
 
-# Create from standard input (requires --filename)
-printf '# hello\n' | tg string create --filename hello.md
+- Command reference — `tg <command> --help`, or the man pages installed by the Nix package (`man tg`, `man tg-issue-list`, ...)
+- [Authentication](docs/authentication.md) — OAuth and app-password login, multiple accounts, keyring token storage
+- [Configuration](docs/configuration.md) — config file, environment variables, and flags
 
-# List your strings, or another user's
-tg string list
-tg string list microcosm.blue
+## Contributing
 
-# View one of your strings, or another user's
-tg string view <rkey>
-tg string view <rkey> microcosm.blue
-
-# Delete one of your strings
-tg string delete <rkey>
-```
-
-### Other commands
-
-`tg repo edit`, `tg repo set-default-branch`, `tg repo delete --yes`, `tg repo fork`,
-`tg ssh-key delete`, `tg browse`, `tg completion`, `tg auth token`, and `tg api` are available.
-
-### Authentication & token storage
-
-`tg` stores OAuth and app-password sessions in the system keyring: macOS Keychain or
-the Secret Service on Linux (GNOME Keyring / KWallet). The keyring unlocks
-with your login session, so no separate passphrase is needed.
-
-Logging in adds or replaces that account and selects it. The keyring is accessed on
-first use (not at startup), so authentication only fails once you run a
-command that needs a session. On Linux this requires a Secret Service
-provider to be running; on a headless system without a D-Bus session bus
-(e.g. a server or container), install and start `gnome-keyring-daemon` or
-`kwalletd`, or set `DBUS_SESSION_BUS_ADDRESS`.
-
-## Configuration
-
-`tg` resolves configuration values from the following sources, in increasing
-precedence (later sources override earlier ones):
-
-1. **Defaults** — `appview` is `https://bobbin.klbr.net`
-2. **Config file** — `$XDG_CONFIG_HOME/tg/config.toml` (or `~/.config/tg/config.toml`)
-3. **Environment variables** — prefixed `TG_` (e.g. `TG_APPVIEW`)
-4. **Command-line flags** — e.g. `--appview`
-
-The config file is optional; a missing file is not an error.
-
-### Config file
-
-```toml
-# ~/.config/tg/config.toml
-appview = "https://bobbin.klbr.net"
-```
-
-Override the config file location with `--config /path/to/config.toml`.
-
-### Environment variables
-
-| Variable     | Config key | Purpose               |
-|--------------|------------|-----------------------|
-| `TG_APPVIEW` | `appview`  | Appview host URL      |
-| `TG_ACCOUNT` | `account`  | Account handle or DID |
-
-Keys containing `.` or `-` map to `TG_`-prefixed underscore-separated names
-(e.g. `foo.bar` → `TG_FOO_BAR`).
-
-### Flags
-
-| Flag        | Purpose                                                          |
-|-------------|------------------------------------------------------------------|
-| `--config`  | Path to config file                                              |
-| `--appview` | Appview host URL (overrides config file and `TG_APPVIEW`)        |
-| `--account` | Account handle or DID for this command                           |
-
-## Architecture
-
-- `cmd/tg/` — CLI entry point
-- `internal/cli/` — Cobra command tree (`repo`, `issue`, `pr`); Viper-backed configuration
-- `internal/gitutil/` — Git operations (clone, fetch, patch apply)
-- `tangled/` — Typed client for the Bobbin API (`api.tangled.org`)
-- `atproto/` — Identity resolution (handle ↔ DID, PDS discovery); OAuth session storage (system keyring)
-
-## Dependencies
-
-- Go 1.26+
-- `git` and `ssh` (for clone and PR checkout)
-- [`github.com/bluesky-social/indigo`](https://github.com/bluesky-social/indigo) — atproto SDK
-- [`github.com/spf13/cobra`](https://github.com/spf13/cobra) — CLI framework
-- [`github.com/spf13/viper`](https://github.com/spf13/viper) — configuration
-- [`github.com/zalando/go-keyring`](https://github.com/zalando/go-keyring) — platform keyring access
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the development workflow and an overview of the codebase.
 
 ## License
 
