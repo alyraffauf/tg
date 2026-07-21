@@ -4,6 +4,11 @@ when:
 
 engine: "nixery"
 
+# The nixery image has no C compiler; tests don't need cgo (and the Nix
+# package builds without it too).
+environment:
+  CGO_ENABLED: "0"
+
 dependencies:
   # go.mod requires Go 1.26+; unstable tracks the latest Go release.
   nixpkgs/nixpkgs-unstable:
