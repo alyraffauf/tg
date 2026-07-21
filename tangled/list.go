@@ -47,7 +47,7 @@ func (o ListOpts) params(subject, cursor string) map[string]any {
 	if o.Limit > 0 {
 		params["limit"] = o.Limit
 	} else {
-		params["limit"] = 50
+		params["limit"] = int64(50)
 	}
 	if o.Order != "" {
 		params["order"] = o.Order
