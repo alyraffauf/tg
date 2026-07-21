@@ -10,7 +10,7 @@ import (
 
 func parseHandleRepo(arg string) (string, string, error) {
 	parts := strings.SplitN(arg, "/", 2)
-	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" || strings.Contains(parts[1], "/") {
 		return "", "", fmt.Errorf("expected handle/repo, got %q", arg)
 	}
 	return parts[0], parts[1], nil

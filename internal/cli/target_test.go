@@ -12,7 +12,8 @@ func TestParseHandleRepo(t *testing.T) {
 	}{
 		{name: "handle and repo", arg: "aly.codes/tg", wantHandle: "aly.codes", wantRepo: "tg"},
 		{name: "did handle", arg: "did:plc:abc123/tg", wantHandle: "did:plc:abc123", wantRepo: "tg"},
-		{name: "repo containing slash", arg: "aly.codes/a/b", wantHandle: "aly.codes", wantRepo: "a/b"},
+		// Repo names become atproto record keys, which cannot contain "/".
+		{name: "repo containing slash", arg: "aly.codes/a/b", wantErr: true},
 		{name: "no slash", arg: "tg", wantErr: true},
 		{name: "empty handle", arg: "/tg", wantErr: true},
 		{name: "empty repo", arg: "aly.codes/", wantErr: true},
