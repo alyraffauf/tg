@@ -3,42 +3,33 @@ package cli
 import (
 	"fmt"
 
+	"github.com/alyraffauf/tg/internal/app"
 	"github.com/spf13/cobra"
 )
 
-var authListCmd = &cobra.Command{
-	Use:   "list",
-	Short: "List authenticated accounts",
-	Args:  cobra.NoArgs,
-	RunE: func(cmd *cobra.Command, _ []string) error {
-		accounts, activeDID, err := auth.Accounts()
-		if err != nil {
-			return fmt.Errorf("list accounts: %w", err)
-		}
-		results := make([]authAccountResult, 0, len(accounts))
-		for _, account := range accounts {
-			handle := account.Handle
-			resolved := resolveAuthor(cmd.Context(), account.DID)
-			if resolved.Handle != account.DID {
-				handle = resolved.Handle
+func newAuthListCommand(service *app.Service) *cobra.Command {
+	return &cobra.Command{
+		Use:   "list",
+		Short: "List authenticated accounts",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			results, err := service.AuthAccounts(cmd.Context())
+			if err != nil {
+				return err
 			}
-			results = append(results, authAccountResult{
-				Active: account.DID == activeDID,
-				DID:    account.DID, Handle: handle, Method: account.Method,
-			})
-		}
-		return output(results, func(items []authAccountResult) {
-			if len(items) == 0 {
-				fmt.Println("No accounts.")
-				return
-			}
-			for _, item := range items {
-				marker := " "
-				if item.Active {
-					marker = "*"
+			return output(cmd, results, func(items []app.AuthAccountResult) {
+				if len(items) == 0 {
+					fmt.Fprintln(cmd.OutOrStdout(), "No accounts.")
+					return
 				}
-				fmt.Printf("%s %s  %s  %s\n", marker, item.Handle, item.DID, item.Method)
-			}
-		})
-	},
+				for _, item := range items {
+					marker := " "
+					if item.Active {
+						marker = "*"
+					}
+					fmt.Fprintf(cmd.OutOrStdout(), "%s %s  %s  %s\n", marker, item.Handle, item.DID, item.Method)
+				}
+			})
+		},
+	}
 }

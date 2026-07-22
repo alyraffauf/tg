@@ -12,7 +12,11 @@ type CloneRepoParams struct {
 }
 
 // CloneRepo clones handle/repo from Tangled into params.RepoDir.
-func CloneRepo(ctx context.Context, params CloneRepoParams) error {
+func (c *Client) CloneRepo(ctx context.Context, params CloneRepoParams) error {
 	url := tangledRemoteURL(params.Handle, params.Repo)
-	return run(ctx, "git", "clone", url, params.RepoDir)
+	return c.run(ctx, "git", "clone", url, params.RepoDir)
+}
+
+func CloneRepo(ctx context.Context, params CloneRepoParams) error {
+	return defaultClient.CloneRepo(ctx, params)
 }

@@ -6,25 +6,28 @@ import (
 	"os/exec"
 	"runtime"
 
+	"github.com/alyraffauf/tg/internal/app"
 	"github.com/spf13/cobra"
 )
 
-var browseCmd = &cobra.Command{
-	Use:   "browse [handle/repo]",
-	Short: "Open a Tangled repository in a browser",
-	Args:  cobra.MaximumNArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		handle, repo, err := resolveTarget(cmd.Context(), args)
-		if err != nil {
-			return err
-		}
+func newBrowseCommand(service *app.Service) *cobra.Command {
+	return &cobra.Command{
+		Use:   "browse [handle/repo]",
+		Short: "Open a Tangled repository in a browser",
+		Args:  cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			target, err := resolveTarget(cmd.Context(), args, service)
+			if err != nil {
+				return err
+			}
 
-		repoURL := "https://tangled.org/" + url.PathEscape(handle) + "/" + url.PathEscape(repo)
-		if err := openURL(repoURL); err != nil {
-			return fmt.Errorf("open browser: %w", err)
-		}
-		return nil
-	},
+			repoURL := "https://tangled.org/" + url.PathEscape(target.Handle) + "/" + url.PathEscape(target.Repo)
+			if err := openURL(repoURL); err != nil {
+				return fmt.Errorf("open browser: %w", err)
+			}
+			return nil
+		},
+	}
 }
 
 // openURL passes the URL as an argument instead of through a shell.

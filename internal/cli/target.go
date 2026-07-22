@@ -3,39 +3,56 @@ package cli
 import (
 	"context"
 	"fmt"
-	"strings"
+	"os"
 
-	"github.com/alyraffauf/tg/internal/gitutil"
+	"github.com/alyraffauf/tg/internal/app"
 )
 
-func parseHandleRepo(arg string) (string, string, error) {
-	parts := strings.SplitN(arg, "/", 2)
-	if len(parts) != 2 || parts[0] == "" || parts[1] == "" || strings.Contains(parts[1], "/") {
-		return "", "", fmt.Errorf("expected handle/repo, got %q", arg)
-	}
-	return parts[0], parts[1], nil
-}
-
-// resolveTarget returns the handle and repo name from an explicit
-// "handle/repo" argument or by detecting the git remote in the CWD.
-func resolveTarget(ctx context.Context, args []string) (string, string, error) {
-	if len(args) == 1 {
-		return parseHandleRepo(args[0])
-	}
-
-	rc, err := gitutil.DetectRepoFromCWD(ctx)
+// getwd returns the current working directory, wrapping the common error.
+func getwd() (string, error) {
+	dir, err := os.Getwd()
 	if err != nil {
-		return "", "", fmt.Errorf("detect repo from current directory: %w", err)
+		return "", fmt.Errorf("get current directory: %w", err)
 	}
-	return rc.Handle, rc.Repo, nil
+	return dir, nil
 }
 
-// findRepoDid resolves handle/repo to the repo's repoDid, which listIssues is
-// keyed by.
-func findRepoDid(ctx context.Context, handle, repo string) (string, error) {
-	record, err := resolveRepoRecord(ctx, handle, repo)
+// resolveTarget returns the target from an explicit "handle/repo" argument
+// (when args has one element) or by detecting the git remote in the CWD.
+func resolveTarget(ctx context.Context, args []string, service *app.Service) (app.Target, error) {
+	if len(args) == 1 {
+		return app.ParseTarget(args[0])
+	}
+	return service.TargetFromCWD(ctx)
+}
+
+// resolveTargetFlag returns the target from a --repo flag value, or by
+// detecting the git remote in the CWD when the flag is unset.
+func resolveTargetFlag(ctx context.Context, repoFlag string, service *app.Service) (app.Target, error) {
+	if repoFlag != "" {
+		return app.ParseTarget(repoFlag)
+	}
+	return service.TargetFromCWD(ctx)
+}
+
+// resolveHandleArg returns the handle from an explicit argument, or falls
+// back to the handle of the CWD's git origin remote.
+func resolveHandleArg(ctx context.Context, args []string, service *app.Service) (string, error) {
+	if len(args) == 1 {
+		return args[0], nil
+	}
+	target, err := service.TargetFromCWD(ctx)
 	if err != nil {
 		return "", err
 	}
-	return record.Value.RepoDid, nil
+	return target.Handle, nil
+}
+
+// resolveHandleOrSelf returns the handle from an explicit argument, or the
+// authenticated user's handle. It does not fall back to CWD git detection.
+func resolveHandleOrSelf(ctx context.Context, args []string, service *app.Service) (string, error) {
+	if len(args) == 1 {
+		return args[0], nil
+	}
+	return service.HandleOrSelf(ctx, "")
 }

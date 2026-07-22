@@ -3,6 +3,7 @@ package cli
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,11 +19,26 @@ const (
 
 // config resolves values with the following precedence (highest to lowest):
 // command-line flags, environment variables prefixed TG_, config file, defaults.
-var config = viper.NewWithOptions(viper.KeyDelimiter("."))
+type settings struct {
+	Appview string
+	Account string
+}
 
-var configPath string
+type flagSettings struct {
+	ConfigPath string
+	Appview    string
+	Account    string
+	ConfigSet  bool
+	AppviewSet bool
+	AccountSet bool
+}
 
-func initConfig() {
+func loadConfig(flags flagSettings, errorWriter io.Writer) settings {
+	config := viper.NewWithOptions(viper.KeyDelimiter("."))
+	configPath := flags.ConfigPath
+	if !flags.ConfigSet && configPath == "" {
+		configPath = os.Getenv("TG_CONFIG")
+	}
 	config.SetConfigName(configName)
 	config.SetConfigType(configType)
 
@@ -43,11 +59,26 @@ func initConfig() {
 	if err := config.ReadInConfig(); err != nil {
 		if _, ok := errors.AsType[viper.ConfigFileNotFoundError](err); ok {
 			// A missing config file is fine; configuration is optional.
-			return
+			return applyFlagSettings(settings{
+				Appview: config.GetString("appview"),
+				Account: config.GetString("account"),
+			}, flags)
 		}
 		// Surface parse/permission errors but keep running with defaults.
-		fmt.Fprintln(os.Stderr, "warning: failed to read config:", err)
+		fmt.Fprintln(errorWriter, "warning: failed to read config:", err)
 	}
+	resolved := settings{Appview: config.GetString("appview"), Account: config.GetString("account")}
+	return applyFlagSettings(resolved, flags)
+}
+
+func applyFlagSettings(resolved settings, flags flagSettings) settings {
+	if flags.AppviewSet {
+		resolved.Appview = flags.Appview
+	}
+	if flags.AccountSet {
+		resolved.Account = flags.Account
+	}
+	return resolved
 }
 
 func configSearchDirs() []string {

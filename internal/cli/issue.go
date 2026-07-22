@@ -1,8 +1,13 @@
 package cli
 
-import "github.com/spf13/cobra"
+import (
+	"github.com/alyraffauf/tg/internal/app"
+	"github.com/spf13/cobra"
+)
 
-var issueCmd = &cobra.Command{
-	Use:   "issue",
-	Short: "Manage issues on a Tangled repository",
+func newIssueCommand(_ *app.Service) *cobra.Command {
+	return &cobra.Command{
+		Use:   "issue",
+		Short: "Manage issues on a Tangled repository",
+	}
 }

@@ -1,112 +1,42 @@
 package cli
 
 import (
-	"context"
-	"errors"
-	"fmt"
-	"strings"
+	"io"
 
-	"github.com/alyraffauf/tg/atproto"
-	"github.com/alyraffauf/tg/internal/gitutil"
-	"github.com/alyraffauf/tg/tangled"
+	"github.com/alyraffauf/tg/internal/app"
 	"github.com/spf13/cobra"
 )
 
-var repoListCmd = &cobra.Command{
-	Use:   "list [handle]",
-	Short: "List repositories owned by a Tangled user",
-	Long: `List repositories owned by a Tangled user.
+func newRepoListCommand(service *app.Service) *cobra.Command {
+	return &cobra.Command{
+		Use:   "list [handle]",
+		Short: "List repositories owned by a Tangled user",
+		Long: `List repositories owned by a Tangled user.
 
 If no argument is given, the command detects the user from the "origin"
 remote URL of the git repository in the current directory.`,
-	Args: cobra.MaximumNArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		ctx := cmd.Context()
-
-		handle, err := resolveHandleArg(ctx, args)
-		if err != nil {
-			return err
-		}
-
-		ident, err := resolver.ResolveHandle(ctx, handle)
-		if err != nil {
-			return fmt.Errorf("resolve handle %q: %w", handle, err)
-		}
-
-		repos, err := client.ListRepos(ctx, ident.DID.String())
-		if err != nil {
-			return fmt.Errorf("list repos for %q: %w", handle, err)
-		}
-
-		items := buildRepoItems(repos.Items, handle)
-		return output(items, renderRepoList)
-	},
-}
-
-// resolveHandleArg returns the handle from an explicit argument, or
-// falls back to the handle of the CWD's git origin remote.
-func resolveHandleArg(ctx context.Context, args []string) (string, error) {
-	if len(args) == 1 {
-		return args[0], nil
-	}
-
-	rc, err := gitutil.DetectRepoFromCWD(ctx)
-	if err != nil {
-		return "", fmt.Errorf("detect repo from current directory: %w", err)
-	}
-	return rc.Handle, nil
-}
-
-// resolveHandleOrSelf returns the handle from an explicit argument, or the
-// authenticated user's handle. It does not fall back to CWD git detection.
-func resolveHandleOrSelf(ctx context.Context, args []string) (string, error) {
-	if len(args) == 1 {
-		return args[0], nil
-	}
-	did, err := auth.CurrentDID(ctx)
-	if err != nil {
-		if errors.Is(err, atproto.ErrNotAuthenticated) {
-			return "", fmt.Errorf("not logged in; provide a handle or run \"tg auth login\"")
-		}
-		return "", fmt.Errorf("resume OAuth session: %w", err)
-	}
-	ident, err := resolver.ResolveDID(ctx, did.String())
-	if err != nil {
-		return "", fmt.Errorf("resolve your DID: %w", err)
-	}
-	return ident.Handle.String(), nil
-}
-
-func buildRepoItems(items []tangled.Repo, author string) []repoItem {
-	result := make([]repoItem, 0, len(items))
-
-	for _, tangledRepo := range items {
-		name := tangledRepo.Value.Name
-		if name == "" {
-			// Fall back to the rkey segment of the at:// URI.
-			if idx := strings.LastIndex(tangledRepo.URI, "/"); idx != -1 {
-				name = tangledRepo.URI[idx+1:]
+		Args: cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
+			handle, err := resolveHandleArg(ctx, args, service)
+			if err != nil {
+				return err
 			}
-		}
-
-		result = append(result, repoItem{
-			Name:        name,
-			URI:         tangledRepo.URI,
-			Author:      author,
-			Knot:        tangledRepo.Value.Knot,
-			Description: tangledRepo.Value.Description,
-			CreatedAt:   tangledRepo.Value.CreatedAt,
-			RepoDid:     tangledRepo.Value.RepoDid,
-		})
+			items, err := service.ListRepos(ctx, handle)
+			if err != nil {
+				return err
+			}
+			return output(cmd, items, func(items []app.RepoItem) {
+				renderRepoList(cmd.OutOrStdout(), items)
+			})
+		},
 	}
-
-	return result
 }
 
-func renderRepoList(items []repoItem) {
+func renderRepoList(writer io.Writer, items []app.RepoItem) {
 	rows := make([][]string, 0, len(items))
 	for _, repo := range items {
 		rows = append(rows, []string{repo.Name, repo.Knot, repo.Description, shortDate(repo.CreatedAt)})
 	}
-	renderTable([]string{"NAME", "KNOT", "DESCRIPTION", "CREATED"}, rows, "No repositories found.")
+	renderTable(writer, []string{"NAME", "KNOT", "DESCRIPTION", "CREATED"}, rows, "No repositories found.")
 }

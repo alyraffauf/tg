@@ -2,48 +2,42 @@ package cli
 
 import (
 	"fmt"
-	"os"
 
-	"github.com/alyraffauf/tg/internal/gitutil"
+	"github.com/alyraffauf/tg/internal/app"
 	"github.com/spf13/cobra"
 )
 
-var repoCloneCmd = &cobra.Command{
-	Use:   "clone <handle/repo> [directory]",
-	Short: "Clone a Tangled repository",
-	Long: `Clone a Tangled repository via SSH into a local directory.
+func newRepoCloneCommand(service *app.Service) *cobra.Command {
+	return &cobra.Command{
+		Use:   "clone <handle/repo> [directory]",
+		Short: "Clone a Tangled repository",
+		Long: `Clone a Tangled repository via SSH into a local directory.
 
 The default destination is the repository name.`,
-	Args: cobra.RangeArgs(1, 2),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		ctx := cmd.Context()
+		Args: cobra.RangeArgs(1, 2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
+			target, err := app.ParseTarget(args[0])
+			if err != nil {
+				return err
+			}
 
-		handle, repo, err := parseHandleRepo(args[0])
-		if err != nil {
-			return err
-		}
+			dest := target.Repo
+			if len(args) == 2 {
+				dest = args[1]
+			}
 
-		dest := repo
-		if len(args) == 2 {
-			dest = args[1]
-		}
-
-		fmt.Fprintf(os.Stderr, "Cloning %s/%s into %s...\n", handle, repo, dest)
-		if err := gitutil.CloneRepo(ctx, gitutil.CloneRepoParams{
-			Handle:  handle,
-			Repo:    repo,
-			RepoDir: dest,
-		}); err != nil {
-			return fmt.Errorf("clone %q: %w", args[0], err)
-		}
-
-		result := repoCloneResult{
-			Handle:      handle,
-			Repo:        repo,
-			Destination: dest,
-		}
-		return output(result, func(clone repoCloneResult) {
-			fmt.Printf("Cloned %s/%s into %s\n", clone.Handle, clone.Repo, clone.Destination)
-		})
-	},
+			result, err := service.CloneRepo(ctx, app.CloneRepoInput{
+				Handle:      target.Handle,
+				Repo:        target.Repo,
+				Destination: dest,
+			})
+			if err != nil {
+				return fmt.Errorf("clone %q: %w", args[0], err)
+			}
+			return output(cmd, result, func(clone *app.RepoCloneResult) {
+				fmt.Fprintf(cmd.OutOrStdout(), "Cloned %s/%s into %s\n", clone.Handle, clone.Repo, clone.Destination)
+			})
+		},
+	}
 }

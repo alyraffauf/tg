@@ -1,4 +1,4 @@
-package cli
+package app
 
 import (
 	"testing"
@@ -8,7 +8,7 @@ import (
 )
 
 func TestNewPullRecordUsesDistinctSourceAndTarget(t *testing.T) {
-	record := newPullRecord(prCreateRecord{
+	record, err := newPullRecord(pullRecordInput{
 		Title:         "Cross-repo change",
 		TargetRepoDid: "did:plc:upstream",
 		SourceRepoDid: "did:plc:fork",
@@ -16,6 +16,9 @@ func TestNewPullRecordUsesDistinctSourceAndTarget(t *testing.T) {
 		Head:          "feature",
 		Patch:         &atproto.Blob{},
 	}, time.Date(2026, 7, 17, 0, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("newPullRecord() error = %v", err)
+	}
 
 	if record.Target.Repo != "did:plc:upstream" {
 		t.Fatalf("unexpected target: %+v", record.Target)

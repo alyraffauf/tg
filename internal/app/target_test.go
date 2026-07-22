@@ -1,8 +1,8 @@
-package cli
+package app
 
 import "testing"
 
-func TestParseHandleRepo(t *testing.T) {
+func TestParseTarget(t *testing.T) {
 	tests := []struct {
 		name       string
 		arg        string
@@ -22,13 +22,20 @@ func TestParseHandleRepo(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			handle, repo, err := parseHandleRepo(tt.arg)
+			target, err := ParseTarget(tt.arg)
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("error = %v, wantErr %v", err, tt.wantErr)
 			}
-			if handle != tt.wantHandle || repo != tt.wantRepo {
-				t.Fatalf("got (%q, %q), want (%q, %q)", handle, repo, tt.wantHandle, tt.wantRepo)
+			if target.Handle != tt.wantHandle || target.Repo != tt.wantRepo {
+				t.Fatalf("got (%q, %q), want (%q, %q)", target.Handle, target.Repo, tt.wantHandle, tt.wantRepo)
 			}
 		})
+	}
+}
+
+func TestTargetString(t *testing.T) {
+	target := Target{Handle: "aly.codes", Repo: "tg"}
+	if got := target.String(); got != "aly.codes/tg" {
+		t.Fatalf("String() = %q, want %q", got, "aly.codes/tg")
 	}
 }

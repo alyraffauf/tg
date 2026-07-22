@@ -3,28 +3,21 @@ package cli
 import (
 	"context"
 	"fmt"
-	"os"
-	"time"
+	"io"
 
-	"github.com/alyraffauf/tg/atproto"
-	"github.com/alyraffauf/tg/internal/gitutil"
+	"github.com/alyraffauf/tg/internal/app"
 	"github.com/alyraffauf/tg/knot"
-	"github.com/alyraffauf/tg/tangled"
 	"github.com/spf13/cobra"
 )
 
-var (
-	repoCreateDescription string
-	repoCreateKnot        string
-	repoCreateClone       bool
-	repoCreatePushPath    string
-	repoCreateRemote      string
-)
+func newRepoCreateCommand(service *app.Service) *cobra.Command {
+	var description, knotHost, pushPath, remote string
+	var clone bool
 
-var repoCreateCmd = &cobra.Command{
-	Use:   "create <name>",
-	Short: "Create a repository on Tangled",
-	Long: `Create a repository on Tangled.
+	command := &cobra.Command{
+		Use:   "create <name>",
+		Short: "Create a repository on Tangled",
+		Long: `Create a repository on Tangled.
 
 The repository is provisioned on a knot (default ` + knot.DefaultKnot + `) and a
 sh.tangled.repo record is written to your PDS. The repository name is used as
@@ -35,122 +28,72 @@ Use --clone to clone the new repository into the current directory, or
 remote (and set its current branch as the default branch).
 
 Requires authentication (run "tg auth login" first).`,
-	Args: cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		ctx := cmd.Context()
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
 
-		atClient, did, err := authenticatedATProto(ctx)
-		if err != nil {
-			return err
-		}
-
-		knotHost := repoCreateKnot
-		if knotHost == "" {
-			knotHost = knot.DefaultKnot
-		}
-
-		uri, err := provisionRepo(ctx, atClient, provisionRepoInput{
-			KnotHost:    knotHost,
-			OwnerDID:    did,
-			Name:        args[0],
-			Description: repoCreateDescription,
-		})
-		if err != nil {
-			return err
-		}
-
-		handle := ownerHandle(ctx, did)
-		result := repoCreateResult{
-			Handle: handle,
-			Name:   args[0],
-			URI:    uri,
-			Knot:   knotHost,
-		}
-
-		if repoCreateClone {
-			if err := gitutil.CloneRepo(ctx, gitutil.CloneRepoParams{
-				Handle:  handle,
-				Repo:    args[0],
-				RepoDir: args[0],
-			}); err != nil {
-				return fmt.Errorf("clone new repository: %w", err)
+			selectedKnot := knotHost
+			if selectedKnot == "" {
+				selectedKnot = knot.DefaultKnot
 			}
-			result.Cloned = true
-		}
-		if repoCreatePushPath != "" {
-			if err := pushToNewRepo(ctx, atClient, pushToNewRepoInput{
-				KnotHost:   knotHost,
-				RepoURI:    uri,
-				Handle:     handle,
-				RepoName:   args[0],
-				PushPath:   repoCreatePushPath,
-				RemoteName: repoCreateRemote,
-			}); err != nil {
+
+			uri, handle, err := service.ProvisionRepo(ctx, app.ProvisionRepoInput{
+				KnotHost:    selectedKnot,
+				Name:        args[0],
+				Description: description,
+			})
+			if err != nil {
 				return err
 			}
-			result.Pushed = true
-		}
 
-		return output(result, func(repo repoCreateResult) {
-			fmt.Printf("Created repository %s/%s\n", repo.Handle, repo.Name)
-			if repo.Cloned {
-				fmt.Printf("Cloned into %s\n", repo.Name)
+			result := app.RepoCreateResult{
+				Handle: handle,
+				Name:   args[0],
+				URI:    uri,
+				Knot:   selectedKnot,
 			}
-			if repo.Pushed {
-				fmt.Printf("Pushed to %s\n", repo.Name)
+
+			if clone {
+				if _, err := service.CloneRepo(ctx, app.CloneRepoInput{
+					Handle:      handle,
+					Repo:        args[0],
+					Destination: args[0],
+				}); err != nil {
+					return fmt.Errorf("clone new repository: %w", err)
+				}
+				result.Cloned = true
 			}
-		})
-	},
-}
+			if pushPath != "" {
+				if err := pushToNewRepo(ctx, service, cmd.ErrOrStderr(), pushToNewRepoInput{
+					KnotHost:   selectedKnot,
+					RepoURI:    uri,
+					Handle:     handle,
+					RepoName:   args[0],
+					PushPath:   pushPath,
+					RemoteName: remote,
+				}); err != nil {
+					return err
+				}
+				result.Pushed = true
+			}
 
-func init() {
-	repoCreateCmd.Flags().StringVar(&repoCreateDescription, "description", "", "Repository description")
-	repoCreateCmd.Flags().StringVar(&repoCreateKnot, "knot", "", "knot host to create on (default "+knot.DefaultKnot+")")
-	repoCreateCmd.Flags().BoolVar(&repoCreateClone, "clone", false, "Clone the new repository into the current directory")
-	repoCreateCmd.Flags().StringVar(&repoCreatePushPath, "push", "", "Push an existing local repository at this path to the new remote (e.g. .)")
-	repoCreateCmd.Flags().StringVar(&repoCreateRemote, "remote", "origin", "Remote name to use with --push")
-}
-
-type provisionRepoInput struct {
-	KnotHost    string
-	OwnerDID    string
-	Name        string
-	Description string
-}
-
-// provisionRepo creates the repo on the knot and writes the sh.tangled.repo
-// record to the user's PDS.
-func provisionRepo(ctx context.Context, atClient *atproto.ATProto, in provisionRepoInput) (string, error) {
-	token, err := atClient.GetServiceAuth(ctx, "did:web:"+in.KnotHost, "sh.tangled.repo.create")
-	if err != nil {
-		return "", err
+			return output(cmd, result, func(repo app.RepoCreateResult) {
+				fmt.Fprintf(cmd.OutOrStdout(), "Created repository %s/%s\n", repo.Handle, repo.Name)
+				if repo.Cloned {
+					fmt.Fprintf(cmd.OutOrStdout(), "Cloned into %s\n", repo.Name)
+				}
+				if repo.Pushed {
+					fmt.Fprintf(cmd.OutOrStdout(), "Pushed to %s\n", repo.Name)
+				}
+			})
+		},
 	}
-	repoDid, err := knot.New(in.KnotHost, token).CreateRepo(ctx, knot.CreateRepoInput{
-		Name: in.Name,
-		Rkey: in.Name,
-	})
-	if err != nil {
-		return "", err
-	}
-	record := tangled.RepoRecord{
-		Type:      "sh.tangled.repo",
-		Knot:      in.KnotHost,
-		CreatedAt: time.Now().UTC().Format(time.RFC3339),
-		RepoDid:   repoDid,
-	}
-	if in.Description != "" {
-		record.Description = in.Description
-	}
-	uri, _, err := atClient.PutRecord(ctx, atproto.PutRecordInput{
-		Repo:       in.OwnerDID,
-		Collection: "sh.tangled.repo",
-		Rkey:       in.Name,
-		Record:     record,
-	})
-	if err != nil {
-		return "", err
-	}
-	return uri, nil
+	command.Flags().StringVar(&description, "description", "", "Repository description")
+	command.Flags().StringVar(&knotHost, "knot", "", "knot host to create on (default "+knot.DefaultKnot+")")
+	command.Flags().BoolVar(&clone, "clone", false, "Clone the new repository into the current directory")
+	command.Flags().StringVar(&pushPath, "push", "", "Push an existing local repository at this path to the new remote (e.g. .)")
+	command.Flags().StringVar(&remote, "remote", "origin", "Remote name to use with --push")
+	return command
 }
 
 type pushToNewRepoInput struct {
@@ -164,57 +107,19 @@ type pushToNewRepoInput struct {
 
 // pushToNewRepo sets the default branch then pushes. Default-branch failure is
 // warned, not fatal. Set before push so the knot's hook skips its PR suggestion.
-func pushToNewRepo(ctx context.Context, atClient *atproto.ATProto, in pushToNewRepoInput) error {
-	branch, err := setDefaultBranch(ctx, atClient, setDefaultBranchInput{
-		KnotHost: in.KnotHost,
-		RepoURI:  in.RepoURI,
-		Dir:      in.PushPath,
-	})
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "warning: could not set default branch: %v\n", err)
-	} else {
-		fmt.Fprintf(os.Stderr, "Set default branch to %s\n", branch)
-	}
-	if err := gitutil.PushNewRepo(ctx, gitutil.PushNewRepoParams{
+func pushToNewRepo(ctx context.Context, service *app.Service, errorWriter io.Writer, in pushToNewRepoInput) error {
+	branch, defaultBranchErr, err := service.PushNewRepo(ctx, app.PushNewRepoInput{
+		KnotHost:   in.KnotHost,
+		RepoURI:    in.RepoURI,
 		Dir:        in.PushPath,
 		Handle:     in.Handle,
 		Repo:       in.RepoName,
 		RemoteName: in.RemoteName,
-	}); err != nil {
-		return fmt.Errorf("push to new repository: %w", err)
+	})
+	if defaultBranchErr != nil {
+		fmt.Fprintf(errorWriter, "warning: could not set default branch: %v\n", defaultBranchErr)
+	} else {
+		fmt.Fprintf(errorWriter, "Set default branch to %s\n", branch)
 	}
-	return nil
-}
-
-type setDefaultBranchInput struct {
-	KnotHost string
-	RepoURI  string
-	Dir      string
-}
-
-// setDefaultBranch repoints the default branch to the local repo's current
-// branch. Mints a fresh token because the create token is lexicon-scoped.
-func setDefaultBranch(ctx context.Context, atClient *atproto.ATProto, in setDefaultBranchInput) (string, error) {
-	branch, err := gitutil.CurrentBranch(ctx, in.Dir)
-	if err != nil {
-		return "", err
-	}
-	token, err := atClient.GetServiceAuth(ctx, "did:web:"+in.KnotHost, "sh.tangled.repo.setDefaultBranch")
-	if err != nil {
-		return "", err
-	}
-	if err := knot.New(in.KnotHost, token).SetDefaultBranch(ctx, knot.SetDefaultBranchInput{
-		Repo:          in.RepoURI,
-		DefaultBranch: branch,
-	}); err != nil {
-		return branch, err
-	}
-	return branch, nil
-}
-
-func ownerHandle(ctx context.Context, did string) string {
-	if ident, err := resolver.ResolveDID(ctx, did); err == nil {
-		return ident.Handle.String()
-	}
-	return did
+	return err
 }

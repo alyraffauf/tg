@@ -3,62 +3,41 @@ package cli
 import (
 	"fmt"
 
-	"github.com/alyraffauf/tg/tangled"
+	"github.com/alyraffauf/tg/internal/app"
 	"github.com/spf13/cobra"
 )
 
-var (
-	issueCommentBody     string
-	issueCommentBodyFile string
-	issueCommentRepo     string
-)
+func newIssueCommentCommand(service *app.Service) *cobra.Command {
+	var bodyText, bodyFile, repository string
 
-var issueCommentCmd = &cobra.Command{
-	Use:   "comment <rkey>",
-	Short: "Add a comment to an issue",
-	Args:  cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		body, err := commandBody(issueCommentBody, issueCommentBodyFile)
-		if err != nil {
-			return err
-		}
-		if body == "" {
-			return fmt.Errorf("set --body or --body-file")
-		}
-		ctx := cmd.Context()
-		targetArgs := []string{}
-		if issueCommentRepo != "" {
-			targetArgs = []string{issueCommentRepo}
-		}
-		handle, name, err := resolveTarget(ctx, targetArgs)
-		if err != nil {
-			return err
-		}
-		repoDid, err := findRepoDid(ctx, handle, name)
-		if err != nil {
-			return err
-		}
-		issues, err := client.ListIssues(ctx, repoDid, tangled.ListOpts{Limit: defaultListLimit})
-		if err != nil {
-			return fmt.Errorf("list issues for %s/%s: %w", handle, name, err)
-		}
-		issue, err := findByRKey(issues.Items, args[0], "issue")
-		if err != nil {
-			return err
-		}
-
-		result, err := createIssueComment(ctx, issue.URI, body)
-		if err != nil {
-			return err
-		}
-		return output(result, func(result createdRecordResult) {
-			fmt.Printf("Added comment %s\n", result.URI)
-		})
-	},
-}
-
-func init() {
-	issueCommentCmd.Flags().StringVarP(&issueCommentBody, "body", "b", "", "Comment body")
-	issueCommentCmd.Flags().StringVarP(&issueCommentBodyFile, "body-file", "F", "", "Read comment body from file")
-	issueCommentCmd.Flags().StringVarP(&issueCommentRepo, "repo", "R", "", "Target repository as handle/repo")
+	command := &cobra.Command{
+		Use:   "comment <rkey>",
+		Short: "Add a comment to an issue",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			body, err := commandBody(bodyText, bodyFile)
+			if err != nil {
+				return err
+			}
+			if body == "" {
+				return fmt.Errorf("set --body or --body-file")
+			}
+			ctx := cmd.Context()
+			target, err := resolveTargetFlag(ctx, repository, service)
+			if err != nil {
+				return err
+			}
+			result, err := service.CommentIssue(ctx, target, args[0], body)
+			if err != nil {
+				return err
+			}
+			return output(cmd, result, func(result *app.CreatedRecordResult) {
+				fmt.Fprintf(cmd.OutOrStdout(), "Added comment %s\n", result.URI)
+			})
+		},
+	}
+	command.Flags().StringVarP(&bodyText, "body", "b", "", "Comment body")
+	command.Flags().StringVarP(&bodyFile, "body-file", "F", "", "Read comment body from file")
+	command.Flags().StringVarP(&repository, "repo", "R", "", "Target repository as handle/repo")
+	return command
 }

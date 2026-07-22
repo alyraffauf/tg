@@ -1,8 +1,13 @@
 package cli
 
-import "github.com/spf13/cobra"
+import (
+	"github.com/alyraffauf/tg/internal/app"
+	"github.com/spf13/cobra"
+)
 
-var prCmd = &cobra.Command{
-	Use:   "pr",
-	Short: "Manage pull requests on a Tangled repository",
+func newPRCommand(_ *app.Service) *cobra.Command {
+	return &cobra.Command{
+		Use:   "pr",
+		Short: "Manage pull requests on a Tangled repository",
+	}
 }

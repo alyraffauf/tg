@@ -1,14 +1,18 @@
-package cli
+package app
 
 import (
 	"testing"
+
+	"github.com/alyraffauf/tg/tangled"
+
+	"github.com/alyraffauf/tg/atproto"
 )
 
 func TestDecodeStringRecord(t *testing.T) {
 	tests := []struct {
 		name    string
 		value   any
-		want    stringRecord
+		want    tangled.StringRecord
 		wantErr bool
 	}{
 		{
@@ -20,7 +24,7 @@ func TestDecodeStringRecord(t *testing.T) {
 				"contents":    "# hello",
 				"createdAt":   "2026-07-18T23:15:54+03:00",
 			},
-			want: stringRecord{
+			want: tangled.StringRecord{
 				Type:        "sh.tangled.string",
 				Filename:    "hello.md",
 				Description: "a greeting",
@@ -36,7 +40,7 @@ func TestDecodeStringRecord(t *testing.T) {
 				"contents":  "no description",
 				"createdAt": "2026-07-18T12:00:00Z",
 			},
-			want: stringRecord{
+			want: tangled.StringRecord{
 				Type:      "sh.tangled.string",
 				Filename:  "bare.md",
 				Contents:  "no description",
@@ -51,7 +55,7 @@ func TestDecodeStringRecord(t *testing.T) {
 				"contents":  "empty filename",
 				"createdAt": "2026-07-18T12:00:00Z",
 			},
-			want: stringRecord{
+			want: tangled.StringRecord{
 				Type:      "sh.tangled.string",
 				Filename:  "",
 				Contents:  "empty filename",
@@ -87,5 +91,45 @@ func TestDecodeStringRecord(t *testing.T) {
 				t.Errorf("CreatedAt = %q, want %q", record.CreatedAt, tt.want.CreatedAt)
 			}
 		})
+	}
+}
+
+func TestBuildStringItems(t *testing.T) {
+	records := []atproto.RecordItem{
+		{
+			URI: "at://did:plc:abc/sh.tangled.string/3k2abc",
+			Value: map[string]any{
+				"$type":       "sh.tangled.string",
+				"filename":    "test.d",
+				"description": "my test string",
+				"contents":    "# hello",
+				"createdAt":   "2026-07-18T23:15:54+03:00",
+			},
+		},
+		{
+			URI:   "at://did:plc:abc/sh.tangled.string/3k2def",
+			Value: map[string]any{"not": "a string record"},
+		},
+	}
+
+	items := buildStringItems(records)
+
+	// Records without a filename are not strings and are skipped.
+	if len(items) != 1 {
+		t.Fatalf("buildStringItems() returned %d items, want 1", len(items))
+	}
+
+	first := items[0]
+	if first.Rkey != "3k2abc" {
+		t.Errorf("Rkey = %q, want %q", first.Rkey, "3k2abc")
+	}
+	if first.Filename != "test.d" {
+		t.Errorf("Filename = %q, want %q", first.Filename, "test.d")
+	}
+	if first.Description != "my test string" {
+		t.Errorf("Description = %q, want %q", first.Description, "my test string")
+	}
+	if first.CreatedAt != "2026-07-18T23:15:54+03:00" {
+		t.Errorf("CreatedAt = %q, want %q", first.CreatedAt, "2026-07-18T23:15:54+03:00")
 	}
 }

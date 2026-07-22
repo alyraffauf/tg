@@ -1,12 +1,13 @@
 package cli
 
 import (
-	"log/slog"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"strings"
 
-	"github.com/alyraffauf/tg/atproto"
-	"github.com/alyraffauf/tg/tangled"
-	"github.com/bluesky-social/indigo/atproto/atclient"
-	"github.com/bluesky-social/indigo/atproto/identity"
+	"github.com/alyraffauf/tg/internal/app"
 	"github.com/spf13/cobra"
 )
 
@@ -15,95 +16,109 @@ const (
 	oauthCallbackURL  = "http://" + oauthCallbackAddr + "/callback"
 )
 
-var (
-	resolver = &atproto.Resolver{Directory: identity.DefaultDirectory()}
-	client   = &tangled.Tangled{
-		Client: &atclient.APIClient{Host: defaultAppview},
-		Logger: slog.Default(),
+func NewRoot(service *app.Service) *cobra.Command {
+	rootCmd := &cobra.Command{
+		Use:          "tg",
+		Short:        "A CLI for Tangled",
+		SilenceUsage: true,
 	}
-	auth = atproto.NewAuthManager(oauthCallbackURL)
+	configureRoot(rootCmd)
 
-	jsonOutput bool
-)
+	auth := newAuthCommand(service)
+	auth.AddCommand(newAuthLoginCommand(service), newAuthLogoutCommand(service), newAuthStatusCommand(service), newAuthTokenCommand(service), newAuthListCommand(service), newAuthSwitchCommand(service))
+	rootCmd.AddCommand(auth)
 
-var rootCmd = &cobra.Command{
-	Use:   "tg",
-	Short: "A CLI for Tangled",
-	// Errors such as "not logged in" are expected and shouldn't dump usage.
-	SilenceUsage: true,
-	PersistentPreRun: func(cmd *cobra.Command, args []string) {
-		client.Client.Host = config.GetString("appview")
-		auth.SetAccount(config.GetString("account"))
-	},
+	issue := newIssueCommand(service)
+	issue.AddCommand(newIssueListCommand(service), newIssueViewCommand(service), newIssueCreateCommand(service), newIssueCommentCommand(service), newIssueCloseCommand(service), newIssueReopenCommand(service), newIssueEditCommand(service))
+	rootCmd.AddCommand(issue)
+
+	pull := newPRCommand(service)
+	pull.AddCommand(newPRListCommand(service), newPRViewCommand(service), newPRCreateCommand(service), newPRCommentCommand(service), newPRDiffCommand(service), newPRCheckoutCommand(service), newPRCloseCommand(service), newPRReopenCommand(service), newPREditCommand(service), newPRMergeCommand(service))
+	rootCmd.AddCommand(pull)
+
+	repo := newRepoCommand(service)
+	repo.AddCommand(newRepoViewCommand(service), newRepoCloneCommand(service), newRepoCreateCommand(service), newRepoListCommand(service), newRepoEditCommand(service), newRepoSetDefaultBranchCommand(service), newRepoDeleteCommand(service), newRepoForkCommand(service))
+	rootCmd.AddCommand(repo)
+
+	keys := newSSHKeyCommand(service)
+	keys.AddCommand(newSSHKeyAddCommand(service), newSSHKeyListCommand(service), newSSHKeyDeleteCommand(service))
+	rootCmd.AddCommand(keys)
+
+	stringsCmd := newStringCommand(service)
+	stringsCmd.AddCommand(newStringCreateCommand(service), newStringListCommand(service), newStringViewCommand(service), newStringDeleteCommand(service))
+	rootCmd.AddCommand(stringsCmd, newBrowseCommand(service), newCompletionCommand(service), newManCommand(service), newAPICommand(service))
+	return rootCmd
 }
 
 func Execute() error {
-	return rootCmd.Execute()
+	return ExecuteWith(os.Args[1:], os.Stdin, os.Stdout, os.Stderr)
 }
 
-func init() {
-	cobra.OnInitialize(initConfig)
+// ExecuteWith runs the CLI with explicit arguments and I/O streams.
+func ExecuteWith(arguments []string, input io.Reader, output, errorOutput io.Writer) error {
+	flags, err := parseFlagSettings(arguments)
+	if err != nil {
+		return err
+	}
+	settings := loadConfig(flags, errorOutput)
+	service := app.NewWithStreams(settings.Appview, oauthCallbackURL, output, errorOutput)
+	service.SetAccount(settings.Account)
+	root := NewRoot(service)
+	root.SetArgs(arguments)
+	root.SetIn(input)
+	root.SetOut(output)
+	root.SetErr(errorOutput)
+	err = root.Execute()
+	// A not-authenticated error from any service method is surfaced as the
+	// familiar login hint, so individual commands don't each have to.
+	if errors.Is(err, app.ErrNotAuthenticated) {
+		return fmt.Errorf("not logged in; run \"tg auth login\" first")
+	}
+	return err
+}
 
-	rootCmd.PersistentFlags().StringVar(&configPath, "config", "", "Path to config file (default: $XDG_CONFIG_HOME/tg/config.toml)")
-	rootCmd.PersistentFlags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
+func parseFlagSettings(arguments []string) (flagSettings, error) {
+	var flags flagSettings
+	for index := 0; index < len(arguments); index++ {
+		if arguments[index] == "--" {
+			break
+		}
+		argument := arguments[index]
+		name, value, hasValue := strings.Cut(argument, "=")
+		switch name {
+		case "--config":
+			flags.ConfigPath = flagValue(arguments, index, value, hasValue)
+			flags.ConfigSet = true
+		case "--appview":
+			flags.Appview = flagValue(arguments, index, value, hasValue)
+			flags.AppviewSet = true
+		case "--account":
+			flags.Account = flagValue(arguments, index, value, hasValue)
+			flags.AccountSet = true
+		}
+		if !hasValue && (name == "--config" || name == "--appview" || name == "--account") {
+			if index+1 >= len(arguments) || arguments[index+1] == "--" {
+				return flagSettings{}, fmt.Errorf("flag %s requires a value", name)
+			}
+			index++
+		}
+	}
+	return flags, nil
+}
+
+func flagValue(arguments []string, index int, value string, hasValue bool) string {
+	if hasValue {
+		return value
+	}
+	if index+1 < len(arguments) {
+		return arguments[index+1]
+	}
+	return ""
+}
+
+func configureRoot(rootCmd *cobra.Command) {
+	rootCmd.PersistentFlags().String("config", "", "Path to config file (default: $XDG_CONFIG_HOME/tg/config.toml)")
+	rootCmd.PersistentFlags().Bool("json", false, "Output in JSON format")
 	rootCmd.PersistentFlags().String("appview", defaultAppview, "Appview host URL (overrides config file and TG_APPVIEW)")
 	rootCmd.PersistentFlags().String("account", "", "Account handle or DID to use (overrides the active account and TG_ACCOUNT)")
-
-	config.BindPFlag("appview", rootCmd.PersistentFlags().Lookup("appview"))
-	config.BindPFlag("account", rootCmd.PersistentFlags().Lookup("account"))
-
-	rootCmd.AddCommand(authCmd)
-	authCmd.AddCommand(authLoginCmd)
-	authCmd.AddCommand(authLogoutCmd)
-	authCmd.AddCommand(authStatusCmd)
-	authCmd.AddCommand(authTokenCmd)
-	authCmd.AddCommand(authListCmd)
-	authCmd.AddCommand(authSwitchCmd)
-
-	rootCmd.AddCommand(issueCmd)
-	issueCmd.AddCommand(issueListCmd)
-	issueCmd.AddCommand(issueViewCmd)
-	issueCmd.AddCommand(issueCreateCmd)
-	issueCmd.AddCommand(issueCommentCmd)
-	issueCmd.AddCommand(issueCloseCmd)
-	issueCmd.AddCommand(issueReopenCmd)
-	issueCmd.AddCommand(issueEditCmd)
-
-	rootCmd.AddCommand(prCmd)
-	prCmd.AddCommand(prListCmd)
-	prCmd.AddCommand(prViewCmd)
-	prCmd.AddCommand(prCreateCmd)
-	prCmd.AddCommand(prCommentCmd)
-	prCmd.AddCommand(prDiffCmd)
-	prCmd.AddCommand(prCheckoutCmd)
-	prCmd.AddCommand(prCloseCmd)
-	prCmd.AddCommand(prReopenCmd)
-	prCmd.AddCommand(prEditCmd)
-	prCmd.AddCommand(prMergeCmd)
-
-	rootCmd.AddCommand(repoCmd)
-	repoCmd.AddCommand(repoViewCmd)
-	repoCmd.AddCommand(repoCloneCmd)
-	repoCmd.AddCommand(repoCreateCmd)
-	repoCmd.AddCommand(repoListCmd)
-	repoCmd.AddCommand(repoEditCmd)
-	repoCmd.AddCommand(repoSetDefaultBranchCmd)
-	repoCmd.AddCommand(repoDeleteCmd)
-	repoCmd.AddCommand(repoForkCmd)
-
-	rootCmd.AddCommand(sshKeyCmd)
-	sshKeyCmd.AddCommand(sshKeyAddCmd)
-	sshKeyCmd.AddCommand(sshKeyListCmd)
-	sshKeyCmd.AddCommand(sshKeyDeleteCmd)
-
-	rootCmd.AddCommand(stringCmd)
-	stringCmd.AddCommand(stringCreateCmd)
-	stringCmd.AddCommand(stringListCmd)
-	stringCmd.AddCommand(stringViewCmd)
-	stringCmd.AddCommand(stringDeleteCmd)
-
-	rootCmd.AddCommand(browseCmd)
-	rootCmd.AddCommand(completionCmd)
-	rootCmd.AddCommand(manCmd)
-	rootCmd.AddCommand(apiCmd)
 }

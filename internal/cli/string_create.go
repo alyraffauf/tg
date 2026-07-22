@@ -5,11 +5,9 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"time"
 	"unicode/utf8"
 
-	"github.com/alyraffauf/tg/atproto"
-	"github.com/bluesky-social/indigo/atproto/syntax"
+	"github.com/alyraffauf/tg/internal/app"
 	"github.com/spf13/cobra"
 )
 
@@ -19,55 +17,43 @@ const bytesPerMiB = 1 << 20
 // limit for a text record.
 const maxStringContents = 100 * bytesPerMiB
 
-var (
-	stringCreateDescription string
-	stringCreateFilename    string
-)
+func newStringCreateCommand(service *app.Service) *cobra.Command {
+	var description, filenameFlag string
 
-var stringCreateCmd = &cobra.Command{
-	Use:   "create [<file>]",
-	Short: "Create a string on your Tangled account",
-	Long: `Create a string on your Tangled account.
+	command := &cobra.Command{
+		Use:   "create [<file>]",
+		Short: "Create a string on your Tangled account",
+		Long: `Create a string on your Tangled account.
 
 Contents are read from the given file, or from standard input if no file
 is given (or the file is "-"). When reading from standard input,
 --filename is required. Contents must be valid UTF-8, at most 100 MiB.
 Requires authentication (run "tg auth login" first).`,
-	Args: cobra.MaximumNArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		ctx := cmd.Context()
+		Args: cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
 
-		contents, filename, err := stringContents(os.Stdin, args, stringCreateFilename)
-		if err != nil {
-			return err
-		}
+			contents, filename, err := stringContents(cmd.InOrStdin(), args, filenameFlag)
+			if err != nil {
+				return err
+			}
 
-		atClient, did, err := authenticatedATProto(ctx)
-		if err != nil {
-			return err
-		}
-
-		rkey := string(syntax.NewTIDNow(0))
-		uri, _, err := atClient.PutRecord(ctx, atproto.PutRecordInput{
-			Repo:       did,
-			Collection: stringCollection,
-			Rkey:       rkey,
-			Record: stringRecord{
-				Type:        stringCollection,
+			result, err := service.CreateString(ctx, app.CreateStringInput{
 				Filename:    filename,
-				Description: stringCreateDescription,
+				Description: description,
 				Contents:    contents,
-				CreatedAt:   time.Now().UTC().Format(time.RFC3339),
-			},
-		})
-		if err != nil {
-			return fmt.Errorf("create string: %w", err)
-		}
-
-		return output(createdRecordResult{Rkey: rkey, URI: uri}, func(result createdRecordResult) {
-			fmt.Printf("Created string %s\n", result.URI)
-		})
-	},
+			})
+			if err != nil {
+				return err
+			}
+			return output(cmd, result, func(result *app.CreatedRecordResult) {
+				fmt.Fprintf(cmd.OutOrStdout(), "Created string %s\n", result.URI)
+			})
+		},
+	}
+	command.Flags().StringVarP(&description, "description", "d", "", "Description of the string")
+	command.Flags().StringVarP(&filenameFlag, "filename", "f", "", "Filename for the string (defaults to the file's basename)")
+	return command
 }
 
 // stringContents reads string contents from the file named in args (or stdin
@@ -105,9 +91,4 @@ func stringContents(stdin io.Reader, args []string, filenameFlag string) (conten
 		return "", "", fmt.Errorf("contents must be valid UTF-8")
 	}
 	return contents, filename, nil
-}
-
-func init() {
-	stringCreateCmd.Flags().StringVarP(&stringCreateDescription, "description", "d", "", "Description of the string")
-	stringCreateCmd.Flags().StringVarP(&stringCreateFilename, "filename", "f", "", "Filename for the string (defaults to the file's basename)")
 }

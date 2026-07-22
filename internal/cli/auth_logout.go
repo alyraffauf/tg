@@ -1,44 +1,33 @@
 package cli
 
 import (
-	"errors"
 	"fmt"
 
-	"github.com/alyraffauf/tg/atproto"
+	"github.com/alyraffauf/tg/internal/app"
 	"github.com/spf13/cobra"
 )
 
-var authLogoutAll bool
+func newAuthLogoutCommand(service *app.Service) *cobra.Command {
+	var logoutAll bool
 
-var authLogoutCmd = &cobra.Command{
-	Use:   "logout",
-	Short: "Log out of your AT Protocol account",
-	Args:  cobra.NoArgs,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		var err error
-		if authLogoutAll {
-			err = auth.LogoutAll(cmd.Context())
-		} else {
-			err = auth.Logout(cmd.Context())
-		}
-		wasLoggedIn := true
-		if err != nil {
-			if errors.Is(err, atproto.ErrNotAuthenticated) {
-				wasLoggedIn = false
-			} else {
+	command := &cobra.Command{
+		Use:   "logout",
+		Short: "Log out of your AT Protocol account",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			result, err := service.Logout(cmd.Context(), logoutAll)
+			if err != nil {
 				return err
 			}
-		}
-		return output(authLogoutResult{WasLoggedIn: wasLoggedIn}, func(r authLogoutResult) {
-			if r.WasLoggedIn {
-				fmt.Println("Logged out.")
-			} else {
-				fmt.Println("Not logged in.")
-			}
-		})
-	},
-}
-
-func init() {
-	authLogoutCmd.Flags().BoolVar(&authLogoutAll, "all", false, "Log out all accounts")
+			return output(cmd, result, func(r *app.AuthLogoutResult) {
+				if r.WasLoggedIn {
+					fmt.Fprintln(cmd.OutOrStdout(), "Logged out.")
+				} else {
+					fmt.Fprintln(cmd.OutOrStdout(), "Not logged in.")
+				}
+			})
+		},
+	}
+	command.Flags().BoolVar(&logoutAll, "all", false, "Log out all accounts")
+	return command
 }

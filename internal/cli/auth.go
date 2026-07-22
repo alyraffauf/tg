@@ -1,8 +1,13 @@
 package cli
 
-import "github.com/spf13/cobra"
+import (
+	"github.com/alyraffauf/tg/internal/app"
+	"github.com/spf13/cobra"
+)
 
-var authCmd = &cobra.Command{
-	Use:   "auth",
-	Short: "Manage authentication",
+func newAuthCommand(_ *app.Service) *cobra.Command {
+	return &cobra.Command{
+		Use:   "auth",
+		Short: "Manage authentication",
+	}
 }

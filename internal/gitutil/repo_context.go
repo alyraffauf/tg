@@ -30,14 +30,14 @@ type RepoContext struct {
 // DetectRepoFromCWD scans the git remotes in the current directory for one
 // pointing at Tangled, checking the default remote first. Returns the first
 // match.
-func DetectRepoFromCWD(ctx context.Context) (*RepoContext, error) {
-	remotes, err := gitLines(ctx, "remote")
+func (c *Client) DetectRepoFromCWD(ctx context.Context) (*RepoContext, error) {
+	remotes, err := c.gitLines(ctx, "remote")
 	if err != nil {
 		return nil, fmt.Errorf("list git remotes: %w", err)
 	}
 
 	for _, name := range originFirst(remotes) {
-		urls, err := gitLines(ctx, "remote", "get-url", "--all", name)
+		urls, err := c.gitLines(ctx, "remote", "get-url", "--all", name)
 		if err != nil {
 			return nil, fmt.Errorf("get URLs for remote %q: %w", name, err)
 		}
@@ -49,6 +49,10 @@ func DetectRepoFromCWD(ctx context.Context) (*RepoContext, error) {
 	}
 
 	return nil, fmt.Errorf("no Tangled remote found among %d remote(s) %q; pass the repository as handle/repo", len(remotes), remotes)
+}
+
+func DetectRepoFromCWD(ctx context.Context) (*RepoContext, error) {
+	return defaultClient.DetectRepoFromCWD(ctx)
 }
 
 // originFirst returns remotes with the default remote first (if present),
@@ -133,16 +137,26 @@ func splitHandleRepo(path string) (*RepoContext, bool) {
 }
 
 // gitLines runs git with the given args and returns non-empty output lines.
-func gitLines(ctx context.Context, args ...string) ([]string, error) {
-	out, err := exec.CommandContext(ctx, "git", args...).Output()
+func (c *Client) gitLines(ctx context.Context, args ...string) ([]string, error) {
+	// Output is intentionally captured; diagnostics still go to the client's sink.
+	cmd := exec.CommandContext(ctx, "git", args...)
+	var captured strings.Builder
+	cmd.Stdout = &captured
+	_, stderr := c.writers()
+	cmd.Stderr = stderr
+	err := cmd.Run()
 	if err != nil {
 		return nil, fmt.Errorf("git %s: %w", strings.Join(args, " "), err)
 	}
 	var lines []string
-	for _, line := range strings.Split(string(out), "\n") {
+	for _, line := range strings.Split(captured.String(), "\n") {
 		if line = strings.TrimSpace(line); line != "" {
 			lines = append(lines, line)
 		}
 	}
 	return lines, nil
+}
+
+func gitLines(ctx context.Context, args ...string) ([]string, error) {
+	return defaultClient.gitLines(ctx, args...)
 }

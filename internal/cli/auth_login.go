@@ -10,74 +10,75 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/alyraffauf/tg/internal/app"
 	"github.com/spf13/cobra"
 )
 
-var authLoginPasswordStdin bool
+func newAuthLoginCommand(service *app.Service) *cobra.Command {
+	var passwordStdin bool
 
-var authLoginCmd = &cobra.Command{
-	Use:   "login <handle> [app-password]",
-	Short: "Log in to atproto via OAuth or an app password",
-	Long:  `Log in with OAuth, or use an app password as the second argument for headless login.`,
-	Args:  cobra.RangeArgs(1, 2),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		identifier := args[0]
-		password, usePassword, err := loginPassword(args, authLoginPasswordStdin, cmd.InOrStdin())
-		if err != nil {
-			return err
-		}
-		if usePassword {
-			if err := auth.LoginWithPassword(cmd.Context(), identifier, password); err != nil {
-				return err
-			}
-			did, err := auth.CurrentDID(cmd.Context())
-			if err != nil {
-				fmt.Fprintln(os.Stderr, "Login completed but session could not be confirmed.")
-				return err
-			}
-			fmt.Printf("Logged in as %s\n", did)
-			return nil
-		}
-
-		server, resultChannel, err := runCallbackServer()
-		if err != nil {
-			return err
-		}
-		defer server.Shutdown(context.Background())
-
-		ctx := cmd.Context()
-		loginURL, err := auth.StartLogin(ctx, identifier)
-		if err != nil {
-			auth.CancelLogin()
-			return err
-		}
-		defer auth.CancelLogin()
-
-		fmt.Println("Opening browser to complete login...")
-		if err := openBrowser(loginURL); err != nil {
-			fmt.Printf("Could not open browser. Open this URL manually:\n%s\n", loginURL)
-		}
-
-		select {
-		case err := <-resultChannel:
+	command := &cobra.Command{
+		Use:   "login <handle> [app-password]",
+		Short: "Log in to atproto via OAuth or an app password",
+		Long:  `Log in with OAuth, or use an app password as the second argument for headless login.`,
+		Args:  cobra.RangeArgs(1, 2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			identifier := args[0]
+			password, usePassword, err := loginPassword(args, passwordStdin, cmd.InOrStdin())
 			if err != nil {
 				return err
 			}
-			did, err := auth.CurrentDID(ctx)
+			if usePassword {
+				if err := service.LoginWithPassword(cmd.Context(), identifier, password); err != nil {
+					return err
+				}
+				did, err := service.CurrentDID(cmd.Context())
+				if err != nil {
+					fmt.Fprintln(cmd.ErrOrStderr(), "Login completed but session could not be confirmed.")
+					return err
+				}
+				fmt.Fprintf(cmd.OutOrStdout(), "Logged in as %s\n", did)
+				return nil
+			}
+
+			server, resultChannel, err := runCallbackServer(service)
 			if err != nil {
-				fmt.Fprintln(os.Stderr, "Login completed but session could not be confirmed.")
 				return err
 			}
-			fmt.Printf("Logged in as %s\n", did)
-			return nil
-		case <-ctx.Done():
-			return ctx.Err()
-		}
-	},
-}
+			defer server.Shutdown(context.Background())
 
-func init() {
-	authLoginCmd.Flags().BoolVar(&authLoginPasswordStdin, "password-stdin", false, "Read the app password from standard input")
+			ctx := cmd.Context()
+			loginURL, err := service.StartLogin(ctx, identifier)
+			if err != nil {
+				service.CancelLogin()
+				return err
+			}
+			defer service.CancelLogin()
+
+			fmt.Fprintln(cmd.OutOrStdout(), "Opening browser to complete login...")
+			if err := openBrowser(loginURL); err != nil {
+				fmt.Fprintf(cmd.ErrOrStderr(), "Could not open browser. Open this URL manually:\n%s\n", loginURL)
+			}
+
+			select {
+			case err := <-resultChannel:
+				if err != nil {
+					return err
+				}
+				did, err := service.CurrentDID(ctx)
+				if err != nil {
+					fmt.Fprintln(cmd.ErrOrStderr(), "Login completed but session could not be confirmed.")
+					return err
+				}
+				fmt.Fprintf(cmd.OutOrStdout(), "Logged in as %s\n", did)
+				return nil
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		},
+	}
+	command.Flags().BoolVar(&passwordStdin, "password-stdin", false, "Read the app password from standard input")
+	return command
 }
 
 func loginPassword(args []string, fromStdin bool, stdin io.Reader) (string, bool, error) {
@@ -101,12 +102,12 @@ func loginPassword(args []string, fromStdin bool, stdin io.Reader) (string, bool
 	return password, true, nil
 }
 
-func runCallbackServer() (*http.Server, <-chan error, error) {
+func runCallbackServer(service *app.Service) (*http.Server, <-chan error, error) {
 	resultChannel := make(chan error, 1)
 
 	serveMux := http.NewServeMux()
 	serveMux.HandleFunc("/callback", func(w http.ResponseWriter, r *http.Request) {
-		if err := auth.FinishLogin(r.Context(), r.URL.Query()); err != nil {
+		if err := service.FinishLogin(r.Context(), r.URL.Query()); err != nil {
 			resultChannel <- err
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
