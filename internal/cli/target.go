@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/alyraffauf/tg/internal/app"
 )
@@ -46,4 +47,21 @@ func resolveHandleOrSelf(ctx context.Context, args []string, service accountHand
 		return args[0], nil
 	}
 	return service.HandleOrSelf(ctx, "")
+}
+
+// resolveCloneTarget accepts either a complete handle/repo target or a repo
+// name owned by the authenticated user.
+func resolveCloneTarget(ctx context.Context, arg string, service accountHandleResolver) (app.Target, error) {
+	if strings.Contains(arg, "/") {
+		return app.ParseTarget(arg)
+	}
+	if arg == "" {
+		return app.Target{}, fmt.Errorf("expected repo or handle/repo, got %q", arg)
+	}
+
+	handle, err := service.HandleOrSelf(ctx, "")
+	if err != nil {
+		return app.Target{}, err
+	}
+	return app.Target{Handle: handle, Repo: arg}, nil
 }

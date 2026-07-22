@@ -9,15 +9,18 @@ import (
 
 func newRepoCloneCommand(service *app.Service) *cobra.Command {
 	return &cobra.Command{
-		Use:   "clone <handle/repo> [directory]",
+		Use:   "clone <repo | handle/repo> [directory]",
 		Short: "Clone a Tangled repository",
 		Long: `Clone a Tangled repository via SSH into a local directory.
 
-The default destination is the repository name.`,
+The default destination is the repository name. If only a repository name is
+given, the authenticated user's handle is used.
+
+Run "tg auth login" first when using the repository-only form.`,
 		Args: cobra.RangeArgs(1, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
-			target, err := app.ParseTarget(args[0])
+			target, err := resolveCloneTarget(ctx, args[0], service)
 			if err != nil {
 				return err
 			}

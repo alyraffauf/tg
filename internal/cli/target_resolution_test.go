@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"testing"
+
+	"github.com/alyraffauf/tg/internal/app"
 )
 
 func TestResolveHandleOrSelf(t *testing.T) {
@@ -49,6 +51,60 @@ func TestResolveHandleOrSelf(t *testing.T) {
 			}
 			if got != tt.want {
 				t.Fatalf("resolveHandleOrSelf() = %q, want %q", got, tt.want)
+			}
+			if tt.resolver.calls != tt.wantCalls {
+				t.Fatalf("HandleOrSelf() calls = %d, want %d", tt.resolver.calls, tt.wantCalls)
+			}
+		})
+	}
+}
+
+func TestResolveCloneTarget(t *testing.T) {
+	tests := []struct {
+		name      string
+		arg       string
+		resolver  fakeAccountHandleResolver
+		want      app.Target
+		wantCalls int
+		wantError bool
+	}{
+		{
+			name: "explicit handle and repo",
+			arg:  "other.test/tg",
+			want: app.Target{Handle: "other.test", Repo: "tg"},
+		},
+		{
+			name: "authenticated user repo",
+			arg:  "tg",
+			resolver: fakeAccountHandleResolver{
+				handle: "self.test",
+			},
+			want:      app.Target{Handle: "self.test", Repo: "tg"},
+			wantCalls: 1,
+		},
+		{
+			name: "authentication failure",
+			arg:  "tg",
+			resolver: fakeAccountHandleResolver{
+				err: errors.New("not logged in"),
+			},
+			wantCalls: 1,
+			wantError: true,
+		},
+		{
+			name:      "empty repo",
+			wantError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := resolveCloneTarget(context.Background(), tt.arg, &tt.resolver)
+			if (err != nil) != tt.wantError {
+				t.Fatalf("resolveCloneTarget() error = %v, want error %t", err, tt.wantError)
+			}
+			if got != tt.want {
+				t.Fatalf("resolveCloneTarget() = %+v, want %+v", got, tt.want)
 			}
 			if tt.resolver.calls != tt.wantCalls {
 				t.Fatalf("HandleOrSelf() calls = %d, want %d", tt.resolver.calls, tt.wantCalls)
