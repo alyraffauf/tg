@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/alyraffauf/tg/internal/gitutil"
 	"github.com/alyraffauf/tg/tangled"
 	"github.com/bluesky-social/indigo/atproto/atclient"
 )
@@ -31,10 +30,10 @@ func ParseTarget(arg string) (Target, error) {
 
 // TargetFromCWD detects the target using the service's Git client.
 func (s *Service) TargetFromCWD(ctx context.Context) (Target, error) {
-	return targetFromCWD(ctx, s.Git)
+	return targetFromCWD(ctx, s.git)
 }
 
-func targetFromCWD(ctx context.Context, git *gitutil.Client) (Target, error) {
+func targetFromCWD(ctx context.Context, git gitClient) (Target, error) {
 	rc, err := git.DetectRepoFromCWD(ctx)
 	if err != nil {
 		return Target{}, fmt.Errorf("detect repo from current directory: %w", err)
@@ -42,16 +41,16 @@ func targetFromCWD(ctx context.Context, git *gitutil.Client) (Target, error) {
 	return Target{Handle: rc.Handle, Repo: rc.Repo}, nil
 }
 
-// ResolveRepo finds a repository record even when its rkey does not match
+// resolveRepo finds a repository record even when its rkey does not match
 // the repository name.
-func (s *Service) ResolveRepo(ctx context.Context, t Target) (*tangled.Repo, error) {
-	ident, err := s.Resolver.ResolveHandle(ctx, t.Handle)
+func (s *Service) resolveRepo(ctx context.Context, t Target) (*tangled.Repo, error) {
+	ident, err := s.resolver.ResolveHandle(ctx, t.Handle)
 	if err != nil {
 		return nil, fmt.Errorf("resolve handle %q: %w", t.Handle, err)
 	}
 
 	recordURI := fmt.Sprintf("at://%s/sh.tangled.repo/%s", ident.DID, t.Repo)
-	if repo, err := s.Appview.GetRepo(ctx, recordURI); err == nil {
+	if repo, err := s.appview.GetRepo(ctx, recordURI); err == nil {
 		if repo.URI == "" {
 			repo.URI = recordURI
 		}
@@ -60,7 +59,7 @@ func (s *Service) ResolveRepo(ctx context.Context, t Target) (*tangled.Repo, err
 		return nil, fmt.Errorf("get repository %q: %w", t.Repo, err)
 	}
 
-	repos, err := s.Appview.ListRepos(ctx, ident.DID.String())
+	repos, err := s.appview.ListRepos(ctx, ident.DID.String())
 	if err != nil {
 		return nil, fmt.Errorf("list repos for %q: %w", t.Handle, err)
 	}
@@ -73,18 +72,18 @@ func (s *Service) ResolveRepo(ctx context.Context, t Target) (*tangled.Repo, err
 	return nil, fmt.Errorf("repo %q not found for handle %q", t.Repo, t.Handle)
 }
 
-// RepoDID resolves a target to its repoDid, the key the issue/PR listings use.
-func (s *Service) RepoDID(ctx context.Context, t Target) (string, error) {
-	record, err := s.ResolveRepo(ctx, t)
+// repoDID resolves a target to the key used by issue and pull-request listings.
+func (s *Service) repoDID(ctx context.Context, t Target) (string, error) {
+	record, err := s.resolveRepo(ctx, t)
 	if err != nil {
 		return "", err
 	}
 	return record.Value.RepoDid, nil
 }
 
-// RequireOwnedRepo resolves a target and verifies it is owned by did.
-func (s *Service) RequireOwnedRepo(ctx context.Context, t Target, did string) (*tangled.Repo, error) {
-	repo, err := s.ResolveRepo(ctx, t)
+// requireOwnedRepo resolves a target and verifies it is owned by did.
+func (s *Service) requireOwnedRepo(ctx context.Context, t Target, did string) (*tangled.Repo, error) {
+	repo, err := s.resolveRepo(ctx, t)
 	if err != nil {
 		return nil, err
 	}

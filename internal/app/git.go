@@ -16,7 +16,7 @@ type CloneRepoInput struct {
 
 // CloneRepo clones a Tangled repository into Destination.
 func (s *Service) CloneRepo(ctx context.Context, in CloneRepoInput) (*RepoCloneResult, error) {
-	if err := s.Git.CloneRepo(ctx, gitutil.CloneRepoParams{
+	if err := s.git.CloneRepo(ctx, gitutil.CloneRepoParams{
 		Handle:  in.Handle,
 		Repo:    in.Repo,
 		RepoDir: in.Destination,
@@ -43,12 +43,12 @@ type CheckoutPullInput struct {
 
 // CheckoutPull downloads and applies the latest pull request patch.
 func (s *Service) CheckoutPull(ctx context.Context, in CheckoutPullInput) (*PRCheckoutResult, error) {
-	localRepo, err := s.Git.DetectRepoFromCWD(ctx)
+	localRepo, err := s.git.DetectRepoFromCWD(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("detect local repository: %w", err)
 	}
 	localTarget := Target{Handle: localRepo.Handle, Repo: localRepo.Repo}
-	localRecord, err := s.ResolveRepo(ctx, localTarget)
+	localRecord, err := s.resolveRepo(ctx, localTarget)
 	if err != nil {
 		return nil, err
 	}
@@ -59,7 +59,7 @@ func (s *Service) CheckoutPull(ctx context.Context, in CheckoutPullInput) (*PRCh
 	}
 	targetRecord := localRecord
 	if target != localTarget {
-		targetRecord, err = s.ResolveRepo(ctx, target)
+		targetRecord, err = s.resolveRepo(ctx, target)
 		if err != nil {
 			return nil, err
 		}
@@ -72,7 +72,7 @@ func (s *Service) CheckoutPull(ctx context.Context, in CheckoutPullInput) (*PRCh
 	if err != nil {
 		return nil, err
 	}
-	if patch.Record.Target.Branch == "" {
+	if patch.TargetBranch == "" {
 		return nil, fmt.Errorf("pull request %q has no target branch", in.Rkey)
 	}
 
@@ -80,10 +80,10 @@ func (s *Service) CheckoutPull(ctx context.Context, in CheckoutPullInput) (*PRCh
 	if branch == "" {
 		branch = "pr-" + in.Rkey
 	}
-	if err := s.Git.CheckoutPatch(ctx, gitutil.CheckoutPatchParams{
+	if err := s.git.CheckoutPatch(ctx, gitutil.CheckoutPatchParams{
 		RepoDir:      in.RepoDir,
 		Branch:       branch,
-		TargetBranch: patch.Record.Target.Branch,
+		TargetBranch: patch.TargetBranch,
 		Patch:        patch.Patch,
 		Force:        in.Force,
 	}); err != nil {

@@ -5,7 +5,6 @@ import (
 	"compress/gzip"
 	"context"
 	"fmt"
-	"io"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -98,12 +97,11 @@ func (c *Client) resolveBaseRevision(ctx context.Context, repoDir, revision stri
 func (c *Client) gitCommand(ctx context.Context, repoDir string, args ...string) error {
 	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Dir = repoDir
-	var output bytes.Buffer
 	stdout, stderr := c.writers()
-	cmd.Stdout = io.MultiWriter(stdout, &output)
-	cmd.Stderr = io.MultiWriter(stderr, &output)
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("git %s: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(output.String()))
+		return fmt.Errorf("git %s: %w", strings.Join(args, " "), err)
 	}
 	return nil
 }

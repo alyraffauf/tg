@@ -20,7 +20,7 @@ const (
 const patchMimeType = "application/gzip"
 
 // putRecord writes a record to the PDS.
-func putRecord(ctx context.Context, atClient *atproto.ATProto, did, collection, rkey string, record any) error {
+func putRecord(ctx context.Context, atClient pdsClient, did, collection, rkey string, record any) error {
 	if _, _, err := atClient.PutRecord(ctx, atproto.PutRecordInput{
 		Repo: did, Collection: collection, Rkey: rkey, Record: record,
 	}); err != nil {
@@ -31,7 +31,7 @@ func putRecord(ctx context.Context, atClient *atproto.ATProto, did, collection, 
 
 // editRecord fetches an existing record, applies the provided title and/or
 // body patches (nil leaves the field untouched), and writes it back.
-func editRecord(ctx context.Context, atClient *atproto.ATProto, did, collection, rkey string, title, body *string) error {
+func editRecord(ctx context.Context, atClient pdsClient, did, collection, rkey string, title, body *string) error {
 	found, err := atClient.GetRecord(ctx, did, collection, rkey)
 	if err != nil {
 		return fmt.Errorf("get existing record: %w", err)
@@ -73,7 +73,7 @@ func preserveRecord(value any) (map[string]any, error) {
 // putState writes an issue.state or pull.status record keyed by rkey. state
 // is the bare verb ("open"/"closed"/"merged"); the collection-specific suffix
 // is applied here.
-func putState(ctx context.Context, atClient *atproto.ATProto, did, rkey, collection, target, state string) error {
+func putState(ctx context.Context, atClient pdsClient, did, rkey, collection, target, state string) error {
 	if collection == tangled.IssueCollection {
 		state = tangled.IssueCollection + tangled.IssueStateSuffix + "." + state
 		return putRecord(ctx, atClient, did, tangled.IssueCollection+tangled.IssueStateSuffix, rkey, tangled.IssueStateRecord{

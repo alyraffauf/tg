@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/alyraffauf/tg/internal/app"
-	"github.com/bluesky-social/indigo/atproto/syntax"
 	"github.com/spf13/cobra"
 )
 
@@ -21,10 +20,6 @@ func newAPICommand(service *app.Service) *cobra.Command {
 		Short: "Call an authenticated XRPC endpoint",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			endpoint, err := syntax.ParseNSID(args[0])
-			if err != nil {
-				return fmt.Errorf("parse NSID: %w", err)
-			}
 			fields, err := parseAPIFields(fieldsFlag)
 			if err != nil {
 				return err
@@ -38,7 +33,7 @@ func newAPICommand(service *app.Service) *cobra.Command {
 			}
 
 			response, err := service.CallAPI(cmd.Context(), app.APIRequestInput{
-				Endpoint: endpoint,
+				Endpoint: args[0],
 				Method:   method,
 				Fields:   fields,
 			})

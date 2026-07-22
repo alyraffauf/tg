@@ -19,12 +19,11 @@ import (
 // maxPullPatchSize caps a downloaded pull-request patch.
 const maxPullPatchSize = 100 << 20
 
-// PullPatch is a pull request's decoded record and its latest decompressed
-// patch, returned by PullPatch for use by diff and checkout.
+// PullPatch contains the latest decompressed patch and its target branch.
 type PullPatch struct {
-	URI    string
-	Record tangled.PullRecord
-	Patch  []byte
+	URI          string
+	TargetBranch string
+	Patch        []byte
 }
 
 // CreatePullInput configures pull request creation.
@@ -51,11 +50,11 @@ type pullRecordInput struct {
 
 // ListPulls lists every pull request in the target repository.
 func (s *Service) ListPulls(ctx context.Context, t Target) ([]Item, error) {
-	repoDid, err := s.RepoDID(ctx, t)
+	repoDid, err := s.repoDID(ctx, t)
 	if err != nil {
 		return nil, err
 	}
-	pulls, err := s.Appview.ListPulls(ctx, repoDid, tangled.ListOpts{
+	pulls, err := s.appview.ListPulls(ctx, repoDid, tangled.ListOpts{
 		Limit: defaultListLimit,
 	})
 	if err != nil {
@@ -66,11 +65,11 @@ func (s *Service) ListPulls(ctx context.Context, t Target) ([]Item, error) {
 
 // ViewPull finds a single pull request by rkey within the target repository.
 func (s *Service) ViewPull(ctx context.Context, t Target, rkey string) (*ViewResult, error) {
-	repoDid, err := s.RepoDID(ctx, t)
+	repoDid, err := s.repoDID(ctx, t)
 	if err != nil {
 		return nil, err
 	}
-	pulls, err := s.Appview.ListPulls(ctx, repoDid, tangled.ListOpts{
+	pulls, err := s.appview.ListPulls(ctx, repoDid, tangled.ListOpts{
 		Limit: defaultListLimit,
 	})
 	if err != nil {
@@ -98,27 +97,27 @@ func (s *Service) ViewPull(ctx context.Context, t Target, rkey string) (*ViewRes
 // CreatePull generates a patch from the local repository, uploads it, and
 // writes a pull record.
 func (s *Service) CreatePull(ctx context.Context, in CreatePullInput) (*PRCreateResult, error) {
-	atClient, did, err := s.AuthenticatedClient(ctx)
+	atClient, did, err := s.authenticatedPDS(ctx)
 	if err != nil {
 		return nil, err
 	}
 
 	head := in.Head
 	if head == "" {
-		head, err = s.Git.CurrentBranch(ctx, in.RepoDir)
+		head, err = s.git.CurrentBranch(ctx, in.RepoDir)
 		if err != nil {
 			return nil, fmt.Errorf("determine source branch: %w", err)
 		}
 	}
 	base := in.Base
 	if base == "" {
-		base, err = s.Git.DefaultBranch(ctx, in.RepoDir)
+		base, err = s.git.DefaultBranch(ctx, in.RepoDir)
 		if err != nil {
 			return nil, fmt.Errorf("determine target branch; set --base explicitly: %w", err)
 		}
 	}
 
-	target, err := s.ResolveRepo(ctx, in.Target)
+	target, err := s.resolveRepo(ctx, in.Target)
 	if err != nil {
 		return nil, err
 	}
@@ -127,7 +126,7 @@ func (s *Service) CreatePull(ctx context.Context, in CreatePullInput) (*PRCreate
 	}
 	source := target
 	if in.Source != nil {
-		source, err = s.ResolveRepo(ctx, *in.Source)
+		source, err = s.resolveRepo(ctx, *in.Source)
 		if err != nil {
 			return nil, fmt.Errorf("resolve source repository: %w", err)
 		}
@@ -136,7 +135,7 @@ func (s *Service) CreatePull(ctx context.Context, in CreatePullInput) (*PRCreate
 		return nil, fmt.Errorf("source repository has no repo DID")
 	}
 
-	patch, err := s.Git.GeneratePatch(ctx, in.RepoDir, base, head)
+	patch, err := s.git.GeneratePatch(ctx, in.RepoDir, base, head)
 	if err != nil {
 		return nil, fmt.Errorf("generate pull request patch: %w", err)
 	}
@@ -162,7 +161,7 @@ func (s *Service) CreatePull(ctx context.Context, in CreatePullInput) (*PRCreate
 
 func atURIPrefix(uri string) bool { return len(uri) >= 5 && uri[:5] == "at://" }
 
-func createPullRecord(ctx context.Context, atClient *atproto.ATProto, did string, input pullRecordInput) (string, error) {
+func createPullRecord(ctx context.Context, atClient pdsClient, did string, input pullRecordInput) (string, error) {
 	record, err := newPullRecord(input, time.Now().UTC())
 	if err != nil {
 		return "", err
@@ -222,11 +221,11 @@ func patchBlob(blob *atproto.Blob) (tangled.PatchBlob, error) {
 
 // CommentPull adds a comment to the pull request identified by rkey.
 func (s *Service) CommentPull(ctx context.Context, t Target, rkey, body string) (*CreatedRecordResult, error) {
-	repoDid, err := s.RepoDID(ctx, t)
+	repoDid, err := s.repoDID(ctx, t)
 	if err != nil {
 		return nil, err
 	}
-	pulls, err := s.Appview.ListPulls(ctx, repoDid, tangled.ListOpts{
+	pulls, err := s.appview.ListPulls(ctx, repoDid, tangled.ListOpts{
 		Limit: defaultListLimit,
 	})
 	if err != nil {
@@ -240,7 +239,7 @@ func (s *Service) CommentPull(ctx context.Context, t Target, rkey, body string) 
 }
 
 func (s *Service) createPullComment(ctx context.Context, pullURI, body string) (*CreatedRecordResult, error) {
-	atClient, did, err := s.AuthenticatedClient(ctx)
+	atClient, did, err := s.authenticatedPDS(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -265,11 +264,11 @@ func (s *Service) createPullComment(ctx context.Context, pullURI, body string) (
 // PullPatch fetches a pull request's latest patch, decompressed and ready to
 // apply or stream.
 func (s *Service) PullPatch(ctx context.Context, t Target, rkey string) (*PullPatch, error) {
-	repoDid, err := s.RepoDID(ctx, t)
+	repoDid, err := s.repoDID(ctx, t)
 	if err != nil {
 		return nil, err
 	}
-	pulls, err := s.Appview.ListPulls(ctx, repoDid, tangled.ListOpts{
+	pulls, err := s.appview.ListPulls(ctx, repoDid, tangled.ListOpts{
 		Limit: defaultListLimit,
 	})
 	if err != nil {
@@ -287,7 +286,7 @@ func (s *Service) PullPatch(ctx context.Context, t Target, rkey string) (*PullPa
 	if err != nil {
 		return nil, err
 	}
-	return &PullPatch{URI: pull.URI, Record: record, Patch: patch}, nil
+	return &PullPatch{URI: pull.URI, TargetBranch: record.Target.Branch, Patch: patch}, nil
 }
 
 func latestPullPatch(pull *tangled.ListItem, rkey string) (tangled.PullRecord, string, error) {
@@ -306,7 +305,7 @@ func latestPullPatch(pull *tangled.ListItem, rkey string) (tangled.PullRecord, s
 }
 
 func (s *Service) downloadPullPatch(ctx context.Context, authorDID, cid string) ([]byte, error) {
-	pdsHost, err := s.Resolver.ResolvePDS(ctx, authorDID)
+	pdsHost, err := s.resolver.ResolvePDS(ctx, authorDID)
 	if err != nil {
 		return nil, fmt.Errorf("resolve PDS for author %q: %w", authorDID, err)
 	}
@@ -315,7 +314,7 @@ func (s *Service) downloadPullPatch(ctx context.Context, authorDID, cid string) 
 	if err != nil {
 		return nil, fmt.Errorf("build patch download request: %w", err)
 	}
-	resp, err := s.HTTPClient.Do(req)
+	resp, err := s.httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("download patch: %w", err)
 	}
@@ -354,7 +353,7 @@ func readLimited(reader io.Reader, limit int64) ([]byte, error) {
 // SetPullState closes or reopens a pull request. status is the bare verb
 // ("open" or "closed").
 func (s *Service) SetPullState(ctx context.Context, t Target, rkey, status string) (*StateResult, error) {
-	atClient, did, err := s.AuthenticatedClient(ctx)
+	atClient, did, err := s.authenticatedPDS(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -370,7 +369,7 @@ func (s *Service) SetPullState(ctx context.Context, t Target, rkey, status strin
 
 // MergePull applies a pull request on its knot and records the merged status.
 func (s *Service) MergePull(ctx context.Context, t Target, rkey string) (*StateResult, error) {
-	atClient, did, err := s.AuthenticatedClient(ctx)
+	atClient, did, err := s.authenticatedPDS(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -386,7 +385,7 @@ func (s *Service) MergePull(ctx context.Context, t Target, rkey string) (*StateR
 	if err != nil {
 		return nil, err
 	}
-	if err := knot.New(knotHost, token).Merge(ctx, knot.MergeInput{Repo: repoURI, Pull: pullURI}); err != nil {
+	if err := s.knot.New(knotHost, token).Merge(ctx, knot.MergeInput{Repo: repoURI, Pull: pullURI}); err != nil {
 		return nil, err
 	}
 	if err := putState(ctx, atClient, did, rkey, pullCollection, pullURI, "merged"); err != nil {
@@ -398,7 +397,7 @@ func (s *Service) MergePull(ctx context.Context, t Target, rkey string) (*StateR
 // EditPull patches a pull request's title and/or body. A nil pointer leaves
 // the field untouched.
 func (s *Service) EditPull(ctx context.Context, rkey string, title, body *string) error {
-	atClient, did, err := s.AuthenticatedClient(ctx)
+	atClient, did, err := s.authenticatedPDS(ctx)
 	if err != nil {
 		return err
 	}
@@ -407,7 +406,7 @@ func (s *Service) EditPull(ctx context.Context, rkey string, title, body *string
 
 // repoKnot resolves the knot host for a repository record URI.
 func (s *Service) repoKnot(ctx context.Context, repoURI string) (string, error) {
-	repo, err := s.Appview.GetRepo(ctx, repoURI)
+	repo, err := s.appview.GetRepo(ctx, repoURI)
 	if err != nil {
 		return "", fmt.Errorf("get repository: %w", err)
 	}

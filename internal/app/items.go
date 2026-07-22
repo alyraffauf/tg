@@ -49,7 +49,7 @@ func decodePull(raw json.RawMessage) (recordView, error) {
 // string for Handle if resolution fails.
 func (s *Service) resolveAuthor(ctx context.Context, did string) Author {
 	result := Author{DID: did}
-	if ident, err := s.Resolver.ResolveDID(ctx, did); err == nil {
+	if ident, err := s.resolver.ResolveDID(ctx, did); err == nil {
 		result.Handle = ident.Handle.String()
 	} else {
 		result.Handle = did

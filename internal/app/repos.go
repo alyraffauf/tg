@@ -16,12 +16,12 @@ import (
 
 // ViewRepo fetches a single repository record.
 func (s *Service) ViewRepo(ctx context.Context, t Target) (*RepoItem, error) {
-	ident, err := s.Resolver.ResolveHandle(ctx, t.Handle)
+	ident, err := s.resolver.ResolveHandle(ctx, t.Handle)
 	if err != nil {
 		return nil, fmt.Errorf("resolve handle %q: %w", t.Handle, err)
 	}
 	repoURI := fmt.Sprintf("at://%s/sh.tangled.repo/%s", ident.DID, t.Repo)
-	tangledRepo, err := s.Appview.GetRepo(ctx, repoURI)
+	tangledRepo, err := s.appview.GetRepo(ctx, repoURI)
 	if err != nil {
 		return nil, fmt.Errorf("get repo %s: %w", t, err)
 	}
@@ -42,11 +42,11 @@ func (s *Service) ViewRepo(ctx context.Context, t Target) (*RepoItem, error) {
 
 // ListRepos lists every repository owned by handle.
 func (s *Service) ListRepos(ctx context.Context, handle string) ([]RepoItem, error) {
-	ident, err := s.Resolver.ResolveHandle(ctx, handle)
+	ident, err := s.resolver.ResolveHandle(ctx, handle)
 	if err != nil {
 		return nil, fmt.Errorf("resolve handle %q: %w", handle, err)
 	}
-	repos, err := s.Appview.ListRepos(ctx, ident.DID.String())
+	repos, err := s.appview.ListRepos(ctx, ident.DID.String())
 	if err != nil {
 		return nil, fmt.Errorf("list repos for %q: %w", handle, err)
 	}
@@ -83,10 +83,51 @@ type ProvisionRepoInput struct {
 	Description string
 }
 
-// ProvisionRepo creates the repo on the knot and writes the sh.tangled.repo
-// record to the user's PDS. Returns the new record URI and the owner's handle.
-func (s *Service) ProvisionRepo(ctx context.Context, in ProvisionRepoInput) (uri, handle string, err error) {
-	atClient, did, err := s.AuthenticatedClient(ctx)
+// CreateRepoInput configures provisioning and optional local setup.
+type CreateRepoInput struct {
+	KnotHost    string
+	Name        string
+	Description string
+	Clone       bool
+	PushPath    string
+	RemoteName  string
+}
+
+// CreateRepo provisions a repository and performs requested local Git setup.
+func (s *Service) CreateRepo(ctx context.Context, in CreateRepoInput) (*RepoCreateResult, error) {
+	uri, handle, err := s.provisionRepo(ctx, ProvisionRepoInput{
+		KnotHost: in.KnotHost, Name: in.Name, Description: in.Description,
+	})
+	if err != nil {
+		return nil, err
+	}
+	result := &RepoCreateResult{Handle: handle, Name: in.Name, URI: uri, Knot: in.KnotHost}
+	if in.Clone {
+		if _, err := s.CloneRepo(ctx, CloneRepoInput{Handle: handle, Repo: in.Name, Destination: in.Name}); err != nil {
+			return nil, fmt.Errorf("clone new repository: %w", err)
+		}
+		result.Cloned = true
+	}
+	if in.PushPath == "" {
+		return result, nil
+	}
+	pushResult, err := s.pushNewRepo(ctx, PushNewRepoInput{
+		KnotHost: in.KnotHost, RepoURI: uri, Dir: in.PushPath,
+		Handle: handle, Repo: in.Name, RemoteName: in.RemoteName,
+	})
+	if pushResult.defaultBranchWarning != nil {
+		result.Warnings = append(result.Warnings, fmt.Sprintf("could not set default branch: %v", pushResult.defaultBranchWarning))
+	}
+	if err != nil {
+		return nil, err
+	}
+	result.Pushed = true
+	result.DefaultBranch = pushResult.defaultBranch
+	return result, nil
+}
+
+func (s *Service) provisionRepo(ctx context.Context, in ProvisionRepoInput) (uri, handle string, err error) {
+	atClient, did, err := s.authenticatedPDS(ctx)
 	if err != nil {
 		return "", "", err
 	}
@@ -94,7 +135,7 @@ func (s *Service) ProvisionRepo(ctx context.Context, in ProvisionRepoInput) (uri
 	if err != nil {
 		return "", "", err
 	}
-	repoDid, err := knot.New(in.KnotHost, token).CreateRepo(ctx, knot.CreateRepoInput{
+	repoDid, err := s.knot.New(in.KnotHost, token).CreateRepo(ctx, knot.CreateRepoInput{
 		Name: in.Name,
 		Rkey: in.Name,
 	})
@@ -119,25 +160,23 @@ func (s *Service) ProvisionRepo(ctx context.Context, in ProvisionRepoInput) (uri
 	if err != nil {
 		return "", "", err
 	}
-	return uri, s.OwnerHandle(ctx, did), nil
+	return uri, s.ownerHandle(ctx, did), nil
 }
 
-// OwnerHandle resolves did to a handle, falling back to the DID string.
-func (s *Service) OwnerHandle(ctx context.Context, did string) string {
-	if ident, err := s.Resolver.ResolveDID(ctx, did); err == nil {
+func (s *Service) ownerHandle(ctx context.Context, did string) string {
+	if ident, err := s.resolver.ResolveDID(ctx, did); err == nil {
 		return ident.Handle.String()
 	}
 	return did
 }
 
-// SetRepoDefaultBranch sets the default branch of the authenticated user's
-// repo t.
+// SetRepoDefaultBranch sets the default branch of the authenticated user's repo.
 func (s *Service) SetRepoDefaultBranch(ctx context.Context, t Target, branch string) (*RepoDefaultBranchResult, error) {
-	atClient, did, err := s.AuthenticatedClient(ctx)
+	atClient, did, err := s.authenticatedPDS(ctx)
 	if err != nil {
 		return nil, err
 	}
-	repo, err := s.RequireOwnedRepo(ctx, t, did)
+	repo, err := s.requireOwnedRepo(ctx, t, did)
 	if err != nil {
 		return nil, err
 	}
@@ -150,15 +189,12 @@ func (s *Service) SetRepoDefaultBranch(ctx context.Context, t Target, branch str
 	return &RepoDefaultBranchResult{URI: repo.URI, Branch: branch}, nil
 }
 
-// SetDefaultBranchFromDir repoints the default branch of repoURI on knotHost
-// to the current branch of the local git repository at dir. It is best-effort
-// during repo creation; callers may warn rather than fail on error.
-func (s *Service) SetDefaultBranchFromDir(ctx context.Context, knotHost, repoURI, dir string) (string, error) {
-	atClient, _, err := s.AuthenticatedClient(ctx)
+func (s *Service) setDefaultBranchFromDir(ctx context.Context, knotHost, repoURI, dir string) (string, error) {
+	atClient, _, err := s.authenticatedPDS(ctx)
 	if err != nil {
 		return "", err
 	}
-	branch, err := s.Git.CurrentBranch(ctx, dir)
+	branch, err := s.git.CurrentBranch(ctx, dir)
 	if err != nil {
 		return "", err
 	}
@@ -168,17 +204,20 @@ func (s *Service) SetDefaultBranchFromDir(ctx context.Context, knotHost, repoURI
 	return branch, nil
 }
 
-// PushNewRepo sets the knot default branch when possible, then pushes the
-// local repository to its new Tangled remote. A default-branch error is
-// returned separately because repository creation treats it as a warning.
-func (s *Service) PushNewRepo(ctx context.Context, in PushNewRepoInput) (string, error, error) {
-	branch, defaultBranchErr := s.SetDefaultBranchFromDir(ctx, in.KnotHost, in.RepoURI, in.Dir)
-	if err := s.Git.PushNewRepo(ctx, gitutil.PushNewRepoParams{
+type pushNewRepoResult struct {
+	defaultBranch        string
+	defaultBranchWarning error
+}
+
+func (s *Service) pushNewRepo(ctx context.Context, in PushNewRepoInput) (pushNewRepoResult, error) {
+	branch, defaultBranchErr := s.setDefaultBranchFromDir(ctx, in.KnotHost, in.RepoURI, in.Dir)
+	result := pushNewRepoResult{defaultBranch: branch, defaultBranchWarning: defaultBranchErr}
+	if err := s.git.PushNewRepo(ctx, gitutil.PushNewRepoParams{
 		Dir: in.Dir, Handle: in.Handle, Repo: in.Repo, RemoteName: in.RemoteName,
 	}); err != nil {
-		return branch, defaultBranchErr, fmt.Errorf("push to new repository: %w", err)
+		return result, fmt.Errorf("push to new repository: %w", err)
 	}
-	return branch, defaultBranchErr, nil
+	return result, nil
 }
 
 // PushNewRepoInput configures pushing a newly created repository.
@@ -191,12 +230,12 @@ type PushNewRepoInput struct {
 	RemoteName string
 }
 
-func (s *Service) setKnotDefaultBranch(ctx context.Context, atClient *atproto.ATProto, knotHost, repoURI, branch string) error {
+func (s *Service) setKnotDefaultBranch(ctx context.Context, atClient pdsClient, knotHost, repoURI, branch string) error {
 	token, err := atClient.GetServiceAuth(ctx, "did:web:"+knotHost, "sh.tangled.repo.setDefaultBranch")
 	if err != nil {
 		return fmt.Errorf("get knot authorization: %w", err)
 	}
-	return knot.New(knotHost, token).SetDefaultBranch(ctx, knot.SetDefaultBranchInput{
+	return s.knot.New(knotHost, token).SetDefaultBranch(ctx, knot.SetDefaultBranchInput{
 		Repo:          repoURI,
 		DefaultBranch: branch,
 	})
@@ -214,11 +253,11 @@ type EditRepoInput struct {
 
 // EditRepo patches repository fields on the authenticated user's repo t.
 func (s *Service) EditRepo(ctx context.Context, t Target, in EditRepoInput) (*RepoEditResult, error) {
-	atClient, did, err := s.AuthenticatedClient(ctx)
+	atClient, did, err := s.authenticatedPDS(ctx)
 	if err != nil {
 		return nil, err
 	}
-	repo, err := s.RequireOwnedRepo(ctx, t, did)
+	repo, err := s.requireOwnedRepo(ctx, t, did)
 	if err != nil {
 		return nil, err
 	}
@@ -306,11 +345,11 @@ func labelNames(labels map[string]bool) []string {
 // DeleteRepo deletes the repository record and the knot-side repo. If the
 // knot deletion fails after the record is deleted, the record is restored.
 func (s *Service) DeleteRepo(ctx context.Context, t Target) (*RepoDeleteResult, error) {
-	atClient, did, err := s.AuthenticatedClient(ctx)
+	atClient, did, err := s.authenticatedPDS(ctx)
 	if err != nil {
 		return nil, err
 	}
-	repo, err := s.RequireOwnedRepo(ctx, t, did)
+	repo, err := s.requireOwnedRepo(ctx, t, did)
 	if err != nil {
 		return nil, err
 	}
@@ -335,7 +374,7 @@ func (s *Service) DeleteRepo(ctx context.Context, t Target) (*RepoDeleteResult, 
 			return nil, fmt.Errorf("delete repository record: %w", err)
 		}
 	}
-	if err := knot.New(repo.Value.Knot, token).DeleteRepo(ctx, knot.DeleteRepoInput{
+	if err := s.knot.New(repo.Value.Knot, token).DeleteRepo(ctx, knot.DeleteRepoInput{
 		DID:  did,
 		Name: t.Repo,
 		Rkey: rkey,
@@ -355,7 +394,7 @@ func (s *Service) DeleteRepo(ctx context.Context, t Target) (*RepoDeleteResult, 
 // ForkRepo creates a fork of source on the authenticated user's account,
 // named name (defaults to the source repo's name).
 func (s *Service) ForkRepo(ctx context.Context, source Target, name string) (*RepoForkResult, error) {
-	atClient, ownerDID, err := s.AuthenticatedClient(ctx)
+	atClient, ownerDID, err := s.authenticatedPDS(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -368,7 +407,7 @@ func (s *Service) ForkRepo(ctx context.Context, source Target, name string) (*Re
 	if err != nil {
 		return nil, fmt.Errorf("get knot service auth: %w", err)
 	}
-	repoDID, err := knot.New(src.Knot, token).CreateRepo(ctx, knot.CreateRepoInput{
+	repoDID, err := s.knot.New(src.Knot, token).CreateRepo(ctx, knot.CreateRepoInput{
 		Name:   name,
 		Rkey:   name,
 		Source: forkSourceURL(src.Knot, src.RepoDID),
@@ -396,7 +435,7 @@ func (s *Service) ForkRepo(ctx context.Context, source Target, name string) (*Re
 		}
 		return nil, fmt.Errorf("write fork record: %w", err)
 	}
-	return &RepoForkResult{Handle: s.OwnerHandle(ctx, ownerDID), Name: name, URI: uri, Knot: src.Knot}, nil
+	return &RepoForkResult{Handle: s.ownerHandle(ctx, ownerDID), Name: name, URI: uri, Knot: src.Knot}, nil
 }
 
 type forkSource struct {
@@ -414,12 +453,12 @@ func forkSourceURL(knotHost, repoDID string) string {
 }
 
 func (s *Service) getForkSource(ctx context.Context, t Target) (forkSource, error) {
-	ident, err := s.Resolver.ResolveHandle(ctx, t.Handle)
+	ident, err := s.resolver.ResolveHandle(ctx, t.Handle)
 	if err != nil {
 		return forkSource{}, fmt.Errorf("resolve handle %q: %w", t.Handle, err)
 	}
 	uri := fmt.Sprintf("at://%s/sh.tangled.repo/%s", ident.DID, t.Repo)
-	repo, err := s.Appview.GetRepo(ctx, uri)
+	repo, err := s.appview.GetRepo(ctx, uri)
 	if err != nil {
 		return forkSource{}, fmt.Errorf("get source repository %s: %w", t, err)
 	}
@@ -435,12 +474,12 @@ func (s *Service) getForkSource(ctx context.Context, t Target) (forkSource, erro
 	return forkSource{URI: uri, Knot: repo.Value.Knot, RepoDID: repo.Value.RepoDid}, nil
 }
 
-func (s *Service) deleteFork(ctx context.Context, atClient *atproto.ATProto, knotHost, did, name string) error {
+func (s *Service) deleteFork(ctx context.Context, atClient pdsClient, knotHost, did, name string) error {
 	token, err := atClient.GetServiceAuth(ctx, "did:web:"+knotHost, "sh.tangled.repo.delete")
 	if err != nil {
 		return fmt.Errorf("get knot authorization: %w", err)
 	}
-	if err := knot.New(knotHost, token).DeleteRepo(ctx, knot.DeleteRepoInput{DID: did, Name: name, Rkey: name}); err != nil {
+	if err := s.knot.New(knotHost, token).DeleteRepo(ctx, knot.DeleteRepoInput{DID: did, Name: name, Rkey: name}); err != nil {
 		return err
 	}
 	return nil

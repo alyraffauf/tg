@@ -12,11 +12,11 @@ import (
 
 // ListIssues lists every issue in the target repository.
 func (s *Service) ListIssues(ctx context.Context, t Target) ([]Item, error) {
-	repoDid, err := s.RepoDID(ctx, t)
+	repoDid, err := s.repoDID(ctx, t)
 	if err != nil {
 		return nil, err
 	}
-	issues, err := s.Appview.ListIssues(ctx, repoDid, tangled.ListOpts{
+	issues, err := s.appview.ListIssues(ctx, repoDid, tangled.ListOpts{
 		Limit: defaultListLimit,
 	})
 	if err != nil {
@@ -27,11 +27,11 @@ func (s *Service) ListIssues(ctx context.Context, t Target) ([]Item, error) {
 
 // ViewIssue finds a single issue by rkey within the target repository.
 func (s *Service) ViewIssue(ctx context.Context, t Target, rkey string) (*ViewResult, error) {
-	repoDid, err := s.RepoDID(ctx, t)
+	repoDid, err := s.repoDID(ctx, t)
 	if err != nil {
 		return nil, err
 	}
-	issues, err := s.Appview.ListIssues(ctx, repoDid, tangled.ListOpts{
+	issues, err := s.appview.ListIssues(ctx, repoDid, tangled.ListOpts{
 		Limit: defaultListLimit,
 	})
 	if err != nil {
@@ -56,11 +56,11 @@ func (s *Service) ViewIssue(ctx context.Context, t Target, rkey string) (*ViewRe
 
 // CreateIssue writes a new issue record in the target repository.
 func (s *Service) CreateIssue(ctx context.Context, t Target, title, body string) (*CreatedRecordResult, error) {
-	atClient, did, err := s.AuthenticatedClient(ctx)
+	atClient, did, err := s.authenticatedPDS(ctx)
 	if err != nil {
 		return nil, err
 	}
-	repoDid, err := s.RepoDID(ctx, t)
+	repoDid, err := s.repoDID(ctx, t)
 	if err != nil {
 		return nil, err
 	}
@@ -85,11 +85,11 @@ func (s *Service) CreateIssue(ctx context.Context, t Target, title, body string)
 
 // CommentIssue adds a comment to the issue identified by rkey.
 func (s *Service) CommentIssue(ctx context.Context, t Target, rkey, body string) (*CreatedRecordResult, error) {
-	repoDid, err := s.RepoDID(ctx, t)
+	repoDid, err := s.repoDID(ctx, t)
 	if err != nil {
 		return nil, err
 	}
-	issues, err := s.Appview.ListIssues(ctx, repoDid, tangled.ListOpts{
+	issues, err := s.appview.ListIssues(ctx, repoDid, tangled.ListOpts{
 		Limit: defaultListLimit,
 	})
 	if err != nil {
@@ -103,7 +103,7 @@ func (s *Service) CommentIssue(ctx context.Context, t Target, rkey, body string)
 }
 
 func (s *Service) createIssueComment(ctx context.Context, issueURI, body string) (*CreatedRecordResult, error) {
-	atClient, did, err := s.AuthenticatedClient(ctx)
+	atClient, did, err := s.authenticatedPDS(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -128,7 +128,7 @@ func (s *Service) createIssueComment(ctx context.Context, issueURI, body string)
 // SetIssueState closes or reopens an issue. state is the bare verb
 // ("open" or "closed").
 func (s *Service) SetIssueState(ctx context.Context, t Target, rkey, state string) (*StateResult, error) {
-	atClient, did, err := s.AuthenticatedClient(ctx)
+	atClient, did, err := s.authenticatedPDS(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -145,7 +145,7 @@ func (s *Service) SetIssueState(ctx context.Context, t Target, rkey, state strin
 // EditIssue patches an issue's title and/or body. A nil pointer leaves the
 // field untouched.
 func (s *Service) EditIssue(ctx context.Context, rkey string, title, body *string) error {
-	atClient, did, err := s.AuthenticatedClient(ctx)
+	atClient, did, err := s.authenticatedPDS(ctx)
 	if err != nil {
 		return err
 	}
@@ -155,7 +155,7 @@ func (s *Service) EditIssue(ctx context.Context, rkey string, title, body *strin
 // targetRecord resolves t, finds the issue/pull record rkey, and returns the
 // record URI and the repo record URI. collection selects issues or pulls.
 func (s *Service) targetRecord(ctx context.Context, t Target, collection, rkey string) (string, string, error) {
-	repoRecord, err := s.ResolveRepo(ctx, t)
+	repoRecord, err := s.resolveRepo(ctx, t)
 	if err != nil {
 		return "", "", err
 	}
@@ -163,14 +163,14 @@ func (s *Service) targetRecord(ctx context.Context, t Target, collection, rkey s
 	var items []tangled.ListItem
 	var recordType string
 	if collection == issueCollection {
-		issues, err := s.Appview.ListIssues(ctx, repoRecord.Value.RepoDid, tangled.ListOpts{Limit: defaultListLimit})
+		issues, err := s.appview.ListIssues(ctx, repoRecord.Value.RepoDid, tangled.ListOpts{Limit: defaultListLimit})
 		if err != nil {
 			return "", "", fmt.Errorf("list issues for %s: %w", t, err)
 		}
 		items = issues.Items
 		recordType = "issue"
 	} else {
-		pulls, err := s.Appview.ListPulls(ctx, repoRecord.Value.RepoDid, tangled.ListOpts{Limit: defaultListLimit})
+		pulls, err := s.appview.ListPulls(ctx, repoRecord.Value.RepoDid, tangled.ListOpts{Limit: defaultListLimit})
 		if err != nil {
 			return "", "", fmt.Errorf("list pull requests for %s: %w", t, err)
 		}

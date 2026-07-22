@@ -9,23 +9,23 @@ import (
 	"github.com/alyraffauf/tg/atproto"
 	"github.com/bluesky-social/indigo/atproto/atclient"
 )
-var ErrNotAuthenticated = atproto.ErrNotAuthenticated
+
+var ErrNotAuthenticated = errors.New("not authenticated")
 
 const (
-	SessionStatusActive = atproto.SessionStatusActive
+	SessionStatusActive  = atproto.SessionStatusActive
 	SessionStatusExpired = atproto.SessionStatusExpired
 	SessionStatusUnknown = atproto.SessionStatusUnknown
 )
 
-
 // LoginWithPassword authenticates an account with an app password.
 func (s *Service) LoginWithPassword(ctx context.Context, identifier, password string) error {
-	return s.Auth.LoginWithPassword(ctx, identifier, password)
+	return s.auth.LoginWithPassword(ctx, identifier, password)
 }
 
 // CurrentDID returns the DID for the active account.
 func (s *Service) CurrentDID(ctx context.Context) (string, error) {
-	did, err := s.Auth.CurrentDID(ctx)
+	did, err := s.auth.CurrentDID(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -34,61 +34,25 @@ func (s *Service) CurrentDID(ctx context.Context) (string, error) {
 
 // StartLogin starts an OAuth login flow.
 func (s *Service) StartLogin(ctx context.Context, identifier string) (string, error) {
-	return s.Auth.StartLogin(ctx, identifier)
+	return s.auth.StartLogin(ctx, identifier)
 }
 
 // FinishLogin completes an OAuth login flow from callback query parameters.
 func (s *Service) FinishLogin(ctx context.Context, query url.Values) error {
-	return s.Auth.FinishLogin(ctx, query)
+	return s.auth.FinishLogin(ctx, query)
 }
 
 // CancelLogin discards a pending OAuth login flow.
 func (s *Service) CancelLogin() {
-	s.Auth.CancelLogin()
+	s.auth.CancelLogin()
 }
 
-// AuthenticatedClient returns an atproto PDS client and the active account's
-// DID, for write operations. Token refreshes are persisted back to the
-// keyring. Returns atproto.ErrNotAuthenticated when there is no active
-// account.
-func (s *Service) AuthenticatedClient(ctx context.Context) (*atproto.ATProto, string, error) {
-	client, did, err := s.Auth.APIClient(ctx)
-	if err != nil {
-		if errors.Is(err, atproto.ErrNotAuthenticated) {
-			return nil, "", atproto.ErrNotAuthenticated
-		}
-		return nil, "", fmt.Errorf("resume auth session: %w", err)
-	}
-	return &atproto.ATProto{Client: client}, did.String(), nil
+func (s *Service) authenticatedPDS(ctx context.Context) (pdsClient, string, error) {
+	return s.sessions.AuthenticatedPDS(ctx)
 }
 
-// AuthenticatedAPIClient returns the active account's authenticated XRPC
-// client for frontend-specific endpoints.
-func (s *Service) AuthenticatedAPIClient(ctx context.Context) (*atclient.APIClient, error) {
-	client, _, err := s.Auth.APIClient(ctx)
-	if err != nil {
-		if errors.Is(err, atproto.ErrNotAuthenticated) {
-			return nil, atproto.ErrNotAuthenticated
-		}
-		return nil, fmt.Errorf("resume auth session: %w", err)
-	}
-	return client, nil
-}
-
-// PublicAccountReader resolves handle to an unauthenticated PDS client for
-// read-only queries of account-owned records (strings, public keys).
-func (s *Service) PublicAccountReader(ctx context.Context, handle string) (*atproto.ATProto, string, error) {
-	ident, err := s.Resolver.ResolveHandle(ctx, handle)
-	if err != nil {
-		return nil, "", fmt.Errorf("resolve handle %q: %w", handle, err)
-	}
-
-	pdsURL, err := s.Resolver.ResolvePDS(ctx, ident.DID.String())
-	if err != nil {
-		return nil, "", fmt.Errorf("resolve PDS for %q: %w", handle, err)
-	}
-
-	return &atproto.ATProto{Client: &atclient.APIClient{Host: pdsURL}}, ident.DID.String(), nil
+func (s *Service) publicPDS(ctx context.Context, handle string) (pdsClient, string, error) {
+	return s.sessions.PublicPDS(ctx, handle)
 }
 
 // HandleOrSelf returns handle when non-empty, otherwise the authenticated
@@ -97,14 +61,14 @@ func (s *Service) HandleOrSelf(ctx context.Context, handle string) (string, erro
 	if handle != "" {
 		return handle, nil
 	}
-	did, err := s.Auth.CurrentDID(ctx)
+	did, err := s.auth.CurrentDID(ctx)
 	if err != nil {
 		if errors.Is(err, atproto.ErrNotAuthenticated) {
 			return "", fmt.Errorf("not logged in; provide a handle or run \"tg auth login\"")
 		}
 		return "", fmt.Errorf("resume OAuth session: %w", err)
 	}
-	ident, err := s.Resolver.ResolveDID(ctx, did.String())
+	ident, err := s.resolver.ResolveDID(ctx, did.String())
 	if err != nil {
 		return "", fmt.Errorf("resolve your DID: %w", err)
 	}
@@ -114,7 +78,7 @@ func (s *Service) HandleOrSelf(ctx context.Context, handle string) (string, erro
 // AuthStatus probes the active session. A missing session is reported as a
 // zero AuthStatusResult (Authenticated=false), not an error.
 func (s *Service) AuthStatus(ctx context.Context) (*AuthStatusResult, error) {
-	status, did, err := s.Auth.SessionStatus(ctx)
+	status, did, err := s.auth.SessionStatus(ctx)
 	if err != nil {
 		if errors.Is(err, atproto.ErrNotAuthenticated) {
 			return &AuthStatusResult{}, nil
@@ -132,7 +96,7 @@ func (s *Service) AuthStatus(ctx context.Context) (*AuthStatusResult, error) {
 
 // AuthAccounts lists all stored accounts, marking the active one.
 func (s *Service) AuthAccounts(ctx context.Context) ([]AuthAccountResult, error) {
-	accounts, activeDID, err := s.Auth.Accounts()
+	accounts, activeDID, err := s.auth.Accounts()
 	if err != nil {
 		return nil, fmt.Errorf("list accounts: %w", err)
 	}
@@ -153,7 +117,7 @@ func (s *Service) AuthAccounts(ctx context.Context) ([]AuthAccountResult, error)
 
 // SwitchAccount selects the active account by handle or DID.
 func (s *Service) SwitchAccount(ctx context.Context, selector string) (*AuthAccountResult, error) {
-	account, err := s.Auth.SelectAccount(selector)
+	account, err := s.auth.SelectAccount(selector)
 	if err != nil {
 		return nil, fmt.Errorf("select account %q: %w", selector, err)
 	}
@@ -168,9 +132,9 @@ func (s *Service) SwitchAccount(ctx context.Context, selector string) (*AuthAcco
 func (s *Service) Logout(ctx context.Context, all bool) (*AuthLogoutResult, error) {
 	var err error
 	if all {
-		err = s.Auth.LogoutAll(ctx)
+		err = s.auth.LogoutAll(ctx)
 	} else {
-		err = s.Auth.Logout(ctx)
+		err = s.auth.Logout(ctx)
 	}
 	if err != nil {
 		if errors.Is(err, atproto.ErrNotAuthenticated) {
@@ -184,7 +148,7 @@ func (s *Service) Logout(ctx context.Context, all bool) (*AuthLogoutResult, erro
 // AccessToken returns the current session's access token, whether OAuth or
 // app-password.
 func (s *Service) AccessToken(ctx context.Context) (string, error) {
-	session, err := s.Auth.CurrentSession(ctx)
+	session, err := s.auth.CurrentSession(ctx)
 	if err == nil {
 		token, _ := session.GetHostAccessData()
 		if token == "" {
@@ -195,7 +159,7 @@ func (s *Service) AccessToken(ctx context.Context) (string, error) {
 	if !errors.Is(err, atproto.ErrNotAuthenticated) {
 		return "", fmt.Errorf("resume OAuth session: %w", err)
 	}
-	client, _, err := s.Auth.APIClient(ctx)
+	client, _, err := s.auth.APIClient(ctx)
 	if err != nil {
 		if errors.Is(err, atproto.ErrNotAuthenticated) {
 			return "", fmt.Errorf("not logged in; run \"tg auth login\" first")

@@ -14,7 +14,7 @@ import (
 
 // APIRequestInput describes an authenticated XRPC request.
 type APIRequestInput struct {
-	Endpoint syntax.NSID
+	Endpoint string
 	Method   string
 	Fields   map[string]any
 }
@@ -28,11 +28,15 @@ type APIResponse struct {
 // CallAPI performs an authenticated XRPC request for frontend-specific API
 // commands.
 func (s *Service) CallAPI(ctx context.Context, in APIRequestInput) (*APIResponse, error) {
-	client, err := s.AuthenticatedAPIClient(ctx)
+	endpoint, err := syntax.ParseNSID(in.Endpoint)
+	if err != nil {
+		return nil, fmt.Errorf("parse NSID: %w", err)
+	}
+	client, err := s.sessions.APIClient(ctx)
 	if err != nil {
 		return nil, err
 	}
-	request := atclient.NewAPIRequest(in.Method, in.Endpoint, nil)
+	request := atclient.NewAPIRequest(in.Method, endpoint, nil)
 	request.Headers.Set("Accept", "application/json")
 	if in.Method == http.MethodGet {
 		request.QueryParams = apiQuery(in.Fields)
@@ -46,7 +50,7 @@ func (s *Service) CallAPI(ctx context.Context, in APIRequestInput) (*APIResponse
 	}
 	response, err := client.Do(ctx, request)
 	if err != nil {
-		return nil, fmt.Errorf("call %s: %w", in.Endpoint, err)
+		return nil, fmt.Errorf("call %s: %w", endpoint, err)
 	}
 	defer response.Body.Close()
 	body, err := io.ReadAll(response.Body)

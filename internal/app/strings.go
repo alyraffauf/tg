@@ -20,7 +20,7 @@ type CreateStringInput struct {
 
 // CreateString writes a new sh.tangled.string record.
 func (s *Service) CreateString(ctx context.Context, in CreateStringInput) (*CreatedRecordResult, error) {
-	atClient, did, err := s.AuthenticatedClient(ctx)
+	atClient, did, err := s.authenticatedPDS(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -45,7 +45,7 @@ func (s *Service) CreateString(ctx context.Context, in CreateStringInput) (*Crea
 
 // ListStrings lists every string owned by handle.
 func (s *Service) ListStrings(ctx context.Context, handle string) ([]StringItem, error) {
-	atClient, did, err := s.PublicAccountReader(ctx, handle)
+	atClient, did, err := s.publicPDS(ctx, handle)
 	if err != nil {
 		return nil, err
 	}
@@ -58,7 +58,7 @@ func (s *Service) ListStrings(ctx context.Context, handle string) ([]StringItem,
 
 // ViewString fetches a single string by rkey from handle's account.
 func (s *Service) ViewString(ctx context.Context, handle, rkey string) (*StringViewResult, error) {
-	atClient, did, err := s.PublicAccountReader(ctx, handle)
+	atClient, did, err := s.publicPDS(ctx, handle)
 	if err != nil {
 		return nil, err
 	}
@@ -83,7 +83,7 @@ func (s *Service) ViewString(ctx context.Context, handle, rkey string) (*StringV
 
 // DeleteString removes a string record from the authenticated user's account.
 func (s *Service) DeleteString(ctx context.Context, rkey string) (*DeletedRecordResult, error) {
-	atClient, did, err := s.AuthenticatedClient(ctx)
+	atClient, did, err := s.authenticatedPDS(ctx)
 	if err != nil {
 		return nil, err
 	}

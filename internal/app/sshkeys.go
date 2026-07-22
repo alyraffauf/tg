@@ -13,7 +13,7 @@ import (
 
 // AddSSHKey writes a new sh.tangled.publicKey record.
 func (s *Service) AddSSHKey(ctx context.Context, name, key string) (*SSHKeyAddResult, error) {
-	atClient, did, err := s.AuthenticatedClient(ctx)
+	atClient, did, err := s.authenticatedPDS(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -36,7 +36,7 @@ func (s *Service) AddSSHKey(ctx context.Context, name, key string) (*SSHKeyAddRe
 
 // ListSSHKeys lists every public key owned by handle.
 func (s *Service) ListSSHKeys(ctx context.Context, handle string) ([]SSHKeyItem, error) {
-	atClient, did, err := s.PublicAccountReader(ctx, handle)
+	atClient, did, err := s.publicPDS(ctx, handle)
 	if err != nil {
 		return nil, err
 	}
@@ -49,7 +49,7 @@ func (s *Service) ListSSHKeys(ctx context.Context, handle string) ([]SSHKeyItem,
 
 // DeleteSSHKey removes a public key record from the authenticated user's account.
 func (s *Service) DeleteSSHKey(ctx context.Context, rkey string) (*DeletedRecordResult, error) {
-	atClient, did, err := s.AuthenticatedClient(ctx)
+	atClient, did, err := s.authenticatedPDS(ctx)
 	if err != nil {
 		return nil, err
 	}

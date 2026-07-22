@@ -1,10 +1,5 @@
 package app
 
-// This file holds the result/domain types returned by Service methods. They
-// are the canonical structured-data contract between the application layer
-// and any frontend: every operation produces one of these (or a slice),
-// and the CLI renders them as JSON (--json) or human-readable text.
-
 // Author is the owner or creator of a record, resolved from a DID.
 type Author struct {
 	DID    string `json:"did"`
@@ -96,12 +91,14 @@ type StateResult struct {
 
 // RepoCreateResult is returned by repository creation.
 type RepoCreateResult struct {
-	Handle string `json:"handle"`
-	Name   string `json:"name"`
-	URI    string `json:"uri"`
-	Knot   string `json:"knot"`
-	Cloned bool   `json:"cloned"`
-	Pushed bool   `json:"pushed"`
+	Handle        string   `json:"handle"`
+	Name          string   `json:"name"`
+	URI           string   `json:"uri"`
+	Knot          string   `json:"knot"`
+	Cloned        bool     `json:"cloned"`
+	Pushed        bool     `json:"pushed"`
+	DefaultBranch string   `json:"defaultBranch,omitempty"`
+	Warnings      []string `json:"warnings,omitempty"`
 }
 
 // RepoCloneResult is returned by repository cloning.

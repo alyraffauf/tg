@@ -70,6 +70,18 @@ func TestCheckoutPatchRejectsDirtyWorktree(t *testing.T) {
 	}
 }
 
+func TestValidateBranchDoesNotStreamStdout(t *testing.T) {
+	var stdout bytes.Buffer
+	client := NewClient(&stdout, io.Discard)
+
+	if err := client.validateBranch(context.Background(), t.TempDir(), "review"); err != nil {
+		t.Fatalf("validateBranch() error = %v", err)
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("validateBranch() streamed stdout %q", stdout.String())
+	}
+}
+
 func runGit(t *testing.T, dir string, args ...string) {
 	t.Helper()
 	cmd := exec.Command("git", args...)
