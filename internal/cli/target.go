@@ -35,22 +35,13 @@ func resolveTargetFlag(ctx context.Context, repoFlag string, service *app.Servic
 	return service.TargetFromCWD(ctx)
 }
 
-// resolveHandleArg returns the handle from an explicit argument, or falls
-// back to the handle of the CWD's git origin remote.
-func resolveHandleArg(ctx context.Context, args []string, service *app.Service) (string, error) {
-	if len(args) == 1 {
-		return args[0], nil
-	}
-	target, err := service.TargetFromCWD(ctx)
-	if err != nil {
-		return "", err
-	}
-	return target.Handle, nil
+type accountHandleResolver interface {
+	HandleOrSelf(context.Context, string) (string, error)
 }
 
 // resolveHandleOrSelf returns the handle from an explicit argument, or the
 // authenticated user's handle. It does not fall back to CWD git detection.
-func resolveHandleOrSelf(ctx context.Context, args []string, service *app.Service) (string, error) {
+func resolveHandleOrSelf(ctx context.Context, args []string, service accountHandleResolver) (string, error) {
 	if len(args) == 1 {
 		return args[0], nil
 	}

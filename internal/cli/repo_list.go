@@ -13,12 +13,12 @@ func newRepoListCommand(service *app.Service) *cobra.Command {
 		Short: "List repositories owned by a Tangled user",
 		Long: `List repositories owned by a Tangled user.
 
-If no argument is given, the command detects the user from the "origin"
-remote URL of the git repository in the current directory.`,
+If no argument is given, lists the authenticated user's repositories
+(run "tg auth login" first).`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
-			handle, err := resolveHandleArg(ctx, args, service)
+			handle, err := resolveHandleOrSelf(ctx, args, service)
 			if err != nil {
 				return err
 			}
