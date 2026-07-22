@@ -18,10 +18,16 @@ type Client struct {
 
 // New returns a Client for host, authenticated with a service-auth token.
 func New(host, token string) *Client {
+	return NewWithClient(host, token, http.DefaultClient)
+}
+
+// NewWithClient returns a Client using httpClient for requests.
+func NewWithClient(host, token string, httpClient *http.Client) *Client {
 	return &Client{
 		APIClient: &atclient.APIClient{
-			Host: "https://" + host,
-			Auth: bearerAuth(token),
+			Client: httpClient,
+			Host:   "https://" + host,
+			Auth:   bearerAuth(token),
 		},
 	}
 }

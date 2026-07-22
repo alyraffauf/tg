@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 
 	"github.com/alyraffauf/tg/atproto"
 	"github.com/alyraffauf/tg/internal/gitutil"
@@ -63,8 +64,9 @@ type knotClientFactory interface {
 }
 
 type productionSessions struct {
-	auth     *atproto.AuthManager
-	resolver identityResolver
+	auth       *atproto.AuthManager
+	resolver   identityResolver
+	httpClient *http.Client
 }
 
 func (s productionSessions) AuthenticatedPDS(ctx context.Context) (pdsClient, string, error) {
@@ -87,7 +89,7 @@ func (s productionSessions) PublicPDS(ctx context.Context, handle string) (pdsCl
 	if err != nil {
 		return nil, "", fmt.Errorf("resolve PDS for %q: %w", handle, err)
 	}
-	return &atproto.ATProto{Client: &atclient.APIClient{Host: pdsURL}}, ident.DID.String(), nil
+	return &atproto.ATProto{Client: &atclient.APIClient{Client: s.httpClient, Host: pdsURL}}, ident.DID.String(), nil
 }
 
 func (s productionSessions) APIClient(ctx context.Context) (*atclient.APIClient, error) {
@@ -101,10 +103,12 @@ func (s productionSessions) APIClient(ctx context.Context) (*atclient.APIClient,
 	return client, nil
 }
 
-type productionKnotFactory struct{}
+type productionKnotFactory struct {
+	httpClient *http.Client
+}
 
-func (productionKnotFactory) New(host, token string) knotClient {
-	return knot.New(host, token)
+func (f productionKnotFactory) New(host, token string) knotClient {
+	return knot.NewWithClient(host, token, f.httpClient)
 }
 
 func isNotAuthenticated(err error) bool {

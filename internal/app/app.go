@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/alyraffauf/tg/atproto"
 	"github.com/alyraffauf/tg/internal/gitutil"
@@ -28,6 +29,8 @@ type Service struct {
 // DefaultKnot is used when repository creation does not specify a knot.
 const DefaultKnot = knot.DefaultKnot
 
+const defaultHTTPTimeout = 30 * time.Second
+
 // New returns a Service with production defaults: the default atproto
 // identity directory, the given appview host, and an AuthManager using
 // oauthCallbackURL for localhost OAuth redirects.
@@ -38,19 +41,20 @@ func New(appviewHost, oauthCallbackURL string) *Service {
 // NewWithStreams creates production dependencies with configurable command
 // output streams.
 func NewWithStreams(appviewHost, oauthCallbackURL string, stdout, stderr io.Writer) *Service {
+	httpClient := &http.Client{Timeout: defaultHTTPTimeout}
 	resolver := &atproto.Resolver{Directory: identity.DefaultDirectory()}
-	auth := atproto.NewAuthManager(oauthCallbackURL)
+	auth := atproto.NewAuthManagerWithClient(oauthCallbackURL, httpClient)
 	return &Service{
 		resolver: resolver,
 		appview: &tangled.Tangled{
-			Client: &atclient.APIClient{Host: appviewHost},
+			Client: &atclient.APIClient{Client: httpClient, Host: appviewHost},
 			Logger: slog.Default(),
 		},
-		sessions:   productionSessions{auth: auth, resolver: resolver},
+		sessions:   productionSessions{auth: auth, resolver: resolver, httpClient: httpClient},
 		auth:       auth,
 		git:        gitutil.NewClient(stdout, stderr),
-		knot:       productionKnotFactory{},
-		httpClient: http.DefaultClient,
+		knot:       productionKnotFactory{httpClient: httpClient},
+		httpClient: httpClient,
 	}
 }
 

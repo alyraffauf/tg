@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/bluesky-social/indigo/atproto/atclient"
 	"github.com/bluesky-social/indigo/atproto/syntax"
@@ -135,6 +136,22 @@ func TestAPIClientReturnsPasswordClient(t *testing.T) {
 	}
 }
 
+func TestRequestContextUsesClientTimeout(t *testing.T) {
+	manager := newAuthManagerForTest("http://127.0.0.1:8095/callback", testKeyringStore(newFakeKeyring()))
+	manager.client = &http.Client{Timeout: 30 * time.Second}
+
+	ctx, cancel := manager.requestContext(context.Background())
+	defer cancel()
+
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		t.Fatal("request context has no deadline")
+	}
+	if remaining := time.Until(deadline); remaining <= 0 || remaining > 30*time.Second {
+		t.Errorf("request context deadline is %v away, want within 30 seconds", remaining)
+	}
+}
+
 func TestAPIClientNotAuthenticated(t *testing.T) {
 	manager := newAuthManagerForTest("http://127.0.0.1:8095/callback", testKeyringStore(newFakeKeyring()))
 	_, _, err := manager.APIClient(context.Background())
@@ -179,6 +196,38 @@ func TestPasswordLogoutRevokesAndRemovesSession(t *testing.T) {
 	if _, err := store.GetPasswordSession(ctx, did); !errors.Is(err, keyring.ErrNotFound) {
 		t.Errorf("password session should have been removed, got: %v", err)
 	}
+}
+
+func TestPasswordLogoutUsesConfiguredClient(t *testing.T) {
+	store := testKeyringStore(newFakeKeyring())
+	manager := newAuthManagerForTest("http://127.0.0.1:8095/callback", store)
+	called := false
+	manager.client = &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		called = true
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       http.NoBody,
+			Header:     make(http.Header),
+		}, nil
+	})}
+	ctx := context.Background()
+	did := mustDID(t, "did:plc:aaaabbbbccccddddeeeeffff")
+
+	if err := store.SavePasswordSession(ctx, samplePasswordSession(did, "https://pds.example")); err != nil {
+		t.Fatalf("SavePasswordSession: %v", err)
+	}
+	if err := manager.Logout(ctx); err != nil {
+		t.Fatalf("Logout: %v", err)
+	}
+	if !called {
+		t.Error("configured HTTP client was not used")
+	}
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) {
+	return f(request)
 }
 
 func TestPasswordLogoutPreservesOtherAccount(t *testing.T) {

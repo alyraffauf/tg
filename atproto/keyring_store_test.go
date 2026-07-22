@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"reflect"
 	"strings"
 	"sync"
@@ -55,8 +56,9 @@ func newAuthManagerForTest(callbackURL string, store *KeyringStore) *AuthManager
 	config := oauth.NewLocalhostConfig(callbackURL, DefaultScopes)
 	config.UserAgent = "tg"
 	return &AuthManager{
-		app:   oauth.NewClientApp(&config, store),
-		store: store,
+		app:    oauth.NewClientApp(&config, store),
+		store:  store,
+		client: http.DefaultClient,
 	}
 }
 

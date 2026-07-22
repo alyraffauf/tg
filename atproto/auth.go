@@ -83,6 +83,7 @@ var DefaultScopes = []string{
 type AuthManager struct {
 	app               *oauth.ClientApp
 	store             *KeyringStore
+	client            *http.Client
 	selector          string
 	pendingIdentifier string
 }
@@ -108,12 +109,21 @@ func (m *AuthManager) activeAccount() (Account, error) {
 }
 
 func NewAuthManager(callbackURL string) *AuthManager {
+	return NewAuthManagerWithClient(callbackURL, http.DefaultClient)
+}
+
+// NewAuthManagerWithClient creates an AuthManager using httpClient for OAuth
+// and authenticated API requests.
+func NewAuthManagerWithClient(callbackURL string, httpClient *http.Client) *AuthManager {
 	config := oauth.NewLocalhostConfig(callbackURL, DefaultScopes)
 	config.UserAgent = "tg"
 	store := NewKeyringStore()
+	app := oauth.NewClientApp(&config, store)
+	app.Client = httpClient
 	return &AuthManager{
-		app:   oauth.NewClientApp(&config, store),
-		store: store,
+		app:    app,
+		store:  store,
+		client: httpClient,
 	}
 }
 
@@ -125,6 +135,8 @@ func (m *AuthManager) LoginWithPassword(ctx context.Context, identifier, passwor
 	if err != nil {
 		return err
 	}
+	ctx, cancel := m.requestContext(ctx)
+	defer cancel()
 	persist := func(_ context.Context, data atclient.PasswordSessionData) {
 		_ = m.store.SavePasswordSession(context.Background(), data)
 	}
@@ -136,6 +148,7 @@ func (m *AuthManager) LoginWithPassword(ctx context.Context, identifier, passwor
 	if !ok {
 		return errors.New("password login returned an unexpected auth type")
 	}
+	client.Client = m.client
 	if err := m.store.SavePasswordSession(ctx, passwordAuth.Session); err != nil {
 		return err
 	}
@@ -265,7 +278,15 @@ func (m *AuthManager) APIClient(ctx context.Context) (*atclient.APIClient, synta
 		_ = m.store.SavePasswordSession(context.Background(), data)
 	}
 	client := atclient.ResumePasswordSession(*passwordSession, persist)
+	client.Client = m.client
 	return client, passwordSession.AccountDID, nil
+}
+
+func (m *AuthManager) requestContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	if m.client == nil || m.client.Timeout <= 0 {
+		return ctx, func() {}
+	}
+	return context.WithTimeout(ctx, m.client.Timeout)
 }
 
 // SessionStatus probes the server to verify the active session. The probe
@@ -318,6 +339,7 @@ func (m *AuthManager) Logout(ctx context.Context) error {
 		}
 		if passwordSession != nil {
 			client := atclient.ResumePasswordSession(*passwordSession, nil)
+			client.Client = m.client
 			if passwordAuth, ok := client.Auth.(*atclient.PasswordAuth); ok {
 				_ = passwordAuth.Logout(ctx, client.Client)
 			}
