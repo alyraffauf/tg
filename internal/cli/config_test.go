@@ -48,7 +48,7 @@ func TestLoadConfigKnotPrecedence(t *testing.T) {
 		env      string
 		wantKnot string
 	}{
-		{name: "hosted Knot default", wantKnot: "knot1.tangled.sh"},
+		{name: "unset enables discovery", wantKnot: ""},
 		{name: "config", config: "config.example", wantKnot: "config.example"},
 		{name: "environment over config", config: "config.example", env: "env.example", wantKnot: "env.example"},
 	}

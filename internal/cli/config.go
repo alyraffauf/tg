@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/alyraffauf/tg/internal/app"
 	"github.com/spf13/viper"
 )
 
@@ -58,7 +57,7 @@ func loadConfig(flags flagSettings, errorWriter io.Writer) settings {
 	config.AutomaticEnv()
 	config.SetDefault("appview", defaultAppview)
 	config.SetDefault("account", "")
-	config.SetDefault("knot", app.DefaultKnot)
+	config.SetDefault("knot", "")
 	config.SetDefault("ssh-port", "22")
 
 	if err := config.ReadInConfig(); err != nil {

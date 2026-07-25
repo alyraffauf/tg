@@ -94,7 +94,7 @@ func TestRepoCreateKnotFlag(t *testing.T) {
 	if flag == nil {
 		t.Fatal("repo create has no knot flag")
 	}
-	if flag.DefValue != "configured.example" || flag.Usage != "Knot host to provision and optionally push to (overrides config file and TG_KNOT)" {
+	if flag.DefValue != "configured.example" || flag.Usage != "Knot host to provision and optionally push to (overrides TG_KNOT, config, and automatic discovery)" {
 		t.Fatalf("knot flag = %+v", flag)
 	}
 	if err := create.Flags().Set("knot", "flag.example"); err != nil {

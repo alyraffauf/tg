@@ -17,13 +17,14 @@ import (
 )
 
 type Service struct {
-	resolver   identityResolver
-	appview    appviewClient
-	sessions   sessionProvider
-	auth       *atproto.AuthManager
-	git        gitClient
-	knot       knotClientFactory
-	httpClient *http.Client
+	resolver              identityResolver
+	appview               appviewClient
+	sessions              sessionProvider
+	auth                  *atproto.AuthManager
+	git                   gitClient
+	knot                  knotClientFactory
+	knotOwnershipVerifier knotOwnershipVerifier
+	httpClient            *http.Client
 }
 
 // DefaultKnot is used when repository creation does not specify a knot.
@@ -51,11 +52,12 @@ func NewWithStreams(appviewHost string, stdout, stderr io.Writer) *Service {
 			Client: &atclient.APIClient{Client: httpClient, Host: appviewHost},
 			Logger: slog.Default(),
 		},
-		sessions:   productionSessions{auth: auth, resolver: resolver, httpClient: httpClient},
-		auth:       auth,
-		git:        gitutil.NewClient(stdout, stderr),
-		knot:       productionKnotFactory{httpClient: httpClient},
-		httpClient: httpClient,
+		sessions:              productionSessions{auth: auth, resolver: resolver, httpClient: httpClient},
+		auth:                  auth,
+		git:                   gitutil.NewClient(stdout, stderr),
+		knot:                  productionKnotFactory{httpClient: httpClient},
+		knotOwnershipVerifier: newHTTPKnotOwnershipVerifier(),
+		httpClient:            httpClient,
 	}
 }
 

@@ -20,7 +20,7 @@ const (
 )
 
 func NewRoot(service *app.Service) *cobra.Command {
-	return newRoot(service, app.DefaultKnot, "22")
+	return newRoot(service, "", "22")
 }
 
 func newRoot(service *app.Service, defaultKnot, defaultSSHPort string) *cobra.Command {

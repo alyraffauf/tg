@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/alyraffauf/tg/atproto"
@@ -214,10 +215,11 @@ func testService(pds *testPDS, git *testGit, knotClient *testKnot) *Service {
 		Handle: syntax.Handle("owner.test"),
 	}}
 	return &Service{
-		resolver: resolver,
-		sessions: testSessions{pds: pds},
-		git:      git,
-		knot:     &testKnotFactory{client: knotClient},
+		resolver:              resolver,
+		sessions:              testSessions{pds: pds},
+		git:                   git,
+		knot:                  &testKnotFactory{client: knotClient},
+		knotOwnershipVerifier: &testKnotOwnershipVerifier{},
 	}
 }
 
@@ -265,7 +267,11 @@ type testPDS struct {
 	puts                 []atproto.PutRecordInput
 	deletes              []atproto.DeleteRecordInput
 	record               *atproto.GetRecordOutput
+	records              []atproto.RecordItem
 	putErr               error
+	listErr              error
+	listCalls            int
+	listOptions          []atproto.ListRecordsOpts
 	serviceAuthCalls     int
 	serviceAuthAudiences []string
 }
@@ -296,8 +302,27 @@ func (p *testPDS) GetRecord(context.Context, string, string, string) (*atproto.G
 	return p.record, nil
 }
 
+func (p *testPDS) ListRecords(_ context.Context, _, _ string, opts atproto.ListRecordsOpts) (*atproto.ListRecordsOutput, error) {
+	p.listCalls++
+	p.listOptions = append(p.listOptions, opts)
+	if p.listErr != nil {
+		return nil, p.listErr
+	}
+	records := p.records
+	var cursor *string
+	if opts.Limit > 0 && int64(len(records)) > opts.Limit {
+		records = records[:opts.Limit]
+	}
+	if len(records) > 0 {
+		lastRecordKey := "last-record"
+		cursor = &lastRecordKey
+	}
+	return &atproto.ListRecordsOutput{Records: records, Cursor: cursor}, nil
+}
+
 func (p *testPDS) ListAllRecords(context.Context, string, string, atproto.ListRecordsOpts) ([]atproto.RecordItem, error) {
-	return nil, errors.New("not implemented")
+	p.listCalls++
+	return p.records, p.listErr
 }
 
 func (p *testPDS) GetServiceAuth(_ context.Context, audience, _ string) (string, error) {
@@ -343,6 +368,19 @@ type testKnotFactory struct {
 func (f *testKnotFactory) New(host string, _ string) knotClient {
 	f.hosts = append(f.hosts, host)
 	return f.client
+}
+
+type testKnotOwnershipVerifier struct {
+	errors map[string]error
+	hosts  []string
+	mu     sync.Mutex
+}
+
+func (v *testKnotOwnershipVerifier) Verify(_ context.Context, host, _ string) error {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	v.hosts = append(v.hosts, host)
+	return v.errors[host]
 }
 
 type testKnot struct {

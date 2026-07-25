@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/alyraffauf/tg/atproto"
@@ -15,6 +16,16 @@ import (
 	"github.com/alyraffauf/tg/tangled"
 	"github.com/bluesky-social/indigo/atproto/syntax"
 )
+
+const (
+	knotCollection       = "sh.tangled.knot"
+	maxKnotRegistrations = 10
+)
+
+type knotRegistration struct {
+	LexiconTypeID string `json:"$type"`
+	CreatedAt     string `json:"createdAt"`
+}
 
 // ViewRepo fetches a single repository record.
 func (s *Service) ViewRepo(ctx context.Context, t Target) (*RepoItem, error) {
@@ -127,21 +138,23 @@ func (s *Service) CreateRepo(ctx context.Context, in CreateRepoInput) (*RepoCrea
 	if (in.Clone || in.PushPath != "") && (in.SSHPort < 1 || in.SSHPort > 65535) {
 		return nil, fmt.Errorf("SSH port must be between 1 and 65535")
 	}
-	knotHost, err := parseKnotHostname(in.KnotHost)
-	if err != nil {
-		return nil, err
+	if in.KnotHost != "" {
+		knotHost, err := parseKnotHostname(in.KnotHost)
+		if err != nil {
+			return nil, err
+		}
+		in.KnotHost = knotHost
 	}
-	in.KnotHost = knotHost
-	uri, handle, err := s.provisionRepo(ctx, ProvisionRepoInput{
+	uri, handle, selectedKnot, warnings, err := s.provisionRepo(ctx, ProvisionRepoInput{
 		KnotHost: in.KnotHost, Name: in.Name, Description: in.Description,
 	})
 	if err != nil {
 		return nil, err
 	}
-	result := &RepoCreateResult{Handle: handle, Name: in.Name, URI: uri, Knot: in.KnotHost}
+	result := &RepoCreateResult{Handle: handle, Name: in.Name, URI: uri, Knot: selectedKnot, Warnings: warnings}
 	if in.Clone {
 		if _, err := s.CloneRepo(ctx, CloneRepoInput{
-			KnotHost: in.KnotHost, SSHPort: in.SSHPort,
+			KnotHost: selectedKnot, SSHPort: in.SSHPort,
 			Handle: handle, Repo: in.Name, Destination: in.Name,
 		}); err != nil {
 			return nil, fmt.Errorf("clone new repository: %w", err)
@@ -152,7 +165,7 @@ func (s *Service) CreateRepo(ctx context.Context, in CreateRepoInput) (*RepoCrea
 		return result, nil
 	}
 	pushResult, err := s.pushNewRepo(ctx, PushNewRepoInput{
-		KnotHost: in.KnotHost, SSHPort: in.SSHPort, RepoURI: uri, Dir: in.PushPath,
+		KnotHost: selectedKnot, SSHPort: in.SSHPort, RepoURI: uri, Dir: in.PushPath,
 		Handle: handle, Repo: in.Name, RemoteName: in.RemoteName,
 	})
 	if pushResult.defaultBranchWarning != nil {
@@ -166,25 +179,29 @@ func (s *Service) CreateRepo(ctx context.Context, in CreateRepoInput) (*RepoCrea
 	return result, nil
 }
 
-func (s *Service) provisionRepo(ctx context.Context, in ProvisionRepoInput) (uri, handle string, err error) {
+func (s *Service) provisionRepo(ctx context.Context, in ProvisionRepoInput) (uri, handle, knotHost string, warnings []string, err error) {
 	atClient, did, err := s.authenticatedPDS(ctx)
 	if err != nil {
-		return "", "", err
+		return "", "", "", nil, err
 	}
-	token, err := atClient.GetServiceAuth(ctx, "did:web:"+in.KnotHost, "sh.tangled.repo.create")
+	knotHost, warnings, err = s.selectCreationKnot(ctx, atClient, did, in.KnotHost)
 	if err != nil {
-		return "", "", err
+		return "", "", "", nil, err
 	}
-	repoDid, err := s.knot.New(in.KnotHost, token).CreateRepo(ctx, knot.CreateRepoInput{
+	token, err := atClient.GetServiceAuth(ctx, "did:web:"+knotHost, "sh.tangled.repo.create")
+	if err != nil {
+		return "", "", "", nil, err
+	}
+	repoDid, err := s.knot.New(knotHost, token).CreateRepo(ctx, knot.CreateRepoInput{
 		Name: in.Name,
 		Rkey: in.Name,
 	})
 	if err != nil {
-		return "", "", err
+		return "", "", "", nil, err
 	}
 	record := tangledlex.Repo{
 		LexiconTypeID: repoCollection,
-		Knot:          in.KnotHost,
+		Knot:          knotHost,
 		CreatedAt:     time.Now().UTC().Format(time.RFC3339),
 		RepoDid:       optionalString(repoDid),
 	}
@@ -198,9 +215,95 @@ func (s *Service) provisionRepo(ctx context.Context, in ProvisionRepoInput) (uri
 		Record:     record,
 	})
 	if err != nil {
-		return "", "", err
+		return "", "", "", nil, err
 	}
-	return uri, s.ownerHandle(ctx, did), nil
+	return uri, s.ownerHandle(ctx, did), knotHost, warnings, nil
+}
+
+func (s *Service) selectCreationKnot(ctx context.Context, atClient pdsClient, did, configured string) (string, []string, error) {
+	if configured != "" {
+		return configured, nil, nil
+	}
+	page, err := atClient.ListRecords(ctx, did, knotCollection, atproto.ListRecordsOpts{Limit: maxKnotRegistrations + 1})
+	if err != nil {
+		return "", nil, fmt.Errorf("discover verified Knots: %w", err)
+	}
+	records := page.Records
+	if len(records) == 0 {
+		return DefaultKnot, nil, nil
+	}
+	if len(records) > maxKnotRegistrations {
+		return "", nil, fmt.Errorf("found more than %d Knot registrations; select one with --knot or set it in the config file", maxKnotRegistrations)
+	}
+	hosts := make([]string, 0, len(records))
+	warnings := make([]string, 0, len(records))
+	seen := make(map[string]bool, len(records))
+	for _, record := range records {
+		uri, err := syntax.ParseATURI(record.URI)
+		if err != nil || uri.Authority().String() != did || uri.Collection().String() != knotCollection || uri.RecordKey().String() == "" {
+			warnings = append(warnings, fmt.Sprintf("ignored invalid Knot registration URI %q", record.URI))
+			continue
+		}
+		if err := validateKnotRegistration(record.Value); err != nil {
+			warnings = append(warnings, fmt.Sprintf("ignored invalid Knot registration %q: %v", record.URI, err))
+			continue
+		}
+		host, err := parseKnotHostname(uri.RecordKey().String())
+		if err != nil {
+			warnings = append(warnings, fmt.Sprintf("ignored Knot registration %q: %v", record.URI, err))
+			continue
+		}
+		if seen[host] {
+			warnings = append(warnings, fmt.Sprintf("ignored duplicate Knot registration for %s", host))
+			continue
+		}
+		seen[host] = true
+		hosts = append(hosts, host)
+	}
+	verificationErrors := make([]error, len(hosts))
+	var verificationGroup sync.WaitGroup
+	for index, host := range hosts {
+		verificationGroup.Add(1)
+		go func() {
+			defer verificationGroup.Done()
+			verificationErrors[index] = s.knotOwnershipVerifier.Verify(ctx, host, did)
+		}()
+	}
+	verificationGroup.Wait()
+	verified := make([]string, 0, len(hosts))
+	for index, host := range hosts {
+		if err := verificationErrors[index]; err != nil {
+			warnings = append(warnings, fmt.Sprintf("could not verify Knot registration for %s: %v", host, err))
+			continue
+		}
+		verified = append(verified, host)
+	}
+	if len(verified) == 0 {
+		return "", nil, fmt.Errorf("no Knot registrations could be verified: %s", strings.Join(warnings, "; "))
+	}
+	if len(verified) > 1 {
+		sort.Strings(verified)
+		return "", nil, fmt.Errorf("multiple verified Knots found (%s); select one with --knot or set it in the config file", strings.Join(verified, ", "))
+	}
+	return verified[0], warnings, nil
+}
+
+func validateKnotRegistration(value any) error {
+	data, err := json.Marshal(value)
+	if err != nil {
+		return fmt.Errorf("encode record: %w", err)
+	}
+	var registration knotRegistration
+	if err := json.Unmarshal(data, &registration); err != nil {
+		return fmt.Errorf("decode record: %w", err)
+	}
+	if registration.LexiconTypeID != knotCollection {
+		return fmt.Errorf("$type must be %q", knotCollection)
+	}
+	if _, err := syntax.ParseDatetime(registration.CreatedAt); err != nil {
+		return fmt.Errorf("invalid createdAt: %w", err)
+	}
+	return nil
 }
 
 func parseKnotHostname(raw string) (string, error) {

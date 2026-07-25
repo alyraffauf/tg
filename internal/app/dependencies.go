@@ -32,6 +32,7 @@ type pdsClient interface {
 	DeleteRecord(context.Context, atproto.DeleteRecordInput) error
 	UploadBlob(context.Context, []byte, string) (*atproto.Blob, error)
 	GetRecord(context.Context, string, string, string) (*atproto.GetRecordOutput, error)
+	ListRecords(context.Context, string, string, atproto.ListRecordsOpts) (*atproto.ListRecordsOutput, error)
 	ListAllRecords(context.Context, string, string, atproto.ListRecordsOpts) ([]atproto.RecordItem, error)
 	GetServiceAuth(context.Context, string, string) (string, error)
 }
@@ -61,6 +62,10 @@ type knotClient interface {
 
 type knotClientFactory interface {
 	New(string, string) knotClient
+}
+
+type knotOwnershipVerifier interface {
+	Verify(ctx context.Context, host, expectedOwnerDID string) error
 }
 
 type productionSessions struct {
@@ -115,8 +120,10 @@ func isNotAuthenticated(err error) bool {
 	return errors.Is(err, ErrNotAuthenticated) || errors.Is(err, atproto.ErrNotAuthenticated)
 }
 
-var _ identityResolver = (*atproto.Resolver)(nil)
-var _ appviewClient = (*tangled.Tangled)(nil)
-var _ gitClient = (*gitutil.Client)(nil)
-var _ pdsClient = (*atproto.ATProto)(nil)
-var _ knotClient = (*knot.Client)(nil)
+var (
+	_ identityResolver = (*atproto.Resolver)(nil)
+	_ appviewClient    = (*tangled.Tangled)(nil)
+	_ gitClient        = (*gitutil.Client)(nil)
+	_ pdsClient        = (*atproto.ATProto)(nil)
+	_ knotClient       = (*knot.Client)(nil)
+)
