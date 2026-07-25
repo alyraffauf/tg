@@ -11,9 +11,11 @@ import (
 	"time"
 
 	"github.com/alyraffauf/tg/atproto"
+	"github.com/alyraffauf/tg/internal/tangledlex"
 	"github.com/alyraffauf/tg/knot"
 	"github.com/alyraffauf/tg/tangled"
 	"github.com/bluesky-social/indigo/atproto/syntax"
+	lexutil "github.com/bluesky-social/indigo/lex/util"
 )
 
 // maxPullPatchSize caps a downloaded pull-request patch.
@@ -131,7 +133,7 @@ func (s *Service) CreatePull(ctx context.Context, in CreatePullInput) (*PRCreate
 			return nil, fmt.Errorf("resolve source repository: %w", err)
 		}
 	}
-	if source.Value.RepoDid == "" {
+	if stringValue(source.Value.RepoDid) == "" {
 		return nil, fmt.Errorf("source repository has no repo DID")
 	}
 
@@ -147,8 +149,8 @@ func (s *Service) CreatePull(ctx context.Context, in CreatePullInput) (*PRCreate
 	uri, err := createPullRecord(ctx, atClient, did, pullRecordInput{
 		Title:         in.Title,
 		Body:          in.Body,
-		TargetRepoDid: target.Value.RepoDid,
-		SourceRepoDid: source.Value.RepoDid,
+		TargetRepoDid: stringValue(target.Value.RepoDid),
+		SourceRepoDid: stringValue(source.Value.RepoDid),
 		Base:          base,
 		Head:          head,
 		Patch:         blob,
@@ -178,43 +180,43 @@ func createPullRecord(ctx context.Context, atClient pdsClient, did string, input
 	return uri, nil
 }
 
-func newPullRecord(input pullRecordInput, createdAt time.Time) (tangled.PullRecord, error) {
+func newPullRecord(input pullRecordInput, createdAt time.Time) (tangledlex.RepoPull, error) {
 	now := createdAt.Format(time.RFC3339)
 	patchBlob, err := patchBlob(input.Patch)
 	if err != nil {
-		return tangled.PullRecord{}, err
+		return tangledlex.RepoPull{}, err
 	}
-	return tangled.PullRecord{
-		Type:      pullCollection,
-		Title:     input.Title,
-		Body:      input.Body,
-		CreatedAt: now,
-		Target: tangled.PullTarget{
+	return tangledlex.RepoPull{
+		LexiconTypeID: pullCollection,
+		Title:         input.Title,
+		Body:          optionalString(input.Body),
+		CreatedAt:     now,
+		Target: &tangledlex.RepoPull_Target{
 			Repo:   input.TargetRepoDid,
 			Branch: input.Base,
 		},
-		Source: tangled.PullSource{
-			Repo:   input.SourceRepoDid,
+		Source: &tangledlex.RepoPull_Source{
+			Repo:   optionalString(input.SourceRepoDid),
 			Branch: input.Head,
 		},
-		Rounds: []tangled.PullRound{{
+		Rounds: []*tangledlex.RepoPull_Round{{
 			CreatedAt: now,
-			PatchBlob: patchBlob,
+			PatchBlob: &patchBlob,
 		}},
 	}, nil
 }
 
-func patchBlob(blob *atproto.Blob) (tangled.PatchBlob, error) {
+func patchBlob(blob *atproto.Blob) (lexutil.LexBlob, error) {
 	if blob == nil || blob.Ref == nil {
-		return tangled.PatchBlob{}, nil
+		return lexutil.LexBlob{}, nil
 	}
 	data, err := json.Marshal(blob)
 	if err != nil {
-		return tangled.PatchBlob{}, fmt.Errorf("encode pull patch blob: %w", err)
+		return lexutil.LexBlob{}, fmt.Errorf("encode pull patch blob: %w", err)
 	}
-	var result tangled.PatchBlob
+	var result lexutil.LexBlob
 	if err := json.Unmarshal(data, &result); err != nil {
-		return tangled.PatchBlob{}, fmt.Errorf("decode pull patch blob: %w", err)
+		return lexutil.LexBlob{}, fmt.Errorf("decode pull patch blob: %w", err)
 	}
 	return result, nil
 }
@@ -248,11 +250,11 @@ func (s *Service) createPullComment(ctx context.Context, pullURI, body string) (
 		Repo:       did,
 		Collection: pullCollection + ".comment",
 		Rkey:       rkey,
-		Record: tangled.PullCommentRecord{
-			Type:      pullCollection + ".comment",
-			Pull:      pullURI,
-			Body:      body,
-			CreatedAt: time.Now().UTC().Format(time.RFC3339),
+		Record: tangledlex.RepoPullComment{
+			LexiconTypeID: pullCollection + ".comment",
+			Pull:          pullURI,
+			Body:          body,
+			CreatedAt:     time.Now().UTC().Format(time.RFC3339),
 		},
 	})
 	if err != nil {
@@ -286,18 +288,22 @@ func (s *Service) PullPatch(ctx context.Context, t Target, rkey string) (*PullPa
 	if err != nil {
 		return nil, err
 	}
-	return &PullPatch{URI: pull.URI, TargetBranch: record.Target.Branch, Patch: patch}, nil
+	return &PullPatch{URI: pull.URI, TargetBranch: pullTargetBranch(record.Target), Patch: patch}, nil
 }
 
-func latestPullPatch(pull *tangled.ListItem, rkey string) (tangled.PullRecord, string, error) {
-	var record tangled.PullRecord
+func latestPullPatch(pull *tangled.ListItem, rkey string) (tangledlex.RepoPull, string, error) {
+	var record tangledlex.RepoPull
 	if err := json.Unmarshal(pull.Value, &record); err != nil {
 		return record, "", fmt.Errorf("decode pull request %q: %w", rkey, err)
 	}
 	if len(record.Rounds) == 0 {
 		return record, "", fmt.Errorf("pull request %q has no rounds", rkey)
 	}
-	patchCID := record.Rounds[len(record.Rounds)-1].PatchBlob.Ref.String()
+	lastRound := record.Rounds[len(record.Rounds)-1]
+	if lastRound == nil || lastRound.PatchBlob == nil {
+		return record, "", fmt.Errorf("pull request %q has no patch blob", rkey)
+	}
+	patchCID := lastRound.PatchBlob.Ref.String()
 	if patchCID == "" {
 		return record, "", fmt.Errorf("pull request %q has no patch blob", rkey)
 	}

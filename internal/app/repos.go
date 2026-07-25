@@ -10,6 +10,7 @@ import (
 
 	"github.com/alyraffauf/tg/atproto"
 	"github.com/alyraffauf/tg/internal/gitutil"
+	"github.com/alyraffauf/tg/internal/tangledlex"
 	"github.com/alyraffauf/tg/knot"
 	"github.com/alyraffauf/tg/tangled"
 )
@@ -25,7 +26,7 @@ func (s *Service) ViewRepo(ctx context.Context, t Target) (*RepoItem, error) {
 	if err != nil {
 		return nil, fmt.Errorf("get repo %s: %w", t, err)
 	}
-	name := tangledRepo.Value.Name
+	name := stringValue(tangledRepo.Value.Name)
 	if name == "" {
 		name = t.Repo
 	}
@@ -34,9 +35,9 @@ func (s *Service) ViewRepo(ctx context.Context, t Target) (*RepoItem, error) {
 		Author:      t.Handle,
 		URI:         repoURI,
 		Knot:        tangledRepo.Value.Knot,
-		Description: tangledRepo.Value.Description,
+		Description: stringValue(tangledRepo.Value.Description),
 		CreatedAt:   tangledRepo.Value.CreatedAt,
-		RepoDid:     tangledRepo.Value.RepoDid,
+		RepoDid:     stringValue(tangledRepo.Value.RepoDid),
 	}, nil
 }
 
@@ -56,7 +57,7 @@ func (s *Service) ListRepos(ctx context.Context, handle string) ([]RepoItem, err
 func buildRepoItems(items []tangled.Repo, author string) []RepoItem {
 	result := make([]RepoItem, 0, len(items))
 	for _, tangledRepo := range items {
-		name := tangledRepo.Value.Name
+		name := stringValue(tangledRepo.Value.Name)
 		if name == "" {
 			// Fall back to the rkey segment of the at:// URI.
 			if idx := strings.LastIndex(tangledRepo.URI, "/"); idx != -1 {
@@ -68,9 +69,9 @@ func buildRepoItems(items []tangled.Repo, author string) []RepoItem {
 			URI:         tangledRepo.URI,
 			Author:      author,
 			Knot:        tangledRepo.Value.Knot,
-			Description: tangledRepo.Value.Description,
+			Description: stringValue(tangledRepo.Value.Description),
 			CreatedAt:   tangledRepo.Value.CreatedAt,
-			RepoDid:     tangledRepo.Value.RepoDid,
+			RepoDid:     stringValue(tangledRepo.Value.RepoDid),
 		})
 	}
 	return result
@@ -142,14 +143,14 @@ func (s *Service) provisionRepo(ctx context.Context, in ProvisionRepoInput) (uri
 	if err != nil {
 		return "", "", err
 	}
-	record := tangled.RepoRecord{
-		Type:      repoCollection,
-		Knot:      in.KnotHost,
-		CreatedAt: time.Now().UTC().Format(time.RFC3339),
-		RepoDid:   repoDid,
+	record := tangledlex.Repo{
+		LexiconTypeID: repoCollection,
+		Knot:          in.KnotHost,
+		CreatedAt:     time.Now().UTC().Format(time.RFC3339),
+		RepoDid:       optionalString(repoDid),
 	}
 	if in.Description != "" {
-		record.Description = in.Description
+		record.Description = optionalString(in.Description)
 	}
 	uri, _, err = atClient.PutRecord(ctx, atproto.PutRecordInput{
 		Repo:       did,
@@ -358,6 +359,19 @@ func (s *Service) DeleteRepo(ctx context.Context, t Target) (*RepoDeleteResult, 
 	}
 	rkey := extractRKey(repo.URI)
 	existingRecord, getErr := atClient.GetRecord(ctx, did, repoCollection, rkey)
+	var recordToRestore tangledlex.Repo
+	if getErr == nil {
+		data, err := json.Marshal(existingRecord.Value)
+		if err != nil {
+			return nil, fmt.Errorf("encode repository record for restore: %w", err)
+		}
+		if err := json.Unmarshal(data, &recordToRestore); err != nil {
+			return nil, fmt.Errorf("decode repository record for restore: %w", err)
+		}
+		if err := tangledlex.ValidateRecord(repoCollection, recordToRestore); err != nil {
+			return nil, fmt.Errorf("validate repository record for restore: %w", err)
+		}
+	}
 	// getErr is non-fatal: the record may already be deleted. Only call
 	// DeleteRecord if it still exists.
 
@@ -381,7 +395,7 @@ func (s *Service) DeleteRepo(ctx context.Context, t Target) (*RepoDeleteResult, 
 	}); err != nil {
 		if getErr == nil {
 			if _, _, restoreErr := atClient.PutRecord(ctx, atproto.PutRecordInput{
-				Repo: did, Collection: repoCollection, Rkey: rkey, Record: existingRecord.Value,
+				Repo: did, Collection: repoCollection, Rkey: rkey, Record: recordToRestore,
 			}); restoreErr != nil {
 				return nil, fmt.Errorf("delete knot repository: %w; restore repository record: %v", err, restoreErr)
 			}
@@ -419,13 +433,13 @@ func (s *Service) ForkRepo(ctx context.Context, source Target, name string) (*Re
 		Repo:       ownerDID,
 		Collection: repoCollection,
 		Rkey:       name,
-		Record: tangled.RepoRecord{
-			Type:      repoCollection,
-			Name:      name,
-			Knot:      src.Knot,
-			CreatedAt: time.Now().UTC().Format(time.RFC3339),
-			RepoDid:   repoDID,
-			Source:    src.URI,
+		Record: tangledlex.Repo{
+			LexiconTypeID: repoCollection,
+			Name:          optionalString(name),
+			Knot:          src.Knot,
+			CreatedAt:     time.Now().UTC().Format(time.RFC3339),
+			RepoDid:       optionalString(repoDID),
+			Source:        optionalString(src.URI),
 		},
 	})
 	if err != nil {
@@ -465,13 +479,13 @@ func (s *Service) getForkSource(ctx context.Context, t Target) (forkSource, erro
 	if repo.Value.Knot == "" {
 		return forkSource{}, fmt.Errorf("source repository %s has no knot", t)
 	}
-	if repo.Value.RepoDid == "" {
+	if stringValue(repo.Value.RepoDid) == "" {
 		return forkSource{}, fmt.Errorf("source repository %s has no repo DID", t)
 	}
 	if repo.URI != "" {
 		uri = repo.URI
 	}
-	return forkSource{URI: uri, Knot: repo.Value.Knot, RepoDID: repo.Value.RepoDid}, nil
+	return forkSource{URI: uri, Knot: repo.Value.Knot, RepoDID: stringValue(repo.Value.RepoDid)}, nil
 }
 
 func (s *Service) deleteFork(ctx context.Context, atClient pdsClient, knotHost, did, name string) error {

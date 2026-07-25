@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/alyraffauf/tg/atproto"
-	"github.com/alyraffauf/tg/tangled"
+	"github.com/alyraffauf/tg/internal/tangledlex"
 	"github.com/bluesky-social/indigo/atproto/syntax"
 )
 
@@ -21,11 +21,11 @@ func (s *Service) AddSSHKey(ctx context.Context, name, key string) (*SSHKeyAddRe
 		Repo:       did,
 		Collection: sshKeyCollection,
 		Rkey:       string(syntax.NewTIDNow(0)),
-		Record: tangled.SSHKeyRecord{
-			Type:      sshKeyCollection,
-			Key:       key,
-			Name:      name,
-			CreatedAt: time.Now().UTC().Format(time.RFC3339),
+		Record: tangledlex.PublicKey{
+			LexiconTypeID: sshKeyCollection,
+			Key:           key,
+			Name:          name,
+			CreatedAt:     time.Now().UTC().Format(time.RFC3339),
 		},
 	})
 	if err != nil {
@@ -66,7 +66,7 @@ func (s *Service) DeleteSSHKey(ctx context.Context, rkey string) (*DeletedRecord
 func buildSSHKeyItems(records []atproto.RecordItem) []SSHKeyItem {
 	items := make([]SSHKeyItem, 0, len(records))
 	for _, rec := range records {
-		var key tangled.SSHKeyRecord
+		var key tangledlex.PublicKey
 		data, err := json.Marshal(rec.Value)
 		if err != nil {
 			continue

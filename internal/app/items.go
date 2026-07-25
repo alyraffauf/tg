@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/alyraffauf/tg/internal/tangledlex"
 	"github.com/alyraffauf/tg/tangled"
 )
 
@@ -24,25 +25,46 @@ type recordView struct {
 }
 
 func decodeIssue(raw json.RawMessage) (recordView, error) {
-	var r tangled.IssueRecord
+	var r tangledlex.RepoIssue
 	if err := json.Unmarshal(raw, &r); err != nil {
 		return recordView{}, err
 	}
-	return recordView{Title: r.Title, Body: r.Body, CreatedAt: r.CreatedAt}, nil
+	return recordView{Title: r.Title, Body: stringValue(r.Body), CreatedAt: r.CreatedAt}, nil
 }
 
 func decodePull(raw json.RawMessage) (recordView, error) {
-	var r tangled.PullRecord
+	var r tangledlex.RepoPull
 	if err := json.Unmarshal(raw, &r); err != nil {
 		return recordView{}, err
 	}
 	return recordView{
 		Title:        r.Title,
-		Body:         r.Body,
+		Body:         stringValue(r.Body),
 		CreatedAt:    r.CreatedAt,
-		SourceBranch: r.Source.Branch,
-		TargetBranch: r.Target.Branch,
+		SourceBranch: pullSourceBranch(r.Source),
+		TargetBranch: pullTargetBranch(r.Target),
 	}, nil
+}
+
+func stringValue(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
+}
+
+func pullSourceBranch(source *tangledlex.RepoPull_Source) string {
+	if source == nil {
+		return ""
+	}
+	return source.Branch
+}
+
+func pullTargetBranch(target *tangledlex.RepoPull_Target) string {
+	if target == nil {
+		return ""
+	}
+	return target.Branch
 }
 
 // resolveAuthor resolves a DID to an author, falling back to the raw DID

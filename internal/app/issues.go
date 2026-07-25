@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/alyraffauf/tg/atproto"
+	"github.com/alyraffauf/tg/internal/tangledlex"
 	"github.com/alyraffauf/tg/tangled"
 	"github.com/bluesky-social/indigo/atproto/syntax"
 )
@@ -69,12 +70,12 @@ func (s *Service) CreateIssue(ctx context.Context, t Target, title, body string)
 		Repo:       did,
 		Collection: issueCollection,
 		Rkey:       rkey,
-		Record: tangled.IssueRecord{
-			Type:      issueCollection,
-			Repo:      repoDid,
-			Title:     title,
-			Body:      body,
-			CreatedAt: time.Now().UTC().Format(time.RFC3339),
+		Record: tangledlex.RepoIssue{
+			LexiconTypeID: issueCollection,
+			Repo:          repoDid,
+			Title:         title,
+			Body:          optionalString(body),
+			CreatedAt:     time.Now().UTC().Format(time.RFC3339),
 		},
 	})
 	if err != nil {
@@ -112,11 +113,11 @@ func (s *Service) createIssueComment(ctx context.Context, issueURI, body string)
 		Repo:       did,
 		Collection: issueCollection + ".comment",
 		Rkey:       rkey,
-		Record: tangled.IssueCommentRecord{
-			Type:      issueCollection + ".comment",
-			Issue:     issueURI,
-			Body:      body,
-			CreatedAt: time.Now().UTC().Format(time.RFC3339),
+		Record: tangledlex.RepoIssueComment{
+			LexiconTypeID: issueCollection + ".comment",
+			Issue:         issueURI,
+			Body:          body,
+			CreatedAt:     time.Now().UTC().Format(time.RFC3339),
 		},
 	})
 	if err != nil {
@@ -163,14 +164,14 @@ func (s *Service) targetRecord(ctx context.Context, t Target, collection, rkey s
 	var items []tangled.ListItem
 	var recordType string
 	if collection == issueCollection {
-		issues, err := s.appview.ListIssues(ctx, repoRecord.Value.RepoDid, tangled.ListOpts{Limit: defaultListLimit})
+		issues, err := s.appview.ListIssues(ctx, stringValue(repoRecord.Value.RepoDid), tangled.ListOpts{Limit: defaultListLimit})
 		if err != nil {
 			return "", "", fmt.Errorf("list issues for %s: %w", t, err)
 		}
 		items = issues.Items
 		recordType = "issue"
 	} else {
-		pulls, err := s.appview.ListPulls(ctx, repoRecord.Value.RepoDid, tangled.ListOpts{Limit: defaultListLimit})
+		pulls, err := s.appview.ListPulls(ctx, stringValue(repoRecord.Value.RepoDid), tangled.ListOpts{Limit: defaultListLimit})
 		if err != nil {
 			return "", "", fmt.Errorf("list pull requests for %s: %w", t, err)
 		}

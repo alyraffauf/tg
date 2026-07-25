@@ -1,0 +1,13 @@
+issue/comment.json
+issue/issue.json
+issue/state.json
+publicKey.json
+pulls/comment.json
+pulls/pull.json
+pulls/state.json
+repo/getRepo.json
+repo/listIssues.json
+repo/listPulls.json
+repo/listRepos.json
+repo/repo.json
+string/string.json

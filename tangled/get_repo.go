@@ -2,39 +2,39 @@ package tangled
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
-	"github.com/bluesky-social/indigo/atproto/syntax"
+	"github.com/alyraffauf/tg/internal/tangledlex"
 )
 
-// RepoRecord is the value of a sh.tangled.repo lexicon record.
-type RepoRecord struct {
-	Type        string   `json:"$type"`
-	Name        string   `json:"name,omitempty"`
-	Description string   `json:"description,omitempty"`
-	Knot        string   `json:"knot"`
-	CreatedAt   string   `json:"createdAt"`
-	Owner       string   `json:"owner,omitempty"`
-	AddedAt     string   `json:"addedAt,omitempty"`
-	RepoDid     string   `json:"repoDid,omitempty"`
-	Source      string   `json:"source,omitempty"`
-	Spindle     string   `json:"spindle,omitempty"`
-	Website     string   `json:"website,omitempty"`
-	Labels      []string `json:"labels,omitempty"`
-}
-
 type Repo struct {
-	URI   string     `json:"uri"`
-	CID   string     `json:"cid"`
-	Value RepoRecord `json:"value"`
+	URI   string          `json:"uri"`
+	CID   string          `json:"cid"`
+	Value tangledlex.Repo `json:"value"`
 }
 
 func (t *Tangled) GetRepo(ctx context.Context, repoURI string) (*Repo, error) {
-	var repo Repo
-	err := t.Client.Get(ctx, syntax.NSID("sh.tangled.repo.getRepo"), map[string]any{"repo": repoURI}, &repo)
+	response, err := tangledlex.RepoGetRepo(ctx, t.lexClient(), repoURI)
 	if err != nil {
 		return nil, fmt.Errorf("get tangled repo %q: %w", repoURI, err)
 	}
+	value, err := recordJSON(response.Value, &tangledlex.Repo{})
+	if err != nil {
+		return nil, fmt.Errorf("decode tangled repo %q: %w", repoURI, err)
+	}
 
-	return &repo, nil
+	var record tangledlex.Repo
+	if err := json.Unmarshal(value, &record); err != nil {
+		return nil, fmt.Errorf("decode tangled repo %q: %w", repoURI, err)
+	}
+
+	return &Repo{URI: response.Uri, CID: dereference(response.Cid), Value: record}, nil
+}
+
+func dereference(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
 }

@@ -1,0 +1,5 @@
+{
+  "source": "https://tangled.org/tangled.org/core.git",
+  "commit": "566697c68dfd519f745fe12862707c898695166b",
+  "schemaPaths": "schemas.txt"
+}

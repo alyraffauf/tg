@@ -65,7 +65,7 @@ func (s *Service) resolveRepo(ctx context.Context, t Target) (*tangled.Repo, err
 	}
 	for index := range repos.Items {
 		repo := &repos.Items[index]
-		if repo.Value.Name == t.Repo || extractRKey(repo.URI) == t.Repo {
+		if stringValue(repo.Value.Name) == t.Repo || extractRKey(repo.URI) == t.Repo {
 			return repo, nil
 		}
 	}
@@ -78,7 +78,7 @@ func (s *Service) repoDID(ctx context.Context, t Target) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return record.Value.RepoDid, nil
+	return stringValue(record.Value.RepoDid), nil
 }
 
 // requireOwnedRepo resolves a target and verifies it is owned by did.

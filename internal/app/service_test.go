@@ -15,6 +15,7 @@ import (
 
 	"github.com/alyraffauf/tg/atproto"
 	"github.com/alyraffauf/tg/internal/gitutil"
+	"github.com/alyraffauf/tg/internal/tangledlex"
 	"github.com/alyraffauf/tg/knot"
 	"github.com/alyraffauf/tg/tangled"
 	"github.com/bluesky-social/indigo/atproto/atclient"
@@ -63,12 +64,12 @@ func TestCreateRepoRecordsDefaultBranchOutcome(t *testing.T) {
 }
 
 func TestDeleteRepoRestoresRecordWhenKnotDeleteFails(t *testing.T) {
-	pds := &testPDS{record: &atproto.GetRecordOutput{Value: map[string]any{"$type": repoCollection, "knot": "knot.example"}}}
+	pds := &testPDS{record: &atproto.GetRecordOutput{Value: map[string]any{"$type": repoCollection, "knot": "knot.example", "createdAt": "2026-07-25T12:00:00Z"}}}
 	knotClient := &testKnot{deleteErr: errors.New("knot unavailable")}
 	service := testService(pds, &testGit{}, knotClient)
 	service.appview = testAppview{repo: &tangled.Repo{
 		URI:   "at://did:plc:owner/sh.tangled.repo/example",
-		Value: tangled.RepoRecord{Knot: "knot.example"},
+		Value: tangledlex.Repo{Knot: "knot.example"},
 	}}
 
 	_, err := service.DeleteRepo(context.Background(), Target{Handle: "owner.test", Repo: "example"})
@@ -89,7 +90,7 @@ func TestForkRepoCleansUpWhenRecordWriteFails(t *testing.T) {
 	service := testService(pds, &testGit{}, knotClient)
 	service.appview = testAppview{repo: &tangled.Repo{
 		URI:   "at://did:plc:source/sh.tangled.repo/source",
-		Value: tangled.RepoRecord{Knot: "knot.example", RepoDid: "did:plc:source-repo"},
+		Value: tangledlex.Repo{Knot: "knot.example", RepoDid: optionalString("did:plc:source-repo")},
 	}}
 
 	_, err := service.ForkRepo(context.Background(), Target{Handle: "source.test", Repo: "source"}, "fork")
@@ -108,7 +109,7 @@ func TestMergePullReportsStatusWriteFailureAfterMerge(t *testing.T) {
 	service.appview = testAppview{
 		repo: &tangled.Repo{
 			URI:   "at://did:plc:owner/sh.tangled.repo/example",
-			Value: tangled.RepoRecord{Knot: "knot.example", RepoDid: "did:plc:repo"},
+			Value: tangledlex.Repo{Knot: "knot.example", RepoDid: optionalString("did:plc:repo")},
 		},
 		pulls: &tangled.List{Items: []tangled.ListItem{{
 			URI:   "at://did:plc:owner/sh.tangled.repo.pull/pr-1",
@@ -268,6 +269,11 @@ func (p *testPDS) PutRecord(_ context.Context, input atproto.PutRecordInput) (st
 	p.puts = append(p.puts, input)
 	if p.putErr != nil {
 		return "", "", p.putErr
+	}
+	if strings.HasPrefix(input.Collection, "sh.tangled.") {
+		if err := tangledlex.ValidateRecord(input.Collection, input.Record); err != nil {
+			return "", "", err
+		}
 	}
 	return fmt.Sprintf("at://%s/%s/%s", input.Repo, input.Collection, input.Rkey), "", nil
 }

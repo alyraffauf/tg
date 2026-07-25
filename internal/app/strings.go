@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/alyraffauf/tg/atproto"
-	"github.com/alyraffauf/tg/tangled"
+	"github.com/alyraffauf/tg/internal/tangledlex"
 	"github.com/bluesky-social/indigo/atproto/syntax"
 )
 
@@ -29,12 +29,12 @@ func (s *Service) CreateString(ctx context.Context, in CreateStringInput) (*Crea
 		Repo:       did,
 		Collection: stringCollection,
 		Rkey:       rkey,
-		Record: tangled.StringRecord{
-			Type:        stringCollection,
-			Filename:    in.Filename,
-			Description: in.Description,
-			Contents:    in.Contents,
-			CreatedAt:   time.Now().UTC().Format(time.RFC3339),
+		Record: tangledlex.String{
+			LexiconTypeID: stringCollection,
+			Filename:      in.Filename,
+			Description:   in.Description,
+			Contents:      in.Contents,
+			CreatedAt:     time.Now().UTC().Format(time.RFC3339),
 		},
 	})
 	if err != nil {
@@ -100,7 +100,7 @@ func (s *Service) DeleteString(ctx context.Context, rkey string) (*DeletedRecord
 func buildStringItems(records []atproto.RecordItem) []StringItem {
 	items := make([]StringItem, 0, len(records))
 	for _, rec := range records {
-		var str tangled.StringRecord
+		var str tangledlex.String
 		data, err := json.Marshal(rec.Value)
 		if err != nil {
 			continue
@@ -124,14 +124,14 @@ func buildStringItems(records []atproto.RecordItem) []StringItem {
 	return items
 }
 
-func decodeStringRecord(value any) (tangled.StringRecord, error) {
+func decodeStringRecord(value any) (tangledlex.String, error) {
 	data, err := json.Marshal(value)
 	if err != nil {
-		return tangled.StringRecord{}, fmt.Errorf("encode record: %w", err)
+		return tangledlex.String{}, fmt.Errorf("encode record: %w", err)
 	}
-	var record tangled.StringRecord
+	var record tangledlex.String
 	if err := json.Unmarshal(data, &record); err != nil {
-		return tangled.StringRecord{}, fmt.Errorf("decode record: %w", err)
+		return tangledlex.String{}, fmt.Errorf("decode record: %w", err)
 	}
 	return record, nil
 }

@@ -1,0 +1,8 @@
+[
+  {
+    "package": "tangledlex",
+    "prefix": "sh.tangled",
+    "outdir": ".",
+    "import": "github.com/alyraffauf/tg/internal/tangledlex"
+  }
+]

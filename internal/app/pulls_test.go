@@ -23,7 +23,7 @@ func TestNewPullRecordUsesDistinctSourceAndTarget(t *testing.T) {
 	if record.Target.Repo != "did:plc:upstream" {
 		t.Fatalf("unexpected target: %+v", record.Target)
 	}
-	if record.Source.Repo != "did:plc:fork" {
+	if stringValue(record.Source.Repo) != "did:plc:fork" {
 		t.Fatalf("unexpected source: %+v", record.Source)
 	}
 }

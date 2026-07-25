@@ -3,16 +3,15 @@ package app
 import (
 	"testing"
 
-	"github.com/alyraffauf/tg/tangled"
-
 	"github.com/alyraffauf/tg/atproto"
+	"github.com/alyraffauf/tg/internal/tangledlex"
 )
 
 func TestDecodeStringRecord(t *testing.T) {
 	tests := []struct {
 		name    string
 		value   any
-		want    tangled.StringRecord
+		want    tangledlex.String
 		wantErr bool
 	}{
 		{
@@ -24,12 +23,12 @@ func TestDecodeStringRecord(t *testing.T) {
 				"contents":    "# hello",
 				"createdAt":   "2026-07-18T23:15:54+03:00",
 			},
-			want: tangled.StringRecord{
-				Type:        "sh.tangled.string",
-				Filename:    "hello.md",
-				Description: "a greeting",
-				Contents:    "# hello",
-				CreatedAt:   "2026-07-18T23:15:54+03:00",
+			want: tangledlex.String{
+				LexiconTypeID: "sh.tangled.string",
+				Filename:      "hello.md",
+				Description:   "a greeting",
+				Contents:      "# hello",
+				CreatedAt:     "2026-07-18T23:15:54+03:00",
 			},
 		},
 		{
@@ -40,11 +39,11 @@ func TestDecodeStringRecord(t *testing.T) {
 				"contents":  "no description",
 				"createdAt": "2026-07-18T12:00:00Z",
 			},
-			want: tangled.StringRecord{
-				Type:      "sh.tangled.string",
-				Filename:  "bare.md",
-				Contents:  "no description",
-				CreatedAt: "2026-07-18T12:00:00Z",
+			want: tangledlex.String{
+				LexiconTypeID: "sh.tangled.string",
+				Filename:      "bare.md",
+				Contents:      "no description",
+				CreatedAt:     "2026-07-18T12:00:00Z",
 			},
 		},
 		{
@@ -55,11 +54,11 @@ func TestDecodeStringRecord(t *testing.T) {
 				"contents":  "empty filename",
 				"createdAt": "2026-07-18T12:00:00Z",
 			},
-			want: tangled.StringRecord{
-				Type:      "sh.tangled.string",
-				Filename:  "",
-				Contents:  "empty filename",
-				CreatedAt: "2026-07-18T12:00:00Z",
+			want: tangledlex.String{
+				LexiconTypeID: "sh.tangled.string",
+				Filename:      "",
+				Contents:      "empty filename",
+				CreatedAt:     "2026-07-18T12:00:00Z",
 			},
 		},
 		{

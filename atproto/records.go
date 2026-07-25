@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 
+	"github.com/alyraffauf/tg/internal/tangledlex"
 	"github.com/bluesky-social/indigo/atproto/atclient"
 	"github.com/bluesky-social/indigo/atproto/syntax"
 )
@@ -69,6 +71,11 @@ const maxRecordPages = 1000
 
 // PutRecord writes a record to the PDS, returning its at:// URI and CID.
 func (a *ATProto) PutRecord(ctx context.Context, in PutRecordInput) (uri, cid string, err error) {
+	if strings.HasPrefix(in.Collection, "sh.tangled.") {
+		if err := tangledlex.ValidateRecord(in.Collection, in.Record); err != nil {
+			return "", "", fmt.Errorf("validate %s record: %w", in.Collection, err)
+		}
+	}
 	var out struct {
 		URI string `json:"uri"`
 		CID string `json:"cid,omitempty"`

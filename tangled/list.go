@@ -34,20 +34,21 @@ type ListOpts struct {
 	Order  string // "asc" or "desc"
 }
 
-// params builds the XRPC query parameters for subject, requesting the page
-// after cursor (the first page if cursor is empty).
+func (o ListOpts) limit() int64 {
+	if o.Limit > 0 {
+		return o.Limit
+	}
+	return 50
+}
+
+// params builds query parameters for a paginated issue or pull request list.
 func (o ListOpts) params(subject, cursor string) map[string]any {
-	params := map[string]any{"subject": subject}
+	params := map[string]any{"subject": subject, "limit": o.limit()}
 	if o.Author != "" {
 		params["author"] = o.Author
 	}
 	if o.State != "" {
 		params["state"] = o.State
-	}
-	if o.Limit > 0 {
-		params["limit"] = o.Limit
-	} else {
-		params["limit"] = int64(50)
 	}
 	if o.Order != "" {
 		params["order"] = o.Order

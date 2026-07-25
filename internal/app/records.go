@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/alyraffauf/tg/atproto"
+	"github.com/alyraffauf/tg/internal/tangledlex"
 	"github.com/alyraffauf/tg/tangled"
 )
 
@@ -37,37 +39,47 @@ func editRecord(ctx context.Context, atClient pdsClient, did, collection, rkey s
 		return fmt.Errorf("get existing record: %w", err)
 	}
 
-	record, err := preserveRecord(found.Value)
+	record, err := editLexiconRecord(collection, found.Value, title, body)
 	if err != nil {
 		return err
 	}
-	if title != nil {
-		record["title"] = *title
-	}
-	if body != nil {
-		record["body"] = *body
-	}
-	_, _, err = atClient.PutRecord(ctx, atproto.PutRecordInput{
-		Repo: did, Collection: collection, Rkey: rkey, Record: record,
-	})
-	return err
+	return putRecord(ctx, atClient, did, collection, rkey, record)
 }
 
-// preserveRecord marshals a record value into a map so individual fields can
-// be patched without losing fields this client does not model.
-func preserveRecord(value any) (map[string]any, error) {
+func editLexiconRecord(collection string, value any, title, body *string) (any, error) {
 	data, err := json.Marshal(value)
 	if err != nil {
 		return nil, fmt.Errorf("encode existing record: %w", err)
 	}
-	var record map[string]any
-	if err := json.Unmarshal(data, &record); err != nil {
-		return nil, fmt.Errorf("decode existing record: %w", err)
+
+	switch collection {
+	case issueCollection:
+		var record tangledlex.RepoIssue
+		if err := json.Unmarshal(data, &record); err != nil {
+			return nil, fmt.Errorf("decode existing issue: %w", err)
+		}
+		if title != nil {
+			record.Title = *title
+		}
+		if body != nil {
+			record.Body = body
+		}
+		return record, nil
+	case pullCollection:
+		var record tangledlex.RepoPull
+		if err := json.Unmarshal(data, &record); err != nil {
+			return nil, fmt.Errorf("decode existing pull request: %w", err)
+		}
+		if title != nil {
+			record.Title = *title
+		}
+		if body != nil {
+			record.Body = body
+		}
+		return record, nil
+	default:
+		return nil, fmt.Errorf("editing records in collection %q is not supported", collection)
 	}
-	if record == nil {
-		return nil, fmt.Errorf("existing record is not an object")
-	}
-	return record, nil
 }
 
 // putState writes an issue.state or pull.status record keyed by rkey. state
@@ -76,16 +88,25 @@ func preserveRecord(value any) (map[string]any, error) {
 func putState(ctx context.Context, atClient pdsClient, did, rkey, collection, target, state string) error {
 	if collection == tangled.IssueCollection {
 		state = tangled.IssueCollection + tangled.IssueStateSuffix + "." + state
-		return putRecord(ctx, atClient, did, tangled.IssueCollection+tangled.IssueStateSuffix, rkey, tangled.IssueStateRecord{
-			Type:  tangled.IssueCollection + tangled.IssueStateSuffix,
-			Issue: target,
-			State: state,
+		return putRecord(ctx, atClient, did, tangled.IssueCollection+tangled.IssueStateSuffix, rkey, tangledlex.RepoIssueState{
+			LexiconTypeID: tangled.IssueCollection + tangled.IssueStateSuffix,
+			CreatedAt:     time.Now().UTC().Format(time.RFC3339),
+			Issue:         target,
+			State:         state,
 		})
 	}
 	state = tangled.PullCollection + tangled.PullStatusSuffix + "." + state
-	return putRecord(ctx, atClient, did, tangled.PullCollection+tangled.PullStatusSuffix, rkey, tangled.PullStatusRecord{
-		Type:   tangled.PullCollection + tangled.PullStatusSuffix,
-		Pull:   target,
-		Status: state,
+	return putRecord(ctx, atClient, did, tangled.PullCollection+tangled.PullStatusSuffix, rkey, tangledlex.RepoPullStatus{
+		LexiconTypeID: tangled.PullCollection + tangled.PullStatusSuffix,
+		CreatedAt:     time.Now().UTC().Format(time.RFC3339),
+		Pull:          target,
+		Status:        state,
 	})
+}
+
+func optionalString(value string) *string {
+	if value == "" {
+		return nil
+	}
+	return &value
 }

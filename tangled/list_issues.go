@@ -4,31 +4,34 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/bluesky-social/indigo/atproto/syntax"
+	"github.com/alyraffauf/tg/internal/tangledlex"
 )
-
-type IssueRecord struct {
-	Type       string   `json:"$type"`
-	Repo       string   `json:"repo"`
-	Title      string   `json:"title"`
-	Body       string   `json:"body,omitempty"`
-	CreatedAt  string   `json:"createdAt"`
-	Mentions   []string `json:"mentions,omitempty"`
-	References []string `json:"references,omitempty"`
-}
 
 // ListIssues fetches every issue for repoDid, following pagination
 // cursors until the listing is exhausted.
 func (t *Tangled) ListIssues(ctx context.Context, repoDid string, opts ListOpts) (*List, error) {
 	items, err := fetchAllPages(ctx, func(ctx context.Context, cursor string) ([]ListItem, *string, error) {
-		var page List
-		if err := t.Client.Get(ctx, syntax.NSID("sh.tangled.repo.listIssues"), opts.params(repoDid, cursor), &page); err != nil {
+		page, err := tangledlex.RepoListIssues(ctx, t.lexClient(), opts.Author, cursor, opts.limit(), opts.Order, opts.State, repoDid)
+		if err != nil {
 			return nil, nil, err
 		}
-		return page.Items, page.Cursor, nil
+		items, err := issueListItems(page.Items)
+		return items, page.Cursor, err
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list issues for %q: %w", repoDid, err)
 	}
 	return &List{Items: items}, nil
+}
+
+func issueListItems(items []*tangledlex.RepoListIssues_IssueListItem) ([]ListItem, error) {
+	decoded := make([]ListItem, 0, len(items))
+	for _, item := range items {
+		value, err := recordJSON(item.Value, &tangledlex.RepoIssue{})
+		if err != nil {
+			return nil, err
+		}
+		decoded = append(decoded, ListItem{URI: item.Uri, CID: dereference(item.Cid), Value: value, State: item.State, StateUpdatedAt: dereference(item.StateUpdatedAt), CommentCount: item.CommentCount})
+	}
+	return decoded, nil
 }
