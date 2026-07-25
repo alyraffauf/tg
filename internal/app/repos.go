@@ -13,6 +13,7 @@ import (
 	"github.com/alyraffauf/tg/internal/tangledlex"
 	"github.com/alyraffauf/tg/knot"
 	"github.com/alyraffauf/tg/tangled"
+	"github.com/bluesky-social/indigo/atproto/syntax"
 )
 
 // ViewRepo fetches a single repository record.
@@ -113,6 +114,7 @@ type ProvisionRepoInput struct {
 // CreateRepoInput configures provisioning and optional local setup.
 type CreateRepoInput struct {
 	KnotHost    string
+	SSHPort     int
 	Name        string
 	Description string
 	Clone       bool
@@ -122,6 +124,14 @@ type CreateRepoInput struct {
 
 // CreateRepo provisions a repository and performs requested local Git setup.
 func (s *Service) CreateRepo(ctx context.Context, in CreateRepoInput) (*RepoCreateResult, error) {
+	if (in.Clone || in.PushPath != "") && (in.SSHPort < 1 || in.SSHPort > 65535) {
+		return nil, fmt.Errorf("SSH port must be between 1 and 65535")
+	}
+	knotHost, err := parseKnotHostname(in.KnotHost)
+	if err != nil {
+		return nil, err
+	}
+	in.KnotHost = knotHost
 	uri, handle, err := s.provisionRepo(ctx, ProvisionRepoInput{
 		KnotHost: in.KnotHost, Name: in.Name, Description: in.Description,
 	})
@@ -130,7 +140,10 @@ func (s *Service) CreateRepo(ctx context.Context, in CreateRepoInput) (*RepoCrea
 	}
 	result := &RepoCreateResult{Handle: handle, Name: in.Name, URI: uri, Knot: in.KnotHost}
 	if in.Clone {
-		if _, err := s.CloneRepo(ctx, CloneRepoInput{Handle: handle, Repo: in.Name, Destination: in.Name}); err != nil {
+		if _, err := s.CloneRepo(ctx, CloneRepoInput{
+			KnotHost: in.KnotHost, SSHPort: in.SSHPort,
+			Handle: handle, Repo: in.Name, Destination: in.Name,
+		}); err != nil {
 			return nil, fmt.Errorf("clone new repository: %w", err)
 		}
 		result.Cloned = true
@@ -139,7 +152,7 @@ func (s *Service) CreateRepo(ctx context.Context, in CreateRepoInput) (*RepoCrea
 		return result, nil
 	}
 	pushResult, err := s.pushNewRepo(ctx, PushNewRepoInput{
-		KnotHost: in.KnotHost, RepoURI: uri, Dir: in.PushPath,
+		KnotHost: in.KnotHost, SSHPort: in.SSHPort, RepoURI: uri, Dir: in.PushPath,
 		Handle: handle, Repo: in.Name, RemoteName: in.RemoteName,
 	})
 	if pushResult.defaultBranchWarning != nil {
@@ -188,6 +201,14 @@ func (s *Service) provisionRepo(ctx context.Context, in ProvisionRepoInput) (uri
 		return "", "", err
 	}
 	return uri, s.ownerHandle(ctx, did), nil
+}
+
+func parseKnotHostname(raw string) (string, error) {
+	hostname, err := syntax.ParseHandle(raw)
+	if err != nil {
+		return "", fmt.Errorf("invalid Knot hostname %q: %w", raw, err)
+	}
+	return hostname.Normalize().String(), nil
 }
 
 func (s *Service) ownerHandle(ctx context.Context, did string) string {
@@ -240,7 +261,8 @@ func (s *Service) pushNewRepo(ctx context.Context, in PushNewRepoInput) (pushNew
 	branch, defaultBranchErr := s.setDefaultBranchFromDir(ctx, in.KnotHost, in.RepoURI, in.Dir)
 	result := pushNewRepoResult{defaultBranch: branch, defaultBranchWarning: defaultBranchErr}
 	if err := s.git.PushNewRepo(ctx, gitutil.PushNewRepoParams{
-		Dir: in.Dir, Handle: in.Handle, Repo: in.Repo, RemoteName: in.RemoteName,
+		Dir: in.Dir, KnotHost: in.KnotHost, SSHPort: in.SSHPort,
+		Handle: in.Handle, Repo: in.Repo, RemoteName: in.RemoteName,
 	}); err != nil {
 		return result, fmt.Errorf("push to new repository: %w", err)
 	}
@@ -250,6 +272,7 @@ func (s *Service) pushNewRepo(ctx context.Context, in PushNewRepoInput) (pushNew
 // PushNewRepoInput configures pushing a newly created repository.
 type PushNewRepoInput struct {
 	KnotHost   string
+	SSHPort    int
 	RepoURI    string
 	Dir        string
 	Handle     string

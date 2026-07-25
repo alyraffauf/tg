@@ -9,6 +9,7 @@ import (
 
 func newRepoCreateCommand(service *app.Service) *cobra.Command {
 	var description, knotHost, pushPath, remote string
+	var sshPort int
 	var clone bool
 
 	command := &cobra.Command{
@@ -35,7 +36,7 @@ Requires authentication (run "tg auth login" first).`,
 			}
 
 			result, err := service.CreateRepo(ctx, app.CreateRepoInput{
-				KnotHost: selectedKnot, Name: args[0], Description: description,
+				KnotHost: selectedKnot, SSHPort: sshPort, Name: args[0], Description: description,
 				Clone: clone, PushPath: pushPath, RemoteName: remote,
 			})
 			if err != nil {
@@ -46,6 +47,7 @@ Requires authentication (run "tg auth login" first).`,
 	}
 	command.Flags().StringVar(&description, "description", "", "Repository description")
 	command.Flags().StringVar(&knotHost, "knot", "", "knot host to create on (default "+app.DefaultKnot+")")
+	command.Flags().IntVar(&sshPort, "ssh-port", 22, "SSH port for cloning from or pushing to the selected Knot")
 	command.Flags().BoolVar(&clone, "clone", false, "Clone the new repository into the current directory")
 	command.Flags().StringVar(&pushPath, "push", "", "Push an existing local repository at this path to the new remote (e.g. .)")
 	command.Flags().StringVar(&remote, "remote", "origin", "Remote name to use with --push")

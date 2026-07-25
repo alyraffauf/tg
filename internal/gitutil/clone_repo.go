@@ -6,14 +6,16 @@ import (
 
 // CloneRepoParams groups the inputs to CloneRepo.
 type CloneRepoParams struct {
-	Handle  string // Tangled owner handle
-	Repo    string // repository name
-	RepoDir string // local directory to clone into
+	KnotHost string // Knot hosting the repository
+	SSHPort  int    // Knot SSH port
+	Handle   string // Tangled owner handle
+	Repo     string // repository name
+	RepoDir  string // local directory to clone into
 }
 
 // CloneRepo clones handle/repo from Tangled into params.RepoDir.
 func (c *Client) CloneRepo(ctx context.Context, params CloneRepoParams) error {
-	url := tangledRemoteURL(params.Handle, params.Repo)
+	url := knotRemoteURL(params.KnotHost, params.SSHPort, params.Handle, params.Repo)
 	return c.run(ctx, "git", "clone", url, params.RepoDir)
 }
 

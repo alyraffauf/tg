@@ -42,7 +42,7 @@ func TestCreateRepoRecordsDefaultBranchOutcome(t *testing.T) {
 			service := testService(pds, git, knotClient)
 
 			result, err := service.CreateRepo(context.Background(), CreateRepoInput{
-				KnotHost: "knot.example", Name: "example", PushPath: ".", RemoteName: "origin",
+				KnotHost: "knot.example", SSHPort: 2222, Name: "example", PushPath: ".", RemoteName: "origin",
 			})
 			if err != nil {
 				t.Fatalf("CreateRepo() error = %v", err)
@@ -58,6 +58,9 @@ func TestCreateRepoRecordsDefaultBranchOutcome(t *testing.T) {
 			}
 			if len(git.pushes) != 1 {
 				t.Fatalf("git pushes = %+v", git.pushes)
+			}
+			if git.pushes[0].KnotHost != "knot.example" || git.pushes[0].SSHPort != 2222 {
+				t.Fatalf("git push destination = %+v", git.pushes[0])
 			}
 		})
 	}
@@ -214,7 +217,7 @@ func testService(pds *testPDS, git *testGit, knotClient *testKnot) *Service {
 		resolver: resolver,
 		sessions: testSessions{pds: pds},
 		git:      git,
-		knot:     testKnotFactory{client: knotClient},
+		knot:     &testKnotFactory{client: knotClient},
 	}
 }
 
@@ -259,10 +262,12 @@ func (s testSessions) APIClient(context.Context) (*atclient.APIClient, error) {
 }
 
 type testPDS struct {
-	puts    []atproto.PutRecordInput
-	deletes []atproto.DeleteRecordInput
-	record  *atproto.GetRecordOutput
-	putErr  error
+	puts                 []atproto.PutRecordInput
+	deletes              []atproto.DeleteRecordInput
+	record               *atproto.GetRecordOutput
+	putErr               error
+	serviceAuthCalls     int
+	serviceAuthAudiences []string
 }
 
 func (p *testPDS) PutRecord(_ context.Context, input atproto.PutRecordInput) (string, string, error) {
@@ -295,16 +300,23 @@ func (p *testPDS) ListAllRecords(context.Context, string, string, atproto.ListRe
 	return nil, errors.New("not implemented")
 }
 
-func (p *testPDS) GetServiceAuth(context.Context, string, string) (string, error) {
+func (p *testPDS) GetServiceAuth(_ context.Context, audience, _ string) (string, error) {
+	p.serviceAuthCalls++
+	p.serviceAuthAudiences = append(p.serviceAuthAudiences, audience)
 	return "token", nil
 }
 
 type testGit struct {
 	branch string
+	clones []gitutil.CloneRepoParams
 	pushes []gitutil.PushNewRepoParams
 }
 
-func (g *testGit) CloneRepo(context.Context, gitutil.CloneRepoParams) error { return nil }
+func (g *testGit) CloneRepo(_ context.Context, input gitutil.CloneRepoParams) error {
+	g.clones = append(g.clones, input)
+	return nil
+}
+
 func (g *testGit) PushNewRepo(_ context.Context, input gitutil.PushNewRepoParams) error {
 	g.pushes = append(g.pushes, input)
 	return nil
@@ -323,18 +335,24 @@ func (g *testGit) DetectRepoFromCWD(context.Context) (*gitutil.RepoContext, erro
 
 type testKnotFactory struct {
 	client knotClient
+	hosts  []string
 }
 
-func (f testKnotFactory) New(string, string) knotClient { return f.client }
+func (f *testKnotFactory) New(host string, _ string) knotClient {
+	f.hosts = append(f.hosts, host)
+	return f.client
+}
 
 type testKnot struct {
 	setDefaultBranchErr error
 	deleteErr           error
 	deleteCalls         int
 	mergeCalls          int
+	createCalls         int
 }
 
 func (k *testKnot) CreateRepo(context.Context, knot.CreateRepoInput) (string, error) {
+	k.createCalls++
 	return "did:plc:repo", nil
 }
 func (k *testKnot) DeleteRepo(context.Context, knot.DeleteRepoInput) error {

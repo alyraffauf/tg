@@ -3,6 +3,8 @@ package gitutil
 import (
 	"slices"
 	"testing"
+
+	"github.com/alyraffauf/tg/knot"
 )
 
 func TestParseTangledURL(t *testing.T) {
@@ -50,6 +52,29 @@ func TestParseTangledURL(t *testing.T) {
 			}
 			if rc.Repo != tt.wantRepo {
 				t.Errorf("Repo = %q, want %q", rc.Repo, tt.wantRepo)
+			}
+		})
+	}
+}
+
+func TestKnotRemoteURL(t *testing.T) {
+	tests := []struct {
+		name     string
+		knotHost string
+		sshPort  int
+		want     string
+	}{
+		{name: "hosted proxy", sshPort: 22, want: "git@tangled.org:aly.codes/tg"},
+		{name: "hosted proxy and custom port", sshPort: 2222, want: "ssh://git@tangled.org:2222/aly.codes/tg"},
+		{name: "default knot through hosted proxy", knotHost: knot.DefaultKnot, sshPort: 22, want: "git@tangled.org:aly.codes/tg"},
+		{name: "default knot through hosted proxy and custom port", knotHost: knot.DefaultKnot, sshPort: 2222, want: "ssh://git@tangled.org:2222/aly.codes/tg"},
+		{name: "custom knot and port", knotHost: "knot.secluded.site", sshPort: 2222, want: "ssh://git@knot.secluded.site:2222/aly.codes/tg"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := knotRemoteURL(tt.knotHost, tt.sshPort, "aly.codes", "tg"); got != tt.want {
+				t.Fatalf("knotRemoteURL() = %q, want %q", got, tt.want)
 			}
 		})
 	}

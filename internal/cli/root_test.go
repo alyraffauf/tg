@@ -30,6 +30,26 @@ func TestNewRootCreatesIndependentCommandState(t *testing.T) {
 	}
 }
 
+func TestRepoCreateSSHPortHelp(t *testing.T) {
+	create, _, err := NewRoot(&app.Service{}).Find([]string{"repo", "create"})
+	if err != nil {
+		t.Fatalf("find repo create command: %v", err)
+	}
+	flag := create.Flags().Lookup("ssh-port")
+	if flag == nil || flag.Usage != "SSH port for cloning from or pushing to the selected Knot" {
+		t.Fatalf("ssh-port flag = %+v", flag)
+	}
+	if flag.DefValue != "22" {
+		t.Fatalf("ssh-port default = %q, want 22", flag.DefValue)
+	}
+	if err := create.Flags().Set("ssh-port", "2200"); err != nil {
+		t.Fatalf("set ssh-port: %v", err)
+	}
+	if got := flag.Value.String(); got != "2200" {
+		t.Fatalf("ssh-port = %q, want 2200", got)
+	}
+}
+
 func TestNewRootCreatesIndependentStateCommands(t *testing.T) {
 	firstRoot := NewRoot(&app.Service{})
 	secondRoot := NewRoot(&app.Service{})

@@ -8,6 +8,8 @@ import (
 	"os/exec"
 	"slices"
 	"strings"
+
+	"github.com/alyraffauf/tg/knot"
 )
 
 // tangledHost is the hostname for Tangled repositories.
@@ -16,9 +18,25 @@ const tangledHost = "tangled.org"
 // defaultRemote is the conventional name of the primary git remote.
 const defaultRemote = "origin"
 
-// tangledRemoteURL builds the SSH clone/push URL for a Tangled repo.
+// tangledRemoteURL builds the hosted Tangled SSH URL for a repository.
 func tangledRemoteURL(handle, repo string) string {
 	return "git@" + tangledHost + ":" + handle + "/" + repo
+}
+
+// knotRemoteURL builds an SSH URL for a repository on knotHost. Tangled's
+// default Knot and callers without a selected Knot use the hosted proxy.
+func knotRemoteURL(knotHost string, sshPort int, handle, repo string) string {
+	gitHost := knotHost
+	if gitHost == "" || gitHost == knot.DefaultKnot {
+		gitHost = tangledHost
+	}
+	if sshPort != 22 {
+		return fmt.Sprintf("ssh://git@%s:%d/%s/%s", gitHost, sshPort, handle, repo)
+	}
+	if gitHost == tangledHost {
+		return tangledRemoteURL(handle, repo)
+	}
+	return "git@" + gitHost + ":" + handle + "/" + repo
 }
 
 // RepoContext holds the handle and repo name parsed from a git remote URL.

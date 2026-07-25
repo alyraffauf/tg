@@ -9,6 +9,8 @@ import (
 
 // CloneRepoInput configures a repository clone.
 type CloneRepoInput struct {
+	KnotHost    string
+	SSHPort     int
 	Handle      string
 	Repo        string
 	Destination string
@@ -16,10 +18,18 @@ type CloneRepoInput struct {
 
 // CloneRepo clones a Tangled repository into Destination.
 func (s *Service) CloneRepo(ctx context.Context, in CloneRepoInput) (*RepoCloneResult, error) {
+	if in.SSHPort == 0 {
+		in.SSHPort = 22
+	}
+	if in.SSHPort < 1 || in.SSHPort > 65535 {
+		return nil, fmt.Errorf("SSH port must be between 1 and 65535")
+	}
 	if err := s.git.CloneRepo(ctx, gitutil.CloneRepoParams{
-		Handle:  in.Handle,
-		Repo:    in.Repo,
-		RepoDir: in.Destination,
+		KnotHost: in.KnotHost,
+		SSHPort:  in.SSHPort,
+		Handle:   in.Handle,
+		Repo:     in.Repo,
+		RepoDir:  in.Destination,
 	}); err != nil {
 		return nil, err
 	}
