@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -11,6 +12,34 @@ import (
 	"strings"
 	"testing"
 )
+
+func TestMain(m *testing.M) {
+	for _, variable := range []string{
+		"GIT_CONFIG",
+		"GIT_CONFIG_PARAMETERS",
+		"GIT_CONFIG_SYSTEM",
+	} {
+		if err := os.Unsetenv(variable); err != nil {
+			panic(fmt.Errorf("unset %s: %w", variable, err))
+		}
+	}
+
+	settings := []struct {
+		name  string
+		value string
+	}{
+		{name: "GIT_CONFIG_COUNT", value: "0"},
+		{name: "GIT_CONFIG_GLOBAL", value: os.DevNull},
+		{name: "GIT_CONFIG_NOSYSTEM", value: "1"},
+	}
+	for _, setting := range settings {
+		if err := os.Setenv(setting.name, setting.value); err != nil {
+			panic(fmt.Errorf("set %s: %w", setting.name, err))
+		}
+	}
+
+	os.Exit(m.Run())
+}
 
 func TestGenerateAndCheckoutPatch(t *testing.T) {
 	ctx := context.Background()
