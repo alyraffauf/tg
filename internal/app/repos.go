@@ -289,38 +289,31 @@ func (s *Service) EditRepo(ctx context.Context, t Target, in EditRepoInput) (*Re
 		return nil, err
 	}
 	rkey := extractRKey(repo.URI)
-	existing, err := atClient.GetRecord(ctx, did, repoCollection, rkey)
-	if err != nil {
-		return nil, fmt.Errorf("get repository record: %w", err)
-	}
-	record, err := repoRecordMap(existing.Value)
-	if err != nil {
-		return nil, err
-	}
-	if in.Description != nil {
-		record["description"] = *in.Description
-	}
-	if in.Website != nil {
-		record["website"] = *in.Website
-	}
-	if in.Spindle != nil {
-		record["spindle"] = *in.Spindle
-	}
-	if len(in.AddLabels) > 0 || len(in.RemoveLabels) > 0 {
-		labels := labelsFromRecord(record["labels"])
-		for _, label := range in.AddLabels {
-			labels[label] = true
+	if err := updateRecord(ctx, atClient, did, repoCollection, rkey, func(value any) (map[string]any, error) {
+		record, err := repoRecordMap(value)
+		if err != nil {
+			return nil, err
 		}
-		for _, label := range in.RemoveLabels {
-			delete(labels, label)
+		if in.Description != nil {
+			record["description"] = *in.Description
 		}
-		record["labels"] = labelNames(labels)
-	}
-	if _, _, err := atClient.PutRecord(ctx, atproto.PutRecordInput{
-		Repo:       did,
-		Collection: repoCollection,
-		Rkey:       rkey,
-		Record:     record,
+		if in.Website != nil {
+			record["website"] = *in.Website
+		}
+		if in.Spindle != nil {
+			record["spindle"] = *in.Spindle
+		}
+		if len(in.AddLabels) > 0 || len(in.RemoveLabels) > 0 {
+			labels := labelsFromRecord(record["labels"])
+			for _, label := range in.AddLabels {
+				labels[label] = true
+			}
+			for _, label := range in.RemoveLabels {
+				delete(labels, label)
+			}
+			record["labels"] = labelNames(labels)
+		}
+		return record, nil
 	}); err != nil {
 		return nil, fmt.Errorf("edit repository: %w", err)
 	}

@@ -1,6 +1,7 @@
 package tangledlex
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"time"
@@ -32,6 +33,19 @@ func ValidateRecord(collection string, record any) error {
 		return validatePublicKey(collection, value)
 	case String:
 		return validateString(collection, value)
+	case map[string]any:
+		if collection != "sh.tangled.repo" {
+			return fmt.Errorf("%s record has unsupported generated type %T", collection, record)
+		}
+		data, err := json.Marshal(value)
+		if err != nil {
+			return fmt.Errorf("encode %s record for validation: %w", collection, err)
+		}
+		var repo Repo
+		if err := json.Unmarshal(data, &repo); err != nil {
+			return fmt.Errorf("decode %s record for validation: %w", collection, err)
+		}
+		return validateRepo(collection, repo)
 	default:
 		return fmt.Errorf("%s record has unsupported generated type %T", collection, record)
 	}

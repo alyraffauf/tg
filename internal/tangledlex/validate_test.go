@@ -24,6 +24,18 @@ func TestValidateRecordAcceptsEveryWritableRecord(t *testing.T) {
 	}
 }
 
+func TestValidateRecordAcceptsPreservedRepoMap(t *testing.T) {
+	record := map[string]any{
+		"$type":     "sh.tangled.repo",
+		"knot":      "knot.example",
+		"createdAt": testTime,
+		"custom":    map[string]any{"preserved": true},
+	}
+	if err := ValidateRecord("sh.tangled.repo", record); err != nil {
+		t.Fatalf("ValidateRecord() error = %v", err)
+	}
+}
+
 func TestValidateRecordRejectsEveryWritableRecord(t *testing.T) {
 	tests := []struct {
 		name       string

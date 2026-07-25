@@ -21,10 +21,11 @@ type ATProto struct {
 }
 
 type PutRecordInput struct {
-	Repo       string `json:"repo"`
-	Collection string `json:"collection"`
-	Rkey       string `json:"rkey"`
-	Record     any    `json:"record"`
+	Repo       string      `json:"repo"`
+	Collection string      `json:"collection"`
+	Rkey       string      `json:"rkey"`
+	Record     any         `json:"record"`
+	SwapRecord *syntax.CID `json:"swapRecord,omitempty"`
 }
 
 type DeleteRecordInput struct {
@@ -42,9 +43,9 @@ type Blob struct {
 }
 
 type GetRecordOutput struct {
-	URI   string `json:"uri"`
-	CID   string `json:"cid,omitempty"`
-	Value any    `json:"value"`
+	URI   string      `json:"uri"`
+	CID   *syntax.CID `json:"cid,omitempty"`
+	Value any         `json:"value"`
 }
 
 // RecordItem is a single record in a listRecords response.

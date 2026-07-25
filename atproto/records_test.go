@@ -61,3 +61,51 @@ func TestPutRecordSendsValidatedTangledRecord(t *testing.T) {
 		t.Fatalf("PutRecord() URI = %q", uri)
 	}
 }
+
+func TestRecordUpdateRoundTripsFetchedCIDAsSwapRecord(t *testing.T) {
+	var swapRecord string
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		switch request.Method {
+		case http.MethodGet:
+			_, _ = writer.Write([]byte(`{"uri":"at://did:plc:abc123/sh.tangled.repo/example","cid":"bafyreifetched","value":{"$type":"sh.tangled.repo","knot":"knot.example","createdAt":"2026-07-25T12:00:00Z"}}`))
+		case http.MethodPost:
+			defer request.Body.Close()
+			var input struct {
+				SwapRecord string `json:"swapRecord"`
+			}
+			if err := json.NewDecoder(request.Body).Decode(&input); err != nil {
+				t.Errorf("decode PutRecord request: %v", err)
+				return
+			}
+			swapRecord = input.SwapRecord
+			_, _ = writer.Write([]byte(`{"uri":"at://did:plc:abc123/sh.tangled.repo/example","cid":"bafyreinew"}`))
+		default:
+			t.Errorf("request method = %s, want GET or POST", request.Method)
+		}
+	}))
+	defer server.Close()
+
+	client := &ATProto{Client: &atclient.APIClient{Client: server.Client(), Host: server.URL}}
+	found, err := client.GetRecord(context.Background(), "did:plc:abc123", "sh.tangled.repo", "example")
+	if err != nil {
+		t.Fatalf("GetRecord() error = %v", err)
+	}
+	if found.CID == nil || found.CID.String() != "bafyreifetched" {
+		t.Fatalf("GetRecord() CID = %v, want bafyreifetched", found.CID)
+	}
+
+	_, _, err = client.PutRecord(context.Background(), PutRecordInput{
+		Repo:       "did:plc:abc123",
+		Collection: "sh.tangled.repo",
+		Rkey:       "example",
+		Record:     found.Value,
+		SwapRecord: found.CID,
+	})
+	if err != nil {
+		t.Fatalf("PutRecord() error = %v", err)
+	}
+	if swapRecord != "bafyreifetched" {
+		t.Fatalf("PutRecord() swapRecord = %q, want bafyreifetched", swapRecord)
+	}
+}

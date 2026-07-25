@@ -31,19 +31,38 @@ func putRecord(ctx context.Context, atClient pdsClient, did, collection, rkey st
 	return nil
 }
 
-// editRecord fetches an existing record, applies the provided title and/or
-// body patches (nil leaves the field untouched), and writes it back.
+// editRecord applies title and body patches to an existing record.
 func editRecord(ctx context.Context, atClient pdsClient, did, collection, rkey string, title, body *string) error {
+	return updateRecord(ctx, atClient, did, collection, rkey, func(value any) (any, error) {
+		return editLexiconRecord(collection, value, title, body)
+	})
+}
+
+// updateRecord fetches an existing record, applies mutate, and writes it back
+// only if the fetched record is still current.
+func updateRecord[T any](ctx context.Context, atClient pdsClient, did, collection, rkey string, mutate func(any) (T, error)) error {
 	found, err := atClient.GetRecord(ctx, did, collection, rkey)
 	if err != nil {
 		return fmt.Errorf("get existing record: %w", err)
 	}
+	if found.CID == nil {
+		return fmt.Errorf("get existing record: PDS response omitted record CID")
+	}
 
-	record, err := editLexiconRecord(collection, found.Value, title, body)
+	record, err := mutate(found.Value)
 	if err != nil {
 		return err
 	}
-	return putRecord(ctx, atClient, did, collection, rkey, record)
+	if _, _, err := atClient.PutRecord(ctx, atproto.PutRecordInput{
+		Repo:       did,
+		Collection: collection,
+		Rkey:       rkey,
+		Record:     record,
+		SwapRecord: found.CID,
+	}); err != nil {
+		return err
+	}
+	return nil
 }
 
 func editLexiconRecord(collection string, value any, title, body *string) (any, error) {
