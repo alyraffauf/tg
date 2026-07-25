@@ -20,6 +20,10 @@ const (
 )
 
 func NewRoot(service *app.Service) *cobra.Command {
+	return newRoot(service, app.DefaultKnot, "22")
+}
+
+func newRoot(service *app.Service, defaultKnot, defaultSSHPort string) *cobra.Command {
 	rootCmd := &cobra.Command{
 		Use:           "tg",
 		Short:         "A CLI for Tangled",
@@ -41,7 +45,7 @@ func NewRoot(service *app.Service) *cobra.Command {
 	rootCmd.AddCommand(pull)
 
 	repo := newRepoCommand(service)
-	repo.AddCommand(newRepoViewCommand(service), newRepoCloneCommand(service), newRepoCreateCommand(service), newRepoListCommand(service), newRepoEditCommand(service), newRepoSetDefaultBranchCommand(service), newRepoDeleteCommand(service), newRepoForkCommand(service))
+	repo.AddCommand(newRepoViewCommand(service), newRepoCloneCommand(service), newRepoCreateCommand(service, defaultKnot, defaultSSHPort), newRepoListCommand(service), newRepoEditCommand(service), newRepoSetDefaultBranchCommand(service), newRepoDeleteCommand(service), newRepoForkCommand(service))
 	rootCmd.AddCommand(repo)
 
 	keys := newSSHKeyCommand(service)
@@ -68,7 +72,7 @@ func ExecuteWith(arguments []string, input io.Reader, output, errorOutput io.Wri
 	settings := loadConfig(flags, errorOutput)
 	service := app.NewWithStreams(settings.Appview, output, errorOutput)
 	service.SetAccount(settings.Account)
-	root := NewRoot(service)
+	root := newRoot(service, settings.Knot, settings.SSHPort)
 	root.SetArgs(arguments)
 	root.SetIn(input)
 	root.SetOut(output)

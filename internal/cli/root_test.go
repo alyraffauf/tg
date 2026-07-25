@@ -58,22 +58,53 @@ func TestExecuteWithRendersPreCommandErrors(t *testing.T) {
 }
 
 func TestRepoCreateSSHPortHelp(t *testing.T) {
-	create, _, err := NewRoot(&app.Service{}).Find([]string{"repo", "create"})
+	create, _, err := newRoot(&app.Service{}, "configured.example", "2200").Find([]string{"repo", "create"})
 	if err != nil {
 		t.Fatalf("find repo create command: %v", err)
 	}
 	flag := create.Flags().Lookup("ssh-port")
-	if flag == nil || flag.Usage != "SSH port for cloning from or pushing to the selected Knot" {
+	if flag == nil || flag.Usage != "SSH port for cloning from or pushing to the selected Knot (overrides config file and TG_SSH_PORT)" {
 		t.Fatalf("ssh-port flag = %+v", flag)
 	}
-	if flag.DefValue != "22" {
-		t.Fatalf("ssh-port default = %q, want 22", flag.DefValue)
+	if flag.DefValue != "2200" {
+		t.Fatalf("ssh-port default = %q, want 2200", flag.DefValue)
 	}
-	if err := create.Flags().Set("ssh-port", "2200"); err != nil {
+	if err := create.Flags().Set("ssh-port", "2222"); err != nil {
 		t.Fatalf("set ssh-port: %v", err)
 	}
-	if got := flag.Value.String(); got != "2200" {
-		t.Fatalf("ssh-port = %q, want 2200", got)
+	if got := flag.Value.String(); got != "2222" {
+		t.Fatalf("ssh-port = %q, want 2222", got)
+	}
+}
+
+func TestRepoCreateRejectsMalformedSSHPort(t *testing.T) {
+	command := newRepoCreateCommand(&app.Service{}, "configured.example", "not-a-port")
+	err := command.RunE(command, []string{"example"})
+	if err == nil || !strings.Contains(err.Error(), `invalid SSH port "not-a-port"`) {
+		t.Fatalf("repo create error = %v", err)
+	}
+}
+
+func TestRepoCreateKnotFlag(t *testing.T) {
+	create, _, err := newRoot(&app.Service{}, "configured.example", "22").Find([]string{"repo", "create"})
+	if err != nil {
+		t.Fatalf("find repo create command: %v", err)
+	}
+	flag := create.Flags().Lookup("knot")
+	if flag == nil {
+		t.Fatal("repo create has no knot flag")
+	}
+	if flag.DefValue != "configured.example" || flag.Usage != "Knot host to provision and optionally push to (overrides config file and TG_KNOT)" {
+		t.Fatalf("knot flag = %+v", flag)
+	}
+	if err := create.Flags().Set("knot", "flag.example"); err != nil {
+		t.Fatalf("set knot flag: %v", err)
+	}
+	if got := flag.Value.String(); got != "flag.example" {
+		t.Fatalf("explicit knot = %q, want flag.example", got)
+	}
+	if NewRoot(&app.Service{}).PersistentFlags().Lookup("knot") != nil {
+		t.Fatal("knot flag must not be global")
 	}
 }
 

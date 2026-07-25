@@ -2,14 +2,14 @@ package cli
 
 import (
 	"fmt"
+	"strconv"
 
 	"github.com/alyraffauf/tg/internal/app"
 	"github.com/spf13/cobra"
 )
 
-func newRepoCreateCommand(service *app.Service) *cobra.Command {
-	var description, knotHost, pushPath, remote string
-	var sshPort int
+func newRepoCreateCommand(service *app.Service, defaultKnot, defaultSSHPort string) *cobra.Command {
+	var description, knotHost, pushPath, remote, sshPort string
 	var clone bool
 
 	command := &cobra.Command{
@@ -17,7 +17,7 @@ func newRepoCreateCommand(service *app.Service) *cobra.Command {
 		Short: "Create a repository on Tangled",
 		Long: `Create a repository on Tangled.
 
-The repository is provisioned on a knot (default ` + app.DefaultKnot + `) and a
+The repository is provisioned on the selected Knot and a
 sh.tangled.repo record is written to your PDS. The repository name is used as
 the record key, matching the current Tangled schema.
 
@@ -29,6 +29,10 @@ Requires authentication (run "tg auth login" first).`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
+			parsedSSHPort, err := strconv.Atoi(sshPort)
+			if err != nil {
+				return fmt.Errorf("invalid SSH port %q: %w", sshPort, err)
+			}
 
 			selectedKnot := knotHost
 			if selectedKnot == "" {
@@ -36,7 +40,7 @@ Requires authentication (run "tg auth login" first).`,
 			}
 
 			result, err := service.CreateRepo(ctx, app.CreateRepoInput{
-				KnotHost: selectedKnot, SSHPort: sshPort, Name: args[0], Description: description,
+				KnotHost: selectedKnot, SSHPort: parsedSSHPort, Name: args[0], Description: description,
 				Clone: clone, PushPath: pushPath, RemoteName: remote,
 			})
 			if err != nil {
@@ -46,8 +50,8 @@ Requires authentication (run "tg auth login" first).`,
 		},
 	}
 	command.Flags().StringVar(&description, "description", "", "Repository description")
-	command.Flags().StringVar(&knotHost, "knot", "", "knot host to create on (default "+app.DefaultKnot+")")
-	command.Flags().IntVar(&sshPort, "ssh-port", 22, "SSH port for cloning from or pushing to the selected Knot")
+	command.Flags().StringVar(&knotHost, "knot", defaultKnot, "Knot host to provision and optionally push to (overrides config file and TG_KNOT)")
+	command.Flags().StringVar(&sshPort, "ssh-port", defaultSSHPort, "SSH port for cloning from or pushing to the selected Knot (overrides config file and TG_SSH_PORT)")
 	command.Flags().BoolVar(&clone, "clone", false, "Clone the new repository into the current directory")
 	command.Flags().StringVar(&pushPath, "push", "", "Push an existing local repository at this path to the new remote (e.g. .)")
 	command.Flags().StringVar(&remote, "remote", "origin", "Remote name to use with --push")

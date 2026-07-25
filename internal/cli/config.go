@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/alyraffauf/tg/internal/app"
 	"github.com/spf13/viper"
 )
 
@@ -22,6 +23,8 @@ const (
 type settings struct {
 	Appview string
 	Account string
+	Knot    string
+	SSHPort string
 }
 
 type flagSettings struct {
@@ -55,6 +58,8 @@ func loadConfig(flags flagSettings, errorWriter io.Writer) settings {
 	config.AutomaticEnv()
 	config.SetDefault("appview", defaultAppview)
 	config.SetDefault("account", "")
+	config.SetDefault("knot", app.DefaultKnot)
+	config.SetDefault("ssh-port", "22")
 
 	if err := config.ReadInConfig(); err != nil {
 		if _, ok := errors.AsType[viper.ConfigFileNotFoundError](err); ok {
@@ -62,12 +67,19 @@ func loadConfig(flags flagSettings, errorWriter io.Writer) settings {
 			return applyFlagSettings(settings{
 				Appview: config.GetString("appview"),
 				Account: config.GetString("account"),
+				Knot:    config.GetString("knot"),
+				SSHPort: config.GetString("ssh-port"),
 			}, flags)
 		}
 		// Surface parse/permission errors but keep running with defaults.
 		fmt.Fprintln(errorWriter, "warning: failed to read config:", err)
 	}
-	resolved := settings{Appview: config.GetString("appview"), Account: config.GetString("account")}
+	resolved := settings{
+		Appview: config.GetString("appview"),
+		Account: config.GetString("account"),
+		Knot:    config.GetString("knot"),
+		SSHPort: config.GetString("ssh-port"),
+	}
 	return applyFlagSettings(resolved, flags)
 }
 
