@@ -18,9 +18,10 @@ const (
 	SessionStatusUnknown = atproto.SessionStatusUnknown
 )
 
-// LoginWithPassword authenticates an account with an app password.
-func (s *Service) LoginWithPassword(ctx context.Context, identifier, password string) error {
-	return s.auth.LoginWithPassword(ctx, identifier, password)
+// LoginWithPassword authenticates an account with an app password. When
+// useInsecureFileStore is true, the session is stored in plaintext instead of the keyring.
+func (s *Service) LoginWithPassword(ctx context.Context, identifier, password string, useInsecureFileStore bool) error {
+	return s.auth.LoginWithPassword(ctx, identifier, password, useInsecureFileStore)
 }
 
 // CurrentDID returns the DID for the active account.

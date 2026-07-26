@@ -43,5 +43,20 @@ Secret Service provider to be running; on a headless system without a D-Bus
 session bus (e.g. a server or container), install and start
 `gnome-keyring-daemon` or `kwalletd`, or set `DBUS_SESSION_BUS_ADDRESS`.
 
+### Insecure file storage (`--insecure`)
+
+For an app-password login without a keyring, use `--insecure`:
+
+```bash
+tg auth login alice.example.com xxxx-xxxx-xxxx-xxxx --insecure
+```
+
+This stores one account in plaintext at `$XDG_DATA_HOME/tg/credentials.json`
+(default `~/.local/share/tg/credentials.json`); logging in again overwrites it.
+The directory and file are created with `0700` and `0600` permissions.
+
+Use the keyring when available. `--insecure` requires an app password; it does
+not support OAuth.
+
 See the [command reference](commands/tg_auth.md) for the full `tg auth`
 subcommand list.

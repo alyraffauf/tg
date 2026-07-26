@@ -83,29 +83,86 @@ var DefaultScopes = []string{
 type AuthManager struct {
 	app               *oauth.ClientApp
 	store             *KeyringStore
+	insecureStore     *insecureFileStore
 	client            *http.Client
 	selector          string
 	pendingIdentifier string
 }
 
+// sessionSource identifies which credential store backs the active session.
+type sessionSource int
+
+const (
+	sessionSourceKeyring sessionSource = iota
+	sessionSourceInsecureFile
+)
+
 func (m *AuthManager) SetAccount(selector string) {
 	m.selector = selector
 }
 
+// Accounts lists stored accounts from both credential stores. A file account
+// lets this succeed when the keyring is unavailable; otherwise keyring errors
+// are returned.
 func (m *AuthManager) Accounts() ([]Account, string, error) {
-	return m.store.Accounts()
+	accounts, activeDID, keyringErr := m.store.Accounts()
+	fileAccount, hasFileAccount, err := m.findInsecureFileAccount()
+	if err != nil {
+		return nil, "", err
+	}
+	if hasFileAccount {
+		accounts = append(accounts, fileAccount)
+		if activeDID == "" {
+			activeDID = fileAccount.DID
+		}
+	}
+	if keyringErr != nil && !errors.Is(keyringErr, keyring.ErrNotFound) && !hasFileAccount {
+		return nil, "", keyringErr
+	}
+	return accounts, activeDID, nil
 }
 
 func (m *AuthManager) SelectAccount(selector string) (Account, error) {
-	return m.store.SelectAccount(selector)
+	account, err := m.store.SelectAccount(selector)
+	if err == nil {
+		return account, nil
+	}
+	fileAccount, hasFileAccount, fileErr := m.findInsecureFileAccount()
+	if fileErr != nil {
+		return Account{}, fileErr
+	}
+	if hasFileAccount && selectorMatches(selector, fileAccount) {
+		m.selector = selector
+		return fileAccount, nil
+	}
+	return Account{}, err
 }
 
-func (m *AuthManager) activeAccount() (Account, error) {
+func (m *AuthManager) activeAccount() (Account, sessionSource, error) {
+	// Prefer the keyring when an account exists in both stores.
 	account, err := m.store.Account(m.selector)
-	if errors.Is(err, keyring.ErrNotFound) {
-		return Account{}, ErrNotAuthenticated
+	if err == nil {
+		return account, sessionSourceKeyring, nil
 	}
-	return account, err
+	fileAccount, hasFileAccount, fileErr := m.findInsecureFileAccount()
+	if fileErr != nil {
+		return Account{}, sessionSourceKeyring, fileErr
+	}
+	if hasFileAccount && selectorMatches(m.selector, fileAccount) {
+		return fileAccount, sessionSourceInsecureFile, nil
+	}
+	if !errors.Is(err, keyring.ErrNotFound) {
+		return Account{}, sessionSourceKeyring, err
+	}
+	return Account{}, sessionSourceKeyring, ErrNotAuthenticated
+}
+
+// findInsecureFileAccount returns the sole account stored in the insecure credential file.
+func (m *AuthManager) findInsecureFileAccount() (Account, bool, error) {
+	if m.insecureStore == nil {
+		return Account{}, false, nil
+	}
+	return m.insecureStore.FindAccount()
 }
 
 func NewAuthManager(callbackURL string) *AuthManager {
@@ -120,25 +177,40 @@ func NewAuthManagerWithClient(callbackURL string, httpClient *http.Client) *Auth
 	store := NewKeyringStore()
 	app := oauth.NewClientApp(&config, store)
 	app.Client = httpClient
+	// Best-effort: if the credentials directory cannot be created (e.g. no home
+	// directory), --insecure login will surface a clear error instead.
+	insecureStore, _ := newInsecureFileStore()
 	return &AuthManager{
-		app:    app,
-		store:  store,
-		client: httpClient,
+		app:           app,
+		store:         store,
+		insecureStore: insecureStore,
+		client:        httpClient,
 	}
 }
 
 // LoginWithPassword authenticates with an atproto app password and stores the
-// resulting session in the keyring. Any existing OAuth session is cleared so
-// only one auth method is active for this account.
-func (m *AuthManager) LoginWithPassword(ctx context.Context, identifier, password string) error {
+// resulting session. When useInsecureFileStore is true the session is written to
+// plaintext instead of the keyring; this is intended
+// for headless systems without a Secret Service provider. Keyring-backed logins
+// replace any existing OAuth session for the account.
+func (m *AuthManager) LoginWithPassword(ctx context.Context, identifier, password string, useInsecureFileStore bool) error {
+	if useInsecureFileStore && m.insecureStore == nil {
+		return errors.New("insecure credential storage is unavailable")
+	}
 	parsedIdentifier, err := syntax.ParseAtIdentifier(identifier)
 	if err != nil {
 		return err
 	}
 	ctx, cancel := m.requestContext(ctx)
 	defer cancel()
+	savePasswordSession := func(data atclient.PasswordSessionData) error {
+		if useInsecureFileStore {
+			return m.insecureStore.SavePasswordSession(identifier, data)
+		}
+		return m.store.SavePasswordSession(context.Background(), data)
+	}
 	persist := func(_ context.Context, data atclient.PasswordSessionData) {
-		_ = m.store.SavePasswordSession(context.Background(), data)
+		_ = savePasswordSession(data)
 	}
 	client, err := atclient.LoginWithPassword(ctx, identity.DefaultDirectory(), parsedIdentifier, password, "", persist)
 	if err != nil {
@@ -149,7 +221,14 @@ func (m *AuthManager) LoginWithPassword(ctx context.Context, identifier, passwor
 		return errors.New("password login returned an unexpected auth type")
 	}
 	client.Client = m.client
-	if err := m.store.SavePasswordSession(ctx, passwordAuth.Session); err != nil {
+	if useInsecureFileStore {
+		if err := savePasswordSession(passwordAuth.Session); err != nil {
+			return err
+		}
+		m.selector = passwordAuth.Session.AccountDID.String()
+		return nil
+	}
+	if err := savePasswordSession(passwordAuth.Session); err != nil {
 		return err
 	}
 	did := passwordAuth.Session.AccountDID.String()
@@ -195,13 +274,16 @@ func (m *AuthManager) CancelLogin() {
 }
 
 func (m *AuthManager) CurrentDID(ctx context.Context) (syntax.DID, error) {
-	account, err := m.activeAccount()
+	account, source, err := m.activeAccount()
 	if err != nil {
 		return "", err
 	}
 	did, err := syntax.ParseDID(account.DID)
 	if err != nil {
 		return "", err
+	}
+	if source == sessionSourceInsecureFile {
+		return did, nil
 	}
 	if account.Method == AuthMethodOAuth {
 		session, err := m.app.ResumeSession(ctx, did, "")
@@ -224,11 +306,13 @@ func (m *AuthManager) CurrentDID(ctx context.Context) (syntax.DID, error) {
 }
 
 func (m *AuthManager) CurrentSession(ctx context.Context) (*oauth.ClientSession, error) {
-	account, err := m.activeAccount()
+	account, source, err := m.activeAccount()
 	if err != nil {
 		return nil, err
 	}
-	if account.Method != AuthMethodOAuth {
+	// The file store only holds app-password sessions, so there is no OAuth
+	// ClientSession to return. Callers fall back to APIClient for token access.
+	if source == sessionSourceInsecureFile || account.Method != AuthMethodOAuth {
 		return nil, ErrNotAuthenticated
 	}
 	did, err := syntax.ParseDID(account.DID)
@@ -246,12 +330,28 @@ func (m *AuthManager) CurrentSession(ctx context.Context) (*oauth.ClientSession,
 }
 
 // APIClient returns an API client and the account DID for the active session,
-// whether OAuth or app-password. Token refreshes are persisted back to the
-// keyring.
+// whether OAuth or app-password and whether backed by the keyring or the
+// insecure file store. Token refreshes are persisted back to whichever store
+// backs the session.
 func (m *AuthManager) APIClient(ctx context.Context) (*atclient.APIClient, syntax.DID, error) {
-	account, err := m.activeAccount()
+	account, source, err := m.activeAccount()
 	if err != nil {
 		return nil, "", err
+	}
+	if source == sessionSourceInsecureFile {
+		session, _, err := m.insecureStore.GetPasswordSession()
+		if err != nil {
+			if errors.Is(err, keyring.ErrNotFound) {
+				return nil, "", ErrNotAuthenticated
+			}
+			return nil, "", err
+		}
+		persist := func(_ context.Context, data atclient.PasswordSessionData) {
+			_ = m.insecureStore.SavePasswordSession(account.Handle, data)
+		}
+		client := atclient.ResumePasswordSession(*session, persist)
+		client.Client = m.client
+		return client, session.AccountDID, nil
 	}
 	did, err := syntax.ParseDID(account.DID)
 	if err != nil {
@@ -313,14 +413,17 @@ func (m *AuthManager) SessionStatus(ctx context.Context) (string, syntax.DID, er
 	return SessionStatusUnknown, did, nil
 }
 
-// Logout removes the active account's credentials from the local keyring.
-// Server-side revocation is best-effort; the local entry is removed even
-// if the PDS rejects the revoke request. Returns ErrNotAuthenticated when
-// there is no active account.
+// Logout removes the active account's credentials from whichever store backs
+// it (keyring or insecure file). Server-side revocation is best-effort; the
+// local entry is removed even if the PDS rejects the revoke request. Returns
+// ErrNotAuthenticated when there is no active account.
 func (m *AuthManager) Logout(ctx context.Context) error {
-	account, err := m.activeAccount()
+	account, source, err := m.activeAccount()
 	if err != nil {
 		return err
+	}
+	if source == sessionSourceInsecureFile {
+		return m.logoutFile(ctx)
 	}
 	did, err := syntax.ParseDID(account.DID)
 	if err != nil {
@@ -353,12 +456,36 @@ func (m *AuthManager) Logout(ctx context.Context) error {
 	return nil
 }
 
+// logoutFile revokes the file-backed session server-side (best-effort) and
+// deletes the credentials file.
+func (m *AuthManager) logoutFile(ctx context.Context) error {
+	session, _, _ := m.insecureStore.GetPasswordSession()
+	if session != nil {
+		client := atclient.ResumePasswordSession(*session, nil)
+		client.Client = m.client
+		if passwordAuth, ok := client.Auth.(*atclient.PasswordAuth); ok {
+			_ = passwordAuth.Logout(ctx, client.Client)
+		}
+	}
+	if err := m.insecureStore.DeletePasswordSession(); err != nil {
+		return fmt.Errorf("clear local session: %w", err)
+	}
+	return nil
+}
+
 func (m *AuthManager) LogoutAll(ctx context.Context) error {
-	accounts, _, err := m.store.Accounts()
+	accounts, _, keyringErr := m.store.Accounts()
+	_, hasFileAccount, err := m.findInsecureFileAccount()
 	if err != nil {
 		return err
 	}
-	if len(accounts) == 0 {
+	if keyringErr != nil && !errors.Is(keyringErr, keyring.ErrNotFound) {
+		if !hasFileAccount {
+			return keyringErr
+		}
+		accounts = nil
+	}
+	if len(accounts) == 0 && !hasFileAccount {
 		return ErrNotAuthenticated
 	}
 	originalSelector := m.selector
@@ -370,5 +497,20 @@ func (m *AuthManager) LogoutAll(ctx context.Context) error {
 			errs = append(errs, fmt.Errorf("logout %s: %w", account.DID, err))
 		}
 	}
+	if hasFileAccount {
+		if err := m.logoutFile(ctx); err != nil {
+			errs = append(errs, fmt.Errorf("logout file session: %w", err))
+		}
+	}
 	return errors.Join(errs...)
+}
+
+// selectorMatches reports whether selector (empty, DID, or handle) identifies
+// the given account, mirroring findAccount's matching for the single-account
+// file store.
+func selectorMatches(selector string, account Account) bool {
+	if selector == "" {
+		return true
+	}
+	return account.DID == selector || strings.EqualFold(account.Handle, selector)
 }

@@ -16,6 +16,7 @@ import (
 
 func newAuthLoginCommand(service *app.Service) *cobra.Command {
 	var passwordStdin bool
+	var useInsecureFileStore bool
 
 	command := &cobra.Command{
 		Use:   "login <handle> [app-password]",
@@ -28,8 +29,11 @@ func newAuthLoginCommand(service *app.Service) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			if useInsecureFileStore && !usePassword {
+				return fmt.Errorf("--insecure requires an app password; pass one as the second argument or use --password-stdin")
+			}
 			if usePassword {
-				if err := service.LoginWithPassword(cmd.Context(), identifier, password); err != nil {
+				if err := service.LoginWithPassword(cmd.Context(), identifier, password, useInsecureFileStore); err != nil {
 					return err
 				}
 				did, err := service.CurrentDID(cmd.Context())
@@ -78,6 +82,7 @@ func newAuthLoginCommand(service *app.Service) *cobra.Command {
 		},
 	}
 	command.Flags().BoolVar(&passwordStdin, "password-stdin", false, "Read the app password from standard input")
+	command.Flags().BoolVar(&useInsecureFileStore, "insecure", false, "Store credentials in a file (~/.local/share/tg/credentials.json) instead of the system keyring. Requires an app password.")
 	return command
 }
 
