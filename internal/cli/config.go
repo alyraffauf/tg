@@ -88,6 +88,5 @@ func configSearchDirs() []string {
 	} else if home, err := os.UserHomeDir(); err == nil {
 		dirs = append(dirs, filepath.Join(home, ".config", "tg"))
 	}
-	dirs = append(dirs, ".")
 	return dirs
 }

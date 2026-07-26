@@ -18,12 +18,12 @@ func TestConfigSearchDirs(t *testing.T) {
 		{
 			name: "xdg config home set",
 			xdg:  xdg,
-			want: []string{filepath.Join(xdg, "tg"), "."},
+			want: []string{filepath.Join(xdg, "tg")},
 		},
 		{
 			name: "fall back to home",
 			xdg:  "",
-			want: []string{filepath.Join(home, ".config", "tg"), "."},
+			want: []string{filepath.Join(home, ".config", "tg")},
 		},
 	}
 
