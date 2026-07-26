@@ -72,6 +72,15 @@ needed.
 - `tangled/` — Typed client for the Bobbin API (`api.tangled.org`)
 - `atproto/` — Identity resolution (handle ↔ DID, PDS discovery); OAuth session storage (system keyring)
 
+## Generated code
+
+`internal/tangledlex/` is generated from the Tangled lexicons. Do not edit the
+`.go` files in that package by hand or via PR; they are produced by
+`internal/tangledlex/generate-lexicons.sh` and carry `// Code generated ...`
+headers. To add or update lexicons, modify `schemas.txt` (and the CBOR generator
+list in `cborgen/main.go` if needed) and run the update script. See
+`internal/tangledlex/README.md` for the full workflow.
+
 ## Dependencies
 
 - Go 1.26+
