@@ -54,22 +54,46 @@ func (s *Service) resolveRepo(ctx context.Context, t Target) (*tangled.Repo, err
 		if repo.URI == "" {
 			repo.URI = recordURI
 		}
-		return repo, nil
+		if isCanonicalRepoRecord(*repo) || stringValue(repo.Value.Name) == "" {
+			return repo, nil
+		}
+		return s.resolveCanonicalRepo(ctx, ident.DID.String(), t, repo)
 	} else if !shouldListRepoRecords(err) {
 		return nil, fmt.Errorf("get repository %q: %w", t.Repo, err)
 	}
 
-	repos, err := s.appview.ListRepos(ctx, ident.DID.String())
+	return s.resolveCanonicalRepo(ctx, ident.DID.String(), t, nil)
+}
+
+func (s *Service) resolveCanonicalRepo(ctx context.Context, ownerDID string, t Target, directRepo *tangled.Repo) (*tangled.Repo, error) {
+	repos, err := s.appview.ListRepos(ctx, ownerDID)
 	if err != nil {
 		return nil, fmt.Errorf("list repos for %q: %w", t.Handle, err)
 	}
-	for index := range repos.Items {
-		repo := &repos.Items[index]
+	if directRepo != nil {
+		return canonicalRepoForAlias(repos.Items, *directRepo), nil
+	}
+	for _, repo := range repos.Items {
 		if stringValue(repo.Value.Name) == t.Repo || extractRKey(repo.URI) == t.Repo {
-			return repo, nil
+			return canonicalRepoForAlias(repos.Items, repo), nil
 		}
 	}
 	return nil, fmt.Errorf("repo %q not found for handle %q", t.Repo, t.Handle)
+}
+
+func canonicalRepoForAlias(items []tangled.Repo, alias tangled.Repo) *tangled.Repo {
+	aliasName := stringValue(alias.Value.Name)
+	aliasRepoDID := stringValue(alias.Value.RepoDid)
+	if aliasName == "" || aliasRepoDID == "" {
+		return &alias
+	}
+	for index := range items {
+		candidate := &items[index]
+		if stringValue(candidate.Value.RepoDid) == aliasRepoDID && isCanonicalRepoRecord(*candidate) && stringValue(candidate.Value.Name) == aliasName {
+			return candidate
+		}
+	}
+	return &alias
 }
 
 // repoDID resolves a target to the key used by issue and pull-request listings.

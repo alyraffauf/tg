@@ -17,14 +17,9 @@ import (
 
 // ViewRepo fetches a single repository record.
 func (s *Service) ViewRepo(ctx context.Context, t Target) (*RepoItem, error) {
-	ident, err := s.resolver.ResolveHandle(ctx, t.Handle)
+	tangledRepo, err := s.resolveRepo(ctx, t)
 	if err != nil {
-		return nil, fmt.Errorf("resolve handle %q: %w", t.Handle, err)
-	}
-	repoURI := fmt.Sprintf("at://%s/sh.tangled.repo/%s", ident.DID, t.Repo)
-	tangledRepo, err := s.appview.GetRepo(ctx, repoURI)
-	if err != nil {
-		return nil, fmt.Errorf("get repo %s: %w", t, err)
+		return nil, err
 	}
 	name := stringValue(tangledRepo.Value.Name)
 	if name == "" {
@@ -33,7 +28,7 @@ func (s *Service) ViewRepo(ctx context.Context, t Target) (*RepoItem, error) {
 	return &RepoItem{
 		Name:        name,
 		Author:      t.Handle,
-		URI:         repoURI,
+		URI:         tangledRepo.URI,
 		Knot:        tangledRepo.Value.Knot,
 		Description: stringValue(tangledRepo.Value.Description),
 		CreatedAt:   tangledRepo.Value.CreatedAt,
@@ -55,8 +50,9 @@ func (s *Service) ListRepos(ctx context.Context, handle string) ([]RepoItem, err
 }
 
 func buildRepoItems(items []tangled.Repo, author string) []RepoItem {
-	result := make([]RepoItem, 0, len(items))
-	for _, tangledRepo := range items {
+	canonicalRepos := canonicalRepoItems(items)
+	result := make([]RepoItem, 0, len(canonicalRepos))
+	for _, tangledRepo := range canonicalRepos {
 		name := stringValue(tangledRepo.Value.Name)
 		if name == "" {
 			// Fall back to the rkey segment of the at:// URI.
@@ -75,6 +71,36 @@ func buildRepoItems(items []tangled.Repo, author string) []RepoItem {
 		})
 	}
 	return result
+}
+
+// canonicalRepoItems returns one record per repository DID. Renamed repositories
+// retain old records as aliases; the record keyed by its name is current.
+func canonicalRepoItems(items []tangled.Repo) []tangled.Repo {
+	result := make([]tangled.Repo, 0, len(items))
+	indexesByRepoDID := make(map[string]int)
+	for _, repo := range items {
+		repoDID := stringValue(repo.Value.RepoDid)
+		if repoDID == "" {
+			result = append(result, repo)
+			continue
+		}
+
+		resultIndex, found := indexesByRepoDID[repoDID]
+		if !found {
+			indexesByRepoDID[repoDID] = len(result)
+			result = append(result, repo)
+			continue
+		}
+		if isCanonicalRepoRecord(repo) && !isCanonicalRepoRecord(result[resultIndex]) {
+			result[resultIndex] = repo
+		}
+	}
+	return result
+}
+
+func isCanonicalRepoRecord(repo tangled.Repo) bool {
+	name := stringValue(repo.Value.Name)
+	return name != "" && extractRKey(repo.URI) == name
 }
 
 // ProvisionRepoInput configures repository provisioning.
