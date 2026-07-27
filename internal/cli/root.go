@@ -12,8 +12,11 @@ import (
 )
 
 const (
-	oauthCallbackAddr = "127.0.0.1:8095"
-	oauthCallbackURL  = "http://" + oauthCallbackAddr + "/callback"
+	// oauthCallbackHost is the loopback address the OAuth callback server
+	// binds. The port is allocated dynamically per login (RFC 8252), not pinned
+	// here, to avoid clashes with other local services.
+	oauthCallbackHost = "127.0.0.1"
+	oauthCallbackPath = "/callback"
 )
 
 func NewRoot(service *app.Service) *cobra.Command {
@@ -61,7 +64,7 @@ func ExecuteWith(arguments []string, input io.Reader, output, errorOutput io.Wri
 		return err
 	}
 	settings := loadConfig(flags, errorOutput)
-	service := app.NewWithStreams(settings.Appview, oauthCallbackURL, output, errorOutput)
+	service := app.NewWithStreams(settings.Appview, output, errorOutput)
 	service.SetAccount(settings.Account)
 	root := NewRoot(service)
 	root.SetArgs(arguments)

@@ -165,14 +165,16 @@ func (m *AuthManager) findInsecureFileAccount() (Account, bool, error) {
 	return m.insecureStore.FindAccount()
 }
 
-func NewAuthManager(callbackURL string) *AuthManager {
-	return NewAuthManagerWithClient(callbackURL, http.DefaultClient)
+func NewAuthManager() *AuthManager {
+	return NewAuthManagerWithClient(http.DefaultClient)
 }
 
 // NewAuthManagerWithClient creates an AuthManager using httpClient for OAuth
-// and authenticated API requests.
-func NewAuthManagerWithClient(callbackURL string, httpClient *http.Client) *AuthManager {
-	config := oauth.NewLocalhostConfig(callbackURL, DefaultScopes)
+// and authenticated API requests. The OAuth loopback redirect URI is not known
+// until a callback server is bound, so it is configured per login via
+// SetCallbackURL before StartLogin.
+func NewAuthManagerWithClient(httpClient *http.Client) *AuthManager {
+	config := oauth.NewLocalhostConfig("", DefaultScopes)
 	config.UserAgent = "tg"
 	store := NewKeyringStore()
 	app := oauth.NewClientApp(&config, store)
@@ -186,6 +188,16 @@ func NewAuthManagerWithClient(callbackURL string, httpClient *http.Client) *Auth
 		insecureStore: insecureStore,
 		client:        httpClient,
 	}
+}
+
+// SetCallbackURL configures the loopback redirect URI (including a dynamically
+// allocated port) for the next OAuth login. Per RFC 8252, tg binds an
+// ephemeral port per login, so this must be called with the bound listener's
+// address before StartLogin.
+func (m *AuthManager) SetCallbackURL(callbackURL string) {
+	updated := oauth.NewLocalhostConfig(callbackURL, DefaultScopes)
+	updated.UserAgent = m.app.Config.UserAgent
+	*m.app.Config = updated
 }
 
 // LoginWithPassword authenticates with an atproto app password and stores the

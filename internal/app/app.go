@@ -32,18 +32,19 @@ const DefaultKnot = knot.DefaultKnot
 const defaultHTTPTimeout = 30 * time.Second
 
 // New returns a Service with production defaults: the default atproto
-// identity directory, the given appview host, and an AuthManager using
-// oauthCallbackURL for localhost OAuth redirects.
-func New(appviewHost, oauthCallbackURL string) *Service {
-	return NewWithStreams(appviewHost, oauthCallbackURL, os.Stdout, os.Stderr)
+// identity directory and the given appview host. The OAuth loopback redirect
+// URI is configured per login (see SetOAuthCallbackURL) using an ephemeral
+// port allocated when the callback server is bound.
+func New(appviewHost string) *Service {
+	return NewWithStreams(appviewHost, os.Stdout, os.Stderr)
 }
 
 // NewWithStreams creates production dependencies with configurable command
 // output streams.
-func NewWithStreams(appviewHost, oauthCallbackURL string, stdout, stderr io.Writer) *Service {
+func NewWithStreams(appviewHost string, stdout, stderr io.Writer) *Service {
 	httpClient := &http.Client{Timeout: defaultHTTPTimeout}
 	resolver := &atproto.Resolver{Directory: identity.DefaultDirectory()}
-	auth := atproto.NewAuthManagerWithClient(oauthCallbackURL, httpClient)
+	auth := atproto.NewAuthManagerWithClient(httpClient)
 	return &Service{
 		resolver: resolver,
 		appview: &tangled.Tangled{
@@ -56,6 +57,13 @@ func NewWithStreams(appviewHost, oauthCallbackURL string, stdout, stderr io.Writ
 		knot:       productionKnotFactory{httpClient: httpClient},
 		httpClient: httpClient,
 	}
+}
+
+// SetOAuthCallbackURL configures the loopback redirect URI used for the next
+// OAuth login. Should be called with the address of a freshly bound local
+// listener before StartLogin.
+func (s *Service) SetOAuthCallbackURL(callbackURL string) {
+	s.auth.SetCallbackURL(callbackURL)
 }
 
 // SetAccount selects the account used by subsequent service operations.

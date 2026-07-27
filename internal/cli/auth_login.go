@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -110,8 +111,19 @@ func loginPassword(args []string, fromStdin bool, stdin io.Reader) (string, bool
 func runCallbackServer(service *app.Service) (*http.Server, <-chan error, error) {
 	resultChannel := make(chan error, 1)
 
+	listener, err := net.Listen("tcp", oauthCallbackHost+":0")
+	if err != nil {
+		return nil, nil, fmt.Errorf("bind callback listener: %w", err)
+	}
+
+	// Register the actual bound port as the OAuth redirect URI before starting
+	// the login flow. RFC 8252 loopback redirects allow any port; binding an
+	// ephemeral one avoids clashes with other local services.
+	callbackURL := "http://" + listener.Addr().String() + oauthCallbackPath
+	service.SetOAuthCallbackURL(callbackURL)
+
 	serveMux := http.NewServeMux()
-	serveMux.HandleFunc("/callback", func(w http.ResponseWriter, r *http.Request) {
+	serveMux.HandleFunc(oauthCallbackPath, func(w http.ResponseWriter, r *http.Request) {
 		if err := service.FinishLogin(r.Context(), r.URL.Query()); err != nil {
 			resultChannel <- err
 			http.Error(w, err.Error(), http.StatusBadRequest)
@@ -122,12 +134,11 @@ func runCallbackServer(service *app.Service) (*http.Server, <-chan error, error)
 	})
 
 	server := &http.Server{
-		Addr:    oauthCallbackAddr,
 		Handler: serveMux,
 	}
 
 	go func() {
-		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := server.Serve(listener); err != nil && err != http.ErrServerClosed {
 			resultChannel <- fmt.Errorf("callback server: %w", err)
 		}
 	}()
