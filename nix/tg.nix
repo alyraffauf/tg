@@ -10,7 +10,7 @@ buildGoModule {
   version = "dev";
   src = ../.;
   proxyVendor = true;
-  vendorHash = "sha256-a3O6J1fwbbb33vCL33c8DZYtrFHSwf0v/VwKhx0YLdg=";
+  vendorHash = "sha256-Vh4uhJOXGMYoX7haUD6r3zti1KSb/uO5+TOtn0NrcCk=";
   subPackages = ["cmd/tg"];
 
   nativeBuildInputs = [installShellFiles];

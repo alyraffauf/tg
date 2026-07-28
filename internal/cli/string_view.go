@@ -29,12 +29,15 @@ If no handle is given, views the authenticated user's string
 				return err
 			}
 			return output(cmd, result, func(view *app.StringViewResult) {
-				fmt.Fprintf(cmd.OutOrStdout(), "Filename:    %s\n", view.Filename)
-				fmt.Fprintf(cmd.OutOrStdout(), "Author:      %s\n", view.Author.Handle)
-				fmt.Fprintf(cmd.OutOrStdout(), "Created:     %s\n", view.CreatedAt)
-				if view.Description != "" {
-					fmt.Fprintf(cmd.OutOrStdout(), "Description: %s\n", view.Description)
+				fields := []detailField{
+					{"Filename", view.Filename},
+					{"Author", view.Author.Handle},
+					{"Created", view.CreatedAt},
 				}
+				if view.Description != "" {
+					fields = append(fields, detailField{"Description", view.Description})
+				}
+				renderDetail(cmd.OutOrStdout(), fields, "")
 				fmt.Fprintf(cmd.OutOrStdout(), "\n%s\n", view.Contents)
 			})
 		},

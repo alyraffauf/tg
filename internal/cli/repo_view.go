@@ -1,8 +1,6 @@
 package cli
 
 import (
-	"fmt"
-
 	"github.com/alyraffauf/tg/internal/app"
 	"github.com/spf13/cobra"
 )
@@ -24,14 +22,17 @@ func newRepoViewCommand(service *app.Service) *cobra.Command {
 				return err
 			}
 			return output(cmd, item, func(item *app.RepoItem) {
-				fmt.Fprintf(cmd.OutOrStdout(), "Name:        %s\n", item.Name)
-				fmt.Fprintf(cmd.OutOrStdout(), "Description: %s\n", item.Description)
-				fmt.Fprintf(cmd.OutOrStdout(), "URI:         %s\n", item.URI)
-				fmt.Fprintf(cmd.OutOrStdout(), "Knot:        %s\n", item.Knot)
-				fmt.Fprintf(cmd.OutOrStdout(), "Created:     %s\n", item.CreatedAt)
-				if item.RepoDid != "" {
-					fmt.Fprintf(cmd.OutOrStdout(), "Repo DID:    %s\n", item.RepoDid)
+				fields := []detailField{
+					{"Name", item.Name},
+					{"Description", item.Description},
+					{"URI", item.URI},
+					{"Knot", item.Knot},
+					{"Created", item.CreatedAt},
 				}
+				if item.RepoDid != "" {
+					fields = append(fields, detailField{"Repo DID", item.RepoDid})
+				}
+				renderDetail(cmd.OutOrStdout(), fields, "")
 			})
 		},
 	}

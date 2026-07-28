@@ -1,8 +1,6 @@
 package cli
 
 import (
-	"fmt"
-
 	"github.com/alyraffauf/tg/internal/app"
 	"github.com/spf13/cobra"
 )
@@ -29,13 +27,13 @@ directory's git origin remote.`,
 				return err
 			}
 			return output(cmd, view, func(view *app.ViewResult) {
-				fmt.Fprintf(cmd.OutOrStdout(), "Title:   %s\n", view.Title)
-				fmt.Fprintf(cmd.OutOrStdout(), "Author:  %s\n", view.Author.Handle)
-				fmt.Fprintf(cmd.OutOrStdout(), "Created: %s\n", view.CreatedAt)
-				fmt.Fprintf(cmd.OutOrStdout(), "Branch:  %s → %s\n", view.SourceBranch, view.TargetBranch)
-				if view.Body != "" {
-					fmt.Fprintf(cmd.OutOrStdout(), "\n%s\n", view.Body)
+				fields := []detailField{
+					{"Title", view.Title},
+					{"Author", view.Author.Handle},
+					{"Created", view.CreatedAt},
+					{"Branch", view.SourceBranch + " → " + view.TargetBranch},
 				}
+				renderDetail(cmd.OutOrStdout(), fields, view.Body)
 			})
 		},
 	}
