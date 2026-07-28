@@ -30,15 +30,41 @@ func ParseTarget(arg string) (Target, error) {
 
 // TargetFromCWD detects the target using the service's Git client.
 func (s *Service) TargetFromCWD(ctx context.Context) (Target, error) {
-	return targetFromCWD(ctx, s.git)
+	target, _, err := s.targetFromCWD(ctx, false)
+	return target, err
 }
 
-func targetFromCWD(ctx context.Context, git gitClient) (Target, error) {
-	rc, err := git.DetectRepoFromCWD(ctx)
+func (s *Service) repoFromCWD(ctx context.Context) (Target, *tangled.Repo, error) {
+	return s.targetFromCWD(ctx, true)
+}
+
+func (s *Service) targetFromCWD(ctx context.Context, resolveHosted bool) (Target, *tangled.Repo, error) {
+	candidates, err := s.git.DetectRepoCandidatesFromCWD(ctx)
 	if err != nil {
-		return Target{}, fmt.Errorf("detect repo from current directory: %w", err)
+		return Target{}, nil, fmt.Errorf("detect repo from current directory: %w", err)
 	}
-	return Target{Handle: rc.Handle, Repo: rc.Repo}, nil
+	var failures []string
+	for _, candidate := range candidates {
+		target := Target{Handle: candidate.Handle, Repo: candidate.Repo}
+		if candidate.KnotHost == "" && !resolveHosted {
+			return target, nil, nil
+		}
+		repo, err := s.resolveRepo(ctx, target)
+		if err != nil {
+			failures = append(failures, fmt.Sprintf("%s: %v", target, err))
+			continue
+		}
+		if candidate.KnotHost != "" {
+			candidateHost, candidateErr := parseKnotHostname(candidate.KnotHost)
+			recordHost, recordErr := parseKnotHostname(repo.Value.Knot)
+			if candidateErr != nil || recordErr != nil || candidateHost != recordHost {
+				failures = append(failures, fmt.Sprintf("%s: remote Knot %q does not match repository record Knot %q", target, candidate.KnotHost, repo.Value.Knot))
+				continue
+			}
+		}
+		return target, repo, nil
+	}
+	return Target{}, nil, fmt.Errorf("no Git remote matches a Tangled repository record: %s; pass the repository as handle/repo", strings.Join(failures, "; "))
 }
 
 // resolveRepo finds a repository record even when its rkey does not match

@@ -53,14 +53,9 @@ type CheckoutPullInput struct {
 
 // CheckoutPull downloads and applies the latest pull request patch.
 func (s *Service) CheckoutPull(ctx context.Context, in CheckoutPullInput) (*PRCheckoutResult, error) {
-	localRepo, err := s.git.DetectRepoFromCWD(ctx)
+	localTarget, localRecord, err := s.repoFromCWD(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("detect local repository: %w", err)
-	}
-	localTarget := Target{Handle: localRepo.Handle, Repo: localRepo.Repo}
-	localRecord, err := s.resolveRepo(ctx, localTarget)
-	if err != nil {
-		return nil, err
 	}
 
 	target := localTarget

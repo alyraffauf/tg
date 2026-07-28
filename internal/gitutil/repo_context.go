@@ -39,38 +39,44 @@ func knotRemoteURL(knotHost string, sshPort int, handle, repo string) string {
 	return "git@" + gitHost + ":" + handle + "/" + repo
 }
 
-// RepoContext holds the handle and repo name parsed from a git remote URL.
+// RepoContext holds an untrusted repository candidate parsed from a git remote
+// URL. KnotHost is empty for Tangled's hosted Git endpoint; otherwise callers
+// must verify it against the repository record before trusting the candidate.
 type RepoContext struct {
-	Handle string
-	Repo   string
+	KnotHost string
+	Handle   string
+	Repo     string
 }
 
-// DetectRepoFromCWD scans the git remotes in the current directory for one
-// pointing at Tangled, checking the default remote first. Returns the first
-// match.
-func (c *Client) DetectRepoFromCWD(ctx context.Context) (*RepoContext, error) {
+// DetectRepoCandidatesFromCWD scans the git remotes in the current directory
+// for hosted Tangled URLs and untrusted custom-Knot SSH candidates, checking
+// the default remote first.
+func (c *Client) DetectRepoCandidatesFromCWD(ctx context.Context) ([]RepoContext, error) {
 	remotes, err := c.gitLines(ctx, "remote")
 	if err != nil {
 		return nil, fmt.Errorf("list git remotes: %w", err)
 	}
 
+	var candidates []RepoContext
 	for _, name := range originFirst(remotes) {
 		urls, err := c.gitLines(ctx, "remote", "get-url", "--all", name)
 		if err != nil {
 			return nil, fmt.Errorf("get URLs for remote %q: %w", name, err)
 		}
 		for _, raw := range urls {
-			if rc, ok := parseTangledURL(raw); ok {
-				return rc, nil
+			if candidate, ok := parseRepoCandidate(raw); ok {
+				candidates = append(candidates, *candidate)
 			}
 		}
 	}
-
-	return nil, fmt.Errorf("no Tangled remote found among %d remote(s) %q; pass the repository as handle/repo", len(remotes), remotes)
+	if len(candidates) == 0 {
+		return nil, fmt.Errorf("no Tangled remote candidate found among %d remote(s) %q; pass the repository as handle/repo", len(remotes), remotes)
+	}
+	return candidates, nil
 }
 
-func DetectRepoFromCWD(ctx context.Context) (*RepoContext, error) {
-	return defaultClient.DetectRepoFromCWD(ctx)
+func DetectRepoCandidatesFromCWD(ctx context.Context) ([]RepoContext, error) {
+	return defaultClient.DetectRepoCandidatesFromCWD(ctx)
 }
 
 // originFirst returns remotes with the default remote first (if present),
@@ -87,20 +93,29 @@ func originFirst(remotes []string) []string {
 	return ordered
 }
 
-// parseTangledURL parses a Tangled git remote URL into handle and repo.
-// Returns ok=false for URLs that don't point at Tangled.
+// parseRepoCandidate parses a hosted Tangled URL or custom SSH URL into an
+// untrusted repository candidate. Custom hosts must be verified by the app
+// layer against the repository record.
 //
-// Supported formats: SCP-like (git@tangled.org:handle/repo), ssh://, git://,
-// https://, and http:// URLs.
-func parseTangledURL(raw string) (*RepoContext, bool) {
+// Tangled's hosted endpoint supports SCP-like, ssh://, git://, https://, and
+// http:// URLs. Custom Knot candidates must use SSH.
+func parseRepoCandidate(raw string) (*RepoContext, bool) {
 	u, err := parseGitURL(strings.TrimSpace(raw))
 	if err != nil {
 		return nil, false
 	}
-	if !strings.EqualFold(u.Hostname(), tangledHost) {
+	hosted := strings.EqualFold(u.Hostname(), tangledHost)
+	if !hosted && u.Scheme != "ssh" {
 		return nil, false
 	}
-	return splitHandleRepo(strings.TrimPrefix(u.Path, "/"))
+	candidate, ok := splitHandleRepo(strings.TrimPrefix(u.Path, "/"))
+	if !ok {
+		return nil, false
+	}
+	if !hosted {
+		candidate.KnotHost = strings.ToLower(u.Hostname())
+	}
+	return candidate, true
 }
 
 // parseGitURL parses a git remote URL, including SCP-like syntax

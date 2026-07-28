@@ -32,7 +32,7 @@ tg pr create --title "Add feature" --base main
 tg pr merge <rkey>
 ```
 
-`tg` auto-detects the repository from the `origin` remote when run inside a cloned Tangled repo. For now, only ssh origins are supported. You can also pass a fully-qualified `handle/repo` argument.
+`tg` auto-detects the repository from Git remotes when run inside a cloned Tangled repo, checking `origin` first. Hosted Tangled remotes support SSH, Git, HTTP, and HTTPS URLs. Custom Knot remotes support SSH URLs and are accepted only when the host matches the repository's canonical record. You can also pass a fully qualified `handle/repo` argument.
 
 ## Documentation
 

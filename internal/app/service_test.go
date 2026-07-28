@@ -307,9 +307,11 @@ func (p *testPDS) GetServiceAuth(_ context.Context, audience, _ string) (string,
 }
 
 type testGit struct {
-	branch string
-	clones []gitutil.CloneRepoParams
-	pushes []gitutil.PushNewRepoParams
+	branch         string
+	clones         []gitutil.CloneRepoParams
+	pushes         []gitutil.PushNewRepoParams
+	repoCandidates []gitutil.RepoContext
+	detectErr      error
 }
 
 func (g *testGit) CloneRepo(_ context.Context, input gitutil.CloneRepoParams) error {
@@ -329,8 +331,8 @@ func (g *testGit) CurrentBranch(context.Context, string) (string, error) { retur
 func (g *testGit) DefaultBranch(context.Context, string) (string, error) {
 	return "", errors.New("not implemented")
 }
-func (g *testGit) DetectRepoFromCWD(context.Context) (*gitutil.RepoContext, error) {
-	return nil, errors.New("not implemented")
+func (g *testGit) DetectRepoCandidatesFromCWD(context.Context) ([]gitutil.RepoContext, error) {
+	return g.repoCandidates, g.detectErr
 }
 
 type testKnotFactory struct {

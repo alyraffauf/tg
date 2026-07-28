@@ -49,7 +49,7 @@ type gitClient interface {
 	GeneratePatch(context.Context, string, string, string) ([]byte, error)
 	CurrentBranch(context.Context, string) (string, error)
 	DefaultBranch(context.Context, string) (string, error)
-	DetectRepoFromCWD(context.Context) (*gitutil.RepoContext, error)
+	DetectRepoCandidatesFromCWD(context.Context) ([]gitutil.RepoContext, error)
 }
 
 type knotClient interface {
