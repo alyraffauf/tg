@@ -1,7 +1,7 @@
 package cli
 
 import (
-	"fmt"
+	"io"
 
 	"github.com/alyraffauf/tg/internal/app"
 	"github.com/spf13/cobra"
@@ -18,18 +18,20 @@ func newAuthListCommand(service *app.Service) *cobra.Command {
 				return err
 			}
 			return output(cmd, results, func(items []app.AuthAccountResult) {
-				if len(items) == 0 {
-					fmt.Fprintln(cmd.OutOrStdout(), "No accounts.")
-					return
-				}
-				for _, item := range items {
-					marker := " "
-					if item.Active {
-						marker = "*"
-					}
-					fmt.Fprintf(cmd.OutOrStdout(), "%s %s  %s  %s\n", marker, item.Handle, item.DID, item.Method)
-				}
+				renderAuthAccountList(cmd.OutOrStdout(), items)
 			})
 		},
 	}
+}
+
+func renderAuthAccountList(writer io.Writer, items []app.AuthAccountResult) {
+	rows := make([][]string, 0, len(items))
+	for _, item := range items {
+		active := ""
+		if item.Active {
+			active = "*"
+		}
+		rows = append(rows, []string{active, item.Handle, item.DID, item.Method})
+	}
+	renderTable(writer, []string{"ACTIVE", "HANDLE", "DID", "METHOD"}, rows, "No accounts.")
 }
