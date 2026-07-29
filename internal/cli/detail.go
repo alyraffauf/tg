@@ -4,10 +4,11 @@ import (
 	"fmt"
 	"image/color"
 	"io"
+	"os"
 	"strings"
 
+	"charm.land/glamour/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/charmbracelet/glamour"
 )
 
 // defaultTerminalWidth is used when the terminal width can't be detected.
@@ -93,7 +94,16 @@ func renderMarkdown(writer io.Writer, body string) {
 		width = defaultTerminalWidth
 	}
 
-	renderer, err := glamour.NewTermRenderer(glamour.WithAutoStyle(), glamour.WithWordWrap(width))
+	// Pick the style from the terminal background. Query the same terminal that
+	// receives the rendered output; if it isn't file-backed or the query fails,
+	// default to dark.
+	style := "dark"
+	terminal := asFile(writer)
+	if terminal != nil && !lipgloss.HasDarkBackground(os.Stdin, terminal) {
+		style = "light"
+	}
+
+	renderer, err := glamour.NewTermRenderer(glamour.WithStandardStyle(style), glamour.WithWordWrap(width))
 	if err != nil {
 		fmt.Fprintln(writer, body)
 		return
@@ -105,5 +115,7 @@ func renderMarkdown(writer io.Writer, body string) {
 		return
 	}
 
-	fmt.Fprintln(writer, strings.TrimSpace(rendered))
+	// glamour v2 emits TrueColor, lipgloss downsamples to the terminal's color
+	// profile on write.
+	lipgloss.Fprintln(writer, strings.TrimSpace(rendered))
 }
