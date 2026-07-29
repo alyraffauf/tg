@@ -59,3 +59,92 @@ can specify one with `--knot` or set it in the config file.
 Set `knot` in your config, `TG_KNOT` in your environment, or pass `--knot` to
 select a host explicitly and bypass automatic discovery. The flag overrides
 the environment, which overrides the config file.
+
+## Shell completions
+
+Put the relevant `tg completion` command in your shell config to source the
+completions on startup _or_ pipe the generated completions to a file somewhere
+your shell will source on startup.
+
+### Bash
+
+This goes in your config and increases shell startup latency because of command
+invocation overhead, but doesn't require updating later
+
+```bash
+source <(tg completion bash)
+```
+
+Run these to generate completions that'll later need updating. They depend on
+`bash-completion`.
+
+```bash
+mkdir -p "${XDG_DATA_HOME:-$HOME/.local/share}/bash-completion/completions"
+# run to generate, rerun to update
+tg completion bash > "${XDG_DATA_HOME:-$HOME/.local/share}/bash-completion/completions/tg.bash"
+```
+
+### Zsh
+
+This goes in your config and increases shell startup latency because of command
+invocation overhead, but doesn't require updating later. Put it somewhere
+_after_ loading your Zsh framework or `compinit`.
+
+```zsh
+source <(tg completion zsh)
+```
+
+Run these to generate completions that'll later need updating
+
+```zsh
+mkdir -p "${XDG_DATA_HOME:-$HOME/.local/share}/zsh/site-functions"
+# run to generate, rerun to update
+tg completion zsh > "${XDG_DATA_HOME:-$HOME/.local/share}/zsh/site-functions/_tg"
+```
+
+Sourcing the generated completions automatically requires this somewhere in your
+config _before_ loading your Zsh framework or `compinit`.
+
+```zsh
+fpath=("${XDG_DATA_HOME:-$HOME/.local/share}/zsh/site-functions" $fpath)
+```
+
+### Fish
+
+This goes in your config and increases shell startup latency because of command
+invocation overhead, but doesn't require updating later
+
+```fish
+tg completion fish | source
+```
+
+Run these to generate completions that'll later need updating
+
+```fish
+mkdir -p "$__fish_config_dir/completions"
+# run to generate, rerun to update
+tg completion fish > "$__fish_config_dir/completions/tg.fish"
+```
+
+### PowerShell
+
+This goes in your PowerShell profile and increases shell startup latency because
+of command invocation overhead, but doesn't require updating later
+
+```powershell
+tg completion powershell | Out-String | Invoke-Expression
+```
+
+Run these to generate completions that'll later need updating
+
+```powershell
+New-Item -ItemType Directory -Force -Path (Split-Path -Parent $PROFILE) | Out-Null
+# run to generate, rerun to update
+tg completion powershell | Set-Content -Encoding utf8 -Path (Join-Path (Split-Path -Parent $PROFILE) "tg-completion.ps1")
+```
+
+Then add this to your PowerShell profile:
+
+```powershell
+. (Join-Path (Split-Path -Parent $PROFILE) "tg-completion.ps1")
+```
