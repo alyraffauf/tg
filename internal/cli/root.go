@@ -21,9 +21,10 @@ const (
 
 func NewRoot(service *app.Service) *cobra.Command {
 	rootCmd := &cobra.Command{
-		Use:          "tg",
-		Short:        "A CLI for Tangled",
-		SilenceUsage: true,
+		Use:           "tg",
+		Short:         "A CLI for Tangled",
+		SilenceErrors: true,
+		SilenceUsage:  true,
 	}
 	configureRoot(rootCmd)
 
@@ -61,6 +62,7 @@ func Execute() error {
 func ExecuteWith(arguments []string, input io.Reader, output, errorOutput io.Writer) error {
 	flags, err := parseFlagSettings(arguments)
 	if err != nil {
+		renderError(errorOutput, err)
 		return err
 	}
 	settings := loadConfig(flags, errorOutput)
@@ -75,7 +77,10 @@ func ExecuteWith(arguments []string, input io.Reader, output, errorOutput io.Wri
 	// A not-authenticated error from any service method is surfaced as the
 	// familiar login hint, so individual commands don't each have to.
 	if errors.Is(err, app.ErrNotAuthenticated) {
-		return fmt.Errorf("not logged in; run \"tg auth login\" first")
+		err = fmt.Errorf("not logged in; run \"tg auth login\" first")
+	}
+	if err != nil {
+		renderError(errorOutput, err)
 	}
 	return err
 }

@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"bytes"
+	"strings"
 	"testing"
 
 	"github.com/alyraffauf/tg/internal/app"
@@ -27,6 +29,31 @@ func TestNewRootCreatesIndependentCommandState(t *testing.T) {
 	}
 	if got := secondCreate.Flags().Lookup("description").Value.String(); got != "" {
 		t.Fatalf("second root inherited description %q", got)
+	}
+}
+
+func TestExecuteWithRendersErrors(t *testing.T) {
+	var errorOutput bytes.Buffer
+	err := ExecuteWith([]string{"issue", "edit", "abc123"}, nil, &bytes.Buffer{}, &errorOutput)
+	if err == nil {
+		t.Fatal("ExecuteWith() returned nil error")
+	}
+
+	const want = "Error: provide --title or --body\n"
+	if got := errorOutput.String(); got != want {
+		t.Errorf("error output = %q, want %q", got, want)
+	}
+}
+
+func TestExecuteWithRendersPreCommandErrors(t *testing.T) {
+	var errorOutput bytes.Buffer
+	err := ExecuteWith([]string{"--appview"}, nil, &bytes.Buffer{}, &errorOutput)
+	if err == nil {
+		t.Fatal("ExecuteWith() returned nil error")
+	}
+
+	if got := errorOutput.String(); !strings.Contains(got, "Error: flag --appview requires a value\n") {
+		t.Errorf("error output = %q", got)
 	}
 }
 

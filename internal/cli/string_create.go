@@ -63,7 +63,7 @@ Requires authentication (run "tg auth login" first).`,
 func stringContents(stdin io.Reader, args []string, filenameFlag string) (contents, filename string, err error) {
 	if len(args) == 0 || args[0] == "-" {
 		if filenameFlag == "" {
-			return "", "", fmt.Errorf("--filename is required when reading from standard input")
+			return "", "", fmt.Errorf("provide --filename when reading from standard input")
 		}
 		data, err := io.ReadAll(stdin)
 		if err != nil {

@@ -31,7 +31,7 @@ func newIssueEditCommand(service *app.Service) *cobra.Command {
 				body = &bodyText
 			}
 			if title == nil && body == nil {
-				return fmt.Errorf("set --title or --body")
+				return fmt.Errorf("provide --title or --body")
 			}
 			return service.EditIssue(cmd.Context(), args[0], title, body)
 		},

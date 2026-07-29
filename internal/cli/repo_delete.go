@@ -16,7 +16,7 @@ func newRepoDeleteCommand(service *app.Service) *cobra.Command {
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if !confirm {
-				return fmt.Errorf("refusing to delete without --yes")
+				return fmt.Errorf("pass --yes to confirm deletion")
 			}
 			ctx := cmd.Context()
 			target, err := resolveTarget(ctx, args, service)

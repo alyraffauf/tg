@@ -17,7 +17,7 @@ func newRepoEditCommand(service *app.Service) *cobra.Command {
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if !cmd.Flags().Changed("description") && !cmd.Flags().Changed("website") && !cmd.Flags().Changed("spindle") && len(addLabels) == 0 && len(removeLabels) == 0 {
-				return fmt.Errorf("set a repository field to update")
+				return fmt.Errorf("provide a repository field to update")
 			}
 			ctx := cmd.Context()
 			target, err := resolveTarget(ctx, args, service)

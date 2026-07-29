@@ -20,7 +20,7 @@ func newIssueCommentCommand(service *app.Service) *cobra.Command {
 				return err
 			}
 			if body == "" {
-				return fmt.Errorf("set --body or --body-file")
+				return fmt.Errorf("provide --body or --body-file")
 			}
 			ctx := cmd.Context()
 			target, err := resolveTargetFlag(ctx, repository, service)
