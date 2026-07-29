@@ -41,7 +41,7 @@ func newRoot(service *app.Service, defaultKnot, defaultSSHPort string) *cobra.Co
 	rootCmd.AddCommand(issue)
 
 	pull := newPRCommand(service)
-	pull.AddCommand(newPRListCommand(service), newPRViewCommand(service), newPRCreateCommand(service), newPRCommentCommand(service), newPRDiffCommand(service), newPRCheckoutCommand(service), newPRCloseCommand(service), newPRReopenCommand(service), newPREditCommand(service), newPRMergeCommand(service))
+	pull.AddCommand(newPRListCommand(service), newPRViewCommand(service), newPRCreateCommand(service), newPRCommentCommand(service), newPRDiffCommand(service), newPRCheckoutCommand(service), newPRCloseCommand(service), newPRReopenCommand(service), newPREditCommand(service), newPRUpdateCommand(service), newPRMergeCommand(service))
 	rootCmd.AddCommand(pull)
 
 	repo := newRepoCommand(service)

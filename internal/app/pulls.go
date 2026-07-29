@@ -162,6 +162,45 @@ func (s *Service) CreatePull(ctx context.Context, in CreatePullInput) (*PRCreate
 	return &PRCreateResult{URI: uri, Title: in.Title, Base: base, Head: head}, nil
 }
 
+func (s *Service) UpdatePullRound(ctx context.Context, repoDir, rkey string) error {
+	atClient, did, err := s.authenticatedPDS(ctx)
+	if err != nil {
+		return err
+	}
+
+	return updateRecord(ctx, atClient, did, pullCollection, rkey, func(value any) (tangledlex.RepoPull, error) {
+		data, err := json.Marshal(value)
+		if err != nil {
+			return tangledlex.RepoPull{}, fmt.Errorf("encode existing pull request: %w", err)
+		}
+		var record tangledlex.RepoPull
+		if err := json.Unmarshal(data, &record); err != nil {
+			return tangledlex.RepoPull{}, fmt.Errorf("decode existing pull request: %w", err)
+		}
+		if record.Target == nil || record.Source == nil || record.Target.Branch == "" || record.Source.Branch == "" {
+			return tangledlex.RepoPull{}, fmt.Errorf("pull request %q has no source and target branches", rkey)
+		}
+
+		patch, err := s.git.GeneratePatch(ctx, repoDir, record.Target.Branch, record.Source.Branch)
+		if err != nil {
+			return tangledlex.RepoPull{}, fmt.Errorf("generate pull request patch: %w", err)
+		}
+		blob, err := atClient.UploadBlob(ctx, patch, patchMimeType)
+		if err != nil {
+			return tangledlex.RepoPull{}, err
+		}
+		patchBlob, err := patchBlob(blob)
+		if err != nil {
+			return tangledlex.RepoPull{}, err
+		}
+		record.Rounds = append(record.Rounds, &tangledlex.RepoPull_Round{
+			CreatedAt: time.Now().UTC().Format(time.RFC3339),
+			PatchBlob: &patchBlob,
+		})
+		return record, nil
+	})
+}
+
 func atURIPrefix(uri string) bool { return len(uri) >= 5 && uri[:5] == "at://" }
 
 func createPullRecord(ctx context.Context, atClient pdsClient, did string, input pullRecordInput) (string, error) {

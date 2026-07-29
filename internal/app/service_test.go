@@ -269,6 +269,8 @@ type testPDS struct {
 	record               *atproto.GetRecordOutput
 	records              []atproto.RecordItem
 	putErr               error
+	uploadBlob           *atproto.Blob
+	uploadErr            error
 	listErr              error
 	listCalls            int
 	listOptions          []atproto.ListRecordsOpts
@@ -295,6 +297,12 @@ func (p *testPDS) DeleteRecord(_ context.Context, input atproto.DeleteRecordInpu
 }
 
 func (p *testPDS) UploadBlob(context.Context, []byte, string) (*atproto.Blob, error) {
+	if p.uploadErr != nil {
+		return nil, p.uploadErr
+	}
+	if p.uploadBlob != nil {
+		return p.uploadBlob, nil
+	}
 	return nil, errors.New("not implemented")
 }
 
@@ -333,6 +341,8 @@ func (p *testPDS) GetServiceAuth(_ context.Context, audience, _ string) (string,
 
 type testGit struct {
 	branch         string
+	patch          []byte
+	patchErr       error
 	clones         []gitutil.CloneRepoParams
 	pushes         []gitutil.PushNewRepoParams
 	repoCandidates []gitutil.RepoContext
@@ -350,6 +360,12 @@ func (g *testGit) PushNewRepo(_ context.Context, input gitutil.PushNewRepoParams
 }
 func (g *testGit) CheckoutPatch(context.Context, gitutil.CheckoutPatchParams) error { return nil }
 func (g *testGit) GeneratePatch(context.Context, string, string, string) ([]byte, error) {
+	if g.patchErr != nil {
+		return nil, g.patchErr
+	}
+	if g.patch != nil {
+		return g.patch, nil
+	}
 	return nil, errors.New("not implemented")
 }
 func (g *testGit) CurrentBranch(context.Context, string) (string, error) { return g.branch, nil }
