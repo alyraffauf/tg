@@ -612,14 +612,11 @@ func forkSourceURL(knotHost, repoDID string) string {
 }
 
 func (s *Service) getForkSource(ctx context.Context, t Target) (forkSource, error) {
-	ident, err := s.resolver.ResolveHandle(ctx, t.Handle)
+	// Repository names are not guaranteed to be their ATProto record rkeys.
+	// Use the common resolver so forks work for repositories with generated rkeys.
+	repo, err := s.resolveRepo(ctx, t)
 	if err != nil {
-		return forkSource{}, fmt.Errorf("resolve handle %q: %w", t.Handle, err)
-	}
-	uri := fmt.Sprintf("at://%s/sh.tangled.repo/%s", ident.DID, t.Repo)
-	repo, err := s.appview.GetRepo(ctx, uri)
-	if err != nil {
-		return forkSource{}, fmt.Errorf("get source repository %s: %w", t, err)
+		return forkSource{}, fmt.Errorf("resolve source repository %s: %w", t, err)
 	}
 	if repo.Value.Knot == "" {
 		return forkSource{}, fmt.Errorf("source repository %s has no knot", t)
@@ -627,10 +624,7 @@ func (s *Service) getForkSource(ctx context.Context, t Target) (forkSource, erro
 	if stringValue(repo.Value.RepoDid) == "" {
 		return forkSource{}, fmt.Errorf("source repository %s has no repo DID", t)
 	}
-	if repo.URI != "" {
-		uri = repo.URI
-	}
-	return forkSource{URI: uri, Knot: repo.Value.Knot, RepoDID: stringValue(repo.Value.RepoDid)}, nil
+	return forkSource{URI: repo.URI, Knot: repo.Value.Knot, RepoDID: stringValue(repo.Value.RepoDid)}, nil
 }
 
 func (s *Service) deleteFork(ctx context.Context, atClient pdsClient, knotHost, did, name string) error {
