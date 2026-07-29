@@ -49,6 +49,7 @@ func (s *Service) ViewIssue(ctx context.Context, t Target, rkey string) (*ViewRe
 	return &ViewResult{
 		Rkey:      rkey,
 		Title:     decoded.Title,
+		State:     found.State,
 		Body:      decoded.Body,
 		Author:    s.resolveAuthor(ctx, extractDID(found.URI)),
 		CreatedAt: decoded.CreatedAt,

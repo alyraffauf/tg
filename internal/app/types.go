@@ -65,6 +65,7 @@ type StringViewResult struct {
 type ViewResult struct {
 	Rkey         string `json:"rkey"`
 	Title        string `json:"title"`
+	State        string `json:"state"`
 	Body         string `json:"body,omitempty"`
 	Author       Author `json:"author"`
 	CreatedAt    string `json:"createdAt"`

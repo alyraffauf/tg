@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"image/color"
 	"io"
 	"strings"
 
@@ -22,7 +23,7 @@ type detailField struct {
 func renderDetail(writer io.Writer, fields []detailField, body string) {
 	labelStyle := lipgloss.NewStyle().Width(labelColumnWidth(fields))
 	if isTerminal(writer) {
-		labelStyle = labelStyle.Bold(true)
+		labelStyle = labelStyle.Faint(true)
 	}
 
 	for _, field := range fields {
@@ -35,6 +36,35 @@ func renderDetail(writer io.Writer, fields []detailField, body string) {
 
 	fmt.Fprintln(writer)
 	renderMarkdown(writer, body)
+}
+
+func formatDetailState(writer io.Writer, state string) string {
+	if !isTerminal(writer) {
+		return state
+	}
+
+	style := lipgloss.NewStyle()
+	if terminalColor := stateColor(state); terminalColor != nil {
+		style = style.Foreground(terminalColor)
+	} else {
+		style = style.Faint(true)
+	}
+	return style.Render(state)
+}
+
+func stateColor(state string) color.Color {
+	switch strings.ToLower(state) {
+	case "open":
+		return lipgloss.Green
+	case "closed":
+		return lipgloss.Red
+	case "merged":
+		return lipgloss.Magenta
+	case "draft":
+		return lipgloss.Yellow
+	default:
+		return nil
+	}
 }
 
 // labelColumnWidth returns the width to pad every label to; the +2 accounts

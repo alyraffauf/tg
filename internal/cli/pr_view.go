@@ -29,6 +29,7 @@ directory's git origin remote.`,
 			return output(cmd, view, func(view *app.ViewResult) {
 				fields := []detailField{
 					{"Title", view.Title},
+					{"Status", formatDetailState(cmd.OutOrStdout(), view.State)},
 					{"Author", view.Author.Handle},
 					{"Created", view.CreatedAt},
 					{"Branch", view.SourceBranch + " → " + view.TargetBranch},

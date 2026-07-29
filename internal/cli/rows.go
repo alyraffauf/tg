@@ -50,8 +50,8 @@ var terminalWidth = func(w io.Writer) int {
 }
 
 // renderTable writes a table of rows under header to writer. When writer
-// is a terminal the table is drawn with a border and a bold header; when
-// piped or redirected it falls back to a plain tab-aligned table.
+// is a terminal the table uses a muted header and separator; when piped or
+// redirected it falls back to a plain tab-aligned table.
 // emptyMessage is shown when rows is empty.
 func renderTable(writer io.Writer, header []string, rows [][]string, emptyMessage string) {
 	if len(rows) == 0 {
@@ -60,7 +60,7 @@ func renderTable(writer io.Writer, header []string, rows [][]string, emptyMessag
 	}
 
 	if isTerminal(writer) {
-		renderBorderedTable(writer, header, rows)
+		renderTerminalTable(writer, header, rows)
 		return
 	}
 
@@ -72,37 +72,69 @@ func renderTable(writer io.Writer, header []string, rows [][]string, emptyMessag
 	tw.Flush()
 }
 
-// renderBorderedTable renders a bordered, styled table for interactive
-// terminals. Cells truncate (with "…") rather than wrap; on narrow
-// terminals the table is shrunk to fit the terminal width.
-func renderBorderedTable(writer io.Writer, header []string, rows [][]string) {
-	rendered := newBorderedTable(header, rows).Render()
+// renderTerminalTable renders a styled table for interactive terminals. Cells
+// truncate (with "…") rather than wrap; on narrow terminals the table is
+// shrunk to fit the terminal width.
+func renderTerminalTable(writer io.Writer, header []string, rows [][]string) {
+	rendered := newTerminalTable(header, rows).Render()
 
 	// The top border spans the full table width, so it tells us whether
 	// the natural width fits the terminal. If it overflows, re-render
 	// with a width cap so lipgloss shrinks columns instead of spilling.
 	if w := terminalWidth(writer); w > 0 {
 		if first, _, _ := strings.Cut(rendered, "\n"); lipgloss.Width(first) > w {
-			rendered = newBorderedTable(header, rows).Width(w).Render()
+			rendered = newTerminalTable(header, rows).Width(w).Render()
 		}
 	}
 
 	fmt.Fprintln(writer, rendered)
 }
 
-func newBorderedTable(header []string, rows [][]string) *table.Table {
+func newTerminalTable(header []string, rows [][]string) *table.Table {
 	return table.New().
 		Headers(header...).
 		Rows(rows...).
 		Border(lipgloss.NormalBorder()).
+		BorderTop(false).
+		BorderBottom(false).
+		BorderLeft(false).
+		BorderRight(false).
+		BorderColumn(false).
+		BorderRow(false).
+		BorderHeader(true).
+		BorderStyle(lipgloss.NewStyle().Faint(true)).
 		Wrap(false).
-		StyleFunc(func(row, _ int) lipgloss.Style {
+		StyleFunc(func(row, column int) lipgloss.Style {
 			s := lipgloss.NewStyle().Padding(0, 1)
 			if row == table.HeaderRow {
-				s = s.Bold(true)
+				return s.Bold(true).Faint(true)
 			}
-			return s
+			return styleTableCell(s, header, rows, row, column)
 		})
+}
+
+func styleTableCell(style lipgloss.Style, header []string, rows [][]string, row, column int) lipgloss.Style {
+	if row < 0 || row >= len(rows) || column < 0 || column >= len(header) || column >= len(rows[row]) {
+		return style
+	}
+
+	columnName := strings.ToLower(header[column])
+	value := strings.ToLower(rows[row][column])
+	switch columnName {
+	case "active":
+		if rows[row][column] == "✓" {
+			return style.Bold(true).Foreground(lipgloss.Green)
+		}
+	case "state":
+		if terminalColor := stateColor(value); terminalColor != nil {
+			return style.Foreground(terminalColor)
+		}
+	case "title", "account":
+		return style.Bold(true)
+	case "did", "rkey", "method", "updated":
+		return style.Faint(true)
+	}
+	return style
 }
 
 // renderList renders issue or pull-request items as a table.

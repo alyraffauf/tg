@@ -72,7 +72,7 @@ func TestRenderTable(t *testing.T) {
 		}
 	})
 
-	t.Run("tty is bordered", func(t *testing.T) {
+	t.Run("tty has a header separator", func(t *testing.T) {
 		isTerminal = func(io.Writer) bool { return true }
 		var buf bytes.Buffer
 		renderTable(&buf, header, rows, "")
@@ -83,8 +83,11 @@ func TestRenderTable(t *testing.T) {
 				t.Errorf("output missing %q:\n%s", want, out)
 			}
 		}
-		if !strings.ContainsAny(out, "│─") {
-			t.Errorf("tty output should have border glyphs:\n%s", out)
+		if !strings.Contains(out, "─") {
+			t.Errorf("tty output should have a header separator:\n%s", out)
+		}
+		if strings.ContainsAny(out, "│╭╮╰╯") {
+			t.Errorf("tty output should not have an outer border:\n%s", out)
 		}
 	})
 
@@ -105,8 +108,8 @@ func TestRenderTable(t *testing.T) {
 		if strings.Contains(out, "…") {
 			t.Errorf("natural render should not truncate:\n%s", out)
 		}
-		if !strings.ContainsAny(out, "│─") {
-			t.Errorf("tty output should have border glyphs:\n%s", out)
+		if strings.ContainsAny(out, "│╭╮╰╯") {
+			t.Errorf("tty output should not have an outer border:\n%s", out)
 		}
 	})
 
