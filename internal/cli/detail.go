@@ -5,8 +5,8 @@ import (
 	"io"
 	"strings"
 
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/glamour"
-	"github.com/charmbracelet/lipgloss"
 )
 
 // defaultTerminalWidth is used when the terminal width can't be detected.
@@ -18,11 +18,12 @@ type detailField struct {
 }
 
 // renderDetail writes aligned label/value pairs plus an optional markdown
-// body. A writer-aware lipgloss renderer keeps TTY and piped output in one
-// code path; the body renders as markdown on a terminal, verbatim otherwise.
+// body. The body renders as markdown on a terminal, verbatim otherwise.
 func renderDetail(writer io.Writer, fields []detailField, body string) {
-	renderer := lipgloss.NewRenderer(writer)
-	labelStyle := renderer.NewStyle().Bold(true).Width(labelColumnWidth(fields))
+	labelStyle := lipgloss.NewStyle().Width(labelColumnWidth(fields))
+	if isTerminal(writer) {
+		labelStyle = labelStyle.Bold(true)
+	}
 
 	for _, field := range fields {
 		fmt.Fprintf(writer, "%s%s\n", labelStyle.Render(field.label+":"), field.value)

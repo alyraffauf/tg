@@ -42,7 +42,7 @@ func newAuthLoginCommand(service *app.Service) *cobra.Command {
 					fmt.Fprintln(cmd.ErrOrStderr(), "Login completed but session could not be confirmed.")
 					return err
 				}
-				fmt.Fprintf(cmd.OutOrStdout(), "Logged in as %s\n", did)
+				renderAuthLogin(cmd.OutOrStdout(), did)
 				return nil
 			}
 
@@ -75,7 +75,7 @@ func newAuthLoginCommand(service *app.Service) *cobra.Command {
 					fmt.Fprintln(cmd.ErrOrStderr(), "Login completed but session could not be confirmed.")
 					return err
 				}
-				fmt.Fprintf(cmd.OutOrStdout(), "Logged in as %s\n", did)
+				renderAuthLogin(cmd.OutOrStdout(), did)
 				return nil
 			case <-ctx.Done():
 				return ctx.Err()
@@ -85,6 +85,12 @@ func newAuthLoginCommand(service *app.Service) *cobra.Command {
 	command.Flags().BoolVar(&passwordStdin, "password-stdin", false, "Read the app password from standard input")
 	command.Flags().BoolVar(&useInsecureFileStore, "insecure", false, "Store credentials in a file (~/.local/share/tg/credentials.json) instead of the system keyring. Requires an app password.")
 	return command
+}
+
+func renderAuthLogin(writer io.Writer, did string) {
+	styles := newAuthOutputStyles(isTerminal(writer))
+	writeAuthHeading(writer, styles.active, "✓", "Logged in")
+	writeAuthDetail(writer, styles, "DID", styles.dim.Render(did))
 }
 
 func loginPassword(args []string, fromStdin bool, stdin io.Reader) (string, bool, error) {

@@ -7,9 +7,9 @@ import (
 	"strings"
 	"text/tabwriter"
 
+	"charm.land/lipgloss/v2"
+	"charm.land/lipgloss/v2/table"
 	"github.com/alyraffauf/tg/internal/app"
-	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/lipgloss/table"
 	xterm "github.com/charmbracelet/x/term"
 )
 

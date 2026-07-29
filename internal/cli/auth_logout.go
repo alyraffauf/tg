@@ -1,7 +1,7 @@
 package cli
 
 import (
-	"fmt"
+	"io"
 
 	"github.com/alyraffauf/tg/internal/app"
 	"github.com/spf13/cobra"
@@ -20,14 +20,19 @@ func newAuthLogoutCommand(service *app.Service) *cobra.Command {
 				return err
 			}
 			return output(cmd, result, func(r *app.AuthLogoutResult) {
-				if r.WasLoggedIn {
-					fmt.Fprintln(cmd.OutOrStdout(), "Logged out.")
-				} else {
-					fmt.Fprintln(cmd.OutOrStdout(), "Not logged in.")
-				}
+				renderAuthLogout(cmd.OutOrStdout(), r)
 			})
 		},
 	}
 	command.Flags().BoolVar(&logoutAll, "all", false, "Log out all accounts")
 	return command
+}
+
+func renderAuthLogout(writer io.Writer, result *app.AuthLogoutResult) {
+	styles := newAuthOutputStyles(isTerminal(writer))
+	if result.WasLoggedIn {
+		writeAuthHeading(writer, styles.active, "✓", "Logged out")
+		return
+	}
+	writeAuthHeading(writer, styles.inactive, "○", "Not logged in")
 }

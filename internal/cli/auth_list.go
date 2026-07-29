@@ -29,7 +29,7 @@ func renderAuthAccountList(writer io.Writer, items []app.AuthAccountResult) {
 	for _, item := range items {
 		active := ""
 		if item.Active {
-			active = "*"
+			active = "✓"
 		}
 		rows = append(rows, []string{active, item.Handle, item.DID, item.Method})
 	}
