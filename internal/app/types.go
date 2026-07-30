@@ -176,3 +176,12 @@ type AuthAccountResult struct {
 	Handle string `json:"handle"`
 	Method string `json:"method"`
 }
+
+// GitCredentialResult contains credentials for a Git HTTPS request.
+// MatchesRequestedHost is false when the request is not for the current
+// repository's recorded Knot.
+type GitCredentialResult struct {
+	Token                string
+	Handle               string
+	MatchesRequestedHost bool
+}

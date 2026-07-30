@@ -49,8 +49,8 @@ type RepoContext struct {
 }
 
 // DetectRepoCandidatesFromCWD scans the git remotes in the current directory
-// for hosted Tangled URLs and untrusted custom-Knot SSH candidates, checking
-// the default remote first.
+// for hosted Tangled URLs and untrusted custom-Knot SSH or HTTPS candidates,
+// checking the default remote first.
 func (c *Client) DetectRepoCandidatesFromCWD(ctx context.Context) ([]RepoContext, error) {
 	remotes, err := c.gitLines(ctx, "remote")
 	if err != nil {
@@ -93,19 +93,19 @@ func originFirst(remotes []string) []string {
 	return ordered
 }
 
-// parseRepoCandidate parses a hosted Tangled URL or custom SSH URL into an
-// untrusted repository candidate. Custom hosts must be verified by the app
+// parseRepoCandidate parses a hosted Tangled URL or custom SSH/HTTPS URL into
+// an untrusted repository candidate. Custom hosts must be verified by the app
 // layer against the repository record.
 //
 // Tangled's hosted endpoint supports SCP-like, ssh://, git://, https://, and
-// http:// URLs. Custom Knot candidates must use SSH.
+// http:// URLs. Custom Knot candidates may use SSH or HTTPS.
 func parseRepoCandidate(raw string) (*RepoContext, bool) {
 	u, err := parseGitURL(strings.TrimSpace(raw))
 	if err != nil {
 		return nil, false
 	}
 	hosted := strings.EqualFold(u.Hostname(), tangledHost)
-	if !hosted && u.Scheme != "ssh" {
+	if !hosted && u.Scheme != "ssh" && u.Scheme != "https" {
 		return nil, false
 	}
 	candidate, ok := splitHandleRepo(strings.TrimPrefix(u.Path, "/"))
@@ -182,14 +182,10 @@ func (c *Client) gitLines(ctx context.Context, args ...string) ([]string, error)
 		return nil, fmt.Errorf("git %s: %w", strings.Join(args, " "), err)
 	}
 	var lines []string
-	for _, line := range strings.Split(captured.String(), "\n") {
+	for line := range strings.SplitSeq(captured.String(), "\n") {
 		if line = strings.TrimSpace(line); line != "" {
 			lines = append(lines, line)
 		}
 	}
 	return lines, nil
-}
-
-func gitLines(ctx context.Context, args ...string) ([]string, error) {
-	return defaultClient.gitLines(ctx, args...)
 }

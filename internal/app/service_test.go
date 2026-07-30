@@ -244,8 +244,11 @@ func (r testResolver) ResolvePDS(context.Context, string) (string, error) {
 }
 
 type testSessions struct {
-	pds pdsClient
-	api *atclient.APIClient
+	pds           pdsClient
+	api           *atclient.APIClient
+	hasScope      bool
+	isOAuth       bool
+	oauthScopeErr error
 }
 
 func (s testSessions) AuthenticatedPDS(context.Context) (pdsClient, string, error) {
@@ -263,19 +266,24 @@ func (s testSessions) APIClient(context.Context) (*atclient.APIClient, error) {
 	return s.api, nil
 }
 
+func (s testSessions) OAuthSessionHasScope(context.Context, string) (bool, bool, error) {
+	return s.hasScope, s.isOAuth, s.oauthScopeErr
+}
+
 type testPDS struct {
-	puts                 []atproto.PutRecordInput
-	deletes              []atproto.DeleteRecordInput
-	record               *atproto.GetRecordOutput
-	records              []atproto.RecordItem
-	putErr               error
-	uploadBlob           *atproto.Blob
-	uploadErr            error
-	listErr              error
-	listCalls            int
-	listOptions          []atproto.ListRecordsOpts
-	serviceAuthCalls     int
-	serviceAuthAudiences []string
+	puts                      []atproto.PutRecordInput
+	deletes                   []atproto.DeleteRecordInput
+	record                    *atproto.GetRecordOutput
+	records                   []atproto.RecordItem
+	putErr                    error
+	uploadBlob                *atproto.Blob
+	uploadErr                 error
+	listErr                   error
+	listCalls                 int
+	listOptions               []atproto.ListRecordsOpts
+	serviceAuthCalls          int
+	serviceAuthAudiences      []string
+	serviceAuthLexiconMethods []string
 }
 
 func (p *testPDS) PutRecord(_ context.Context, input atproto.PutRecordInput) (string, string, error) {
@@ -333,9 +341,10 @@ func (p *testPDS) ListAllRecords(context.Context, string, string, atproto.ListRe
 	return p.records, p.listErr
 }
 
-func (p *testPDS) GetServiceAuth(_ context.Context, audience, _ string) (string, error) {
+func (p *testPDS) GetServiceAuth(_ context.Context, audience, lexiconMethod string) (string, error) {
 	p.serviceAuthCalls++
 	p.serviceAuthAudiences = append(p.serviceAuthAudiences, audience)
+	p.serviceAuthLexiconMethods = append(p.serviceAuthLexiconMethods, lexiconMethod)
 	return "token", nil
 }
 

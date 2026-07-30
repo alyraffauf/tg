@@ -1,0 +1,14 @@
+# Appview used for read operations.
+appview = "https://bobbin.klbr.net"
+
+# SSH port for repository creation and SSH clones.
+ssh-port = 22
+
+# Clone URL protocol: "ssh" or "https".
+protocol = "ssh"
+
+# Account handle or DID to use by default.
+# account = "alice.example"
+
+# Knot selected for repository creation. Omit for automatic discovery.
+# knot = "knot.example"

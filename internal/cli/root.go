@@ -20,10 +20,10 @@ const (
 )
 
 func NewRoot(service *app.Service) *cobra.Command {
-	return newRoot(service, "", "22")
+	return newRoot(service, "", "22", "ssh")
 }
 
-func newRoot(service *app.Service, defaultKnot, defaultSSHPort string) *cobra.Command {
+func newRoot(service *app.Service, defaultKnot, defaultSSHPort, defaultProtocol string) *cobra.Command {
 	rootCmd := &cobra.Command{
 		Use:           "tg",
 		Short:         "A CLI for Tangled",
@@ -33,7 +33,7 @@ func newRoot(service *app.Service, defaultKnot, defaultSSHPort string) *cobra.Co
 	configureRoot(rootCmd)
 
 	auth := newAuthCommand(service)
-	auth.AddCommand(newAuthLoginCommand(service), newAuthLogoutCommand(service), newAuthStatusCommand(service), newAuthTokenCommand(service), newAuthListCommand(service), newAuthSwitchCommand(service))
+	auth.AddCommand(newAuthLoginCommand(service), newAuthLogoutCommand(service), newAuthStatusCommand(service), newAuthTokenCommand(service), newAuthListCommand(service), newAuthSwitchCommand(service), newAuthGitCredentialCommand(service))
 	rootCmd.AddCommand(auth)
 
 	issue := newIssueCommand(service)
@@ -45,7 +45,7 @@ func newRoot(service *app.Service, defaultKnot, defaultSSHPort string) *cobra.Co
 	rootCmd.AddCommand(pull)
 
 	repo := newRepoCommand(service)
-	repo.AddCommand(newRepoViewCommand(service), newRepoCloneCommand(service), newRepoCreateCommand(service, defaultKnot, defaultSSHPort), newRepoListCommand(service), newRepoEditCommand(service), newRepoSetDefaultBranchCommand(service), newRepoDeleteCommand(service), newRepoForkCommand(service))
+	repo.AddCommand(newRepoViewCommand(service), newRepoCloneCommand(service, defaultProtocol), newRepoCreateCommand(service, defaultKnot, defaultSSHPort, defaultProtocol), newRepoListCommand(service), newRepoEditCommand(service), newRepoSetDefaultBranchCommand(service), newRepoDeleteCommand(service), newRepoForkCommand(service))
 	rootCmd.AddCommand(repo)
 
 	keys := newSSHKeyCommand(service)
@@ -72,7 +72,7 @@ func ExecuteWith(arguments []string, input io.Reader, output, errorOutput io.Wri
 	settings := loadConfig(flags, errorOutput)
 	service := app.NewWithStreams(settings.Appview, output, errorOutput)
 	service.SetAccount(settings.Account)
-	root := newRoot(service, settings.Knot, settings.SSHPort)
+	root := newRoot(service, settings.Knot, settings.SSHPort, settings.Protocol)
 	root.SetArgs(arguments)
 	root.SetIn(input)
 	root.SetOut(output)

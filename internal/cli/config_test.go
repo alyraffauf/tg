@@ -112,3 +112,38 @@ func TestLoadConfigSSHPortPrecedence(t *testing.T) {
 		})
 	}
 }
+
+func TestLoadConfigProtocolPrecedence(t *testing.T) {
+	tests := []struct {
+		name             string
+		config           string
+		environmentValue string
+		expectedProtocol string
+	}{
+		{name: "default", expectedProtocol: "ssh"},
+		{name: "config", config: "protocol = \"https\"\n", expectedProtocol: "https"},
+		{name: "environment over config", config: "protocol = \"https\"\n", environmentValue: "ssh", expectedProtocol: "ssh"},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			xdgConfigHome := t.TempDir()
+			t.Setenv("XDG_CONFIG_HOME", xdgConfigHome)
+			t.Setenv("TG_PROTOCOL", testCase.environmentValue)
+			if testCase.config != "" {
+				configDirectory := filepath.Join(xdgConfigHome, "tg")
+				if err := os.MkdirAll(configDirectory, 0o700); err != nil {
+					t.Fatalf("create config directory: %v", err)
+				}
+				if err := os.WriteFile(filepath.Join(configDirectory, "config.toml"), []byte(testCase.config), 0o600); err != nil {
+					t.Fatalf("write config: %v", err)
+				}
+			}
+
+			resolved := loadConfig(flagSettings{}, io.Discard)
+			if resolved.Protocol != testCase.expectedProtocol {
+				t.Fatalf("protocol = %q, want %q", resolved.Protocol, testCase.expectedProtocol)
+			}
+		})
+	}
+}

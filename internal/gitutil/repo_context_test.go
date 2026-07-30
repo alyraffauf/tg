@@ -35,8 +35,8 @@ func TestParseRepoCandidate(t *testing.T) {
 		{"custom Knot ssh", "git@knot.example:aly.codes/tg", true, "knot.example", "aly.codes", "tg"},
 		{"custom Knot ssh URL with port", "ssh://git@KNOT.EXAMPLE:2222/aly.codes/tg", true, "knot.example", "aly.codes", "tg"},
 		{"github ssh is an untrusted candidate", "git@github.com:alyraffauf/tg.git", true, "github.com", "alyraffauf", "tg"},
-		{"github https", "https://github.com/alyraffauf/tg.git", false, "", "", ""},
-		{"unrelated HTTPS", "https://example.com/foo/bar", false, "", "", ""},
+		{"github https is an untrusted candidate", "https://github.com/alyraffauf/tg.git", true, "github.com", "alyraffauf", "tg"},
+		{"unrelated HTTPS is an untrusted candidate", "https://example.com/foo/bar", true, "example.com", "foo", "bar"},
 		{"unrelated git protocol", "git://example.com/foo/bar", false, "", "", ""},
 		{"empty", "", false, "", "", ""},
 	}
@@ -81,6 +81,40 @@ func TestKnotRemoteURL(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := knotRemoteURL(tt.knotHost, tt.sshPort, "aly.codes", "tg"); got != tt.want {
 				t.Fatalf("knotRemoteURL() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCloneRemoteURL(t *testing.T) {
+	tests := []struct {
+		name        string
+		protocol    string
+		knotHost    string
+		sshPort     int
+		expectedURL string
+		expectedErr string
+	}{
+		{name: "SSH", protocol: "ssh", knotHost: "knot.example", sshPort: 22, expectedURL: "git@knot.example:aly.codes/tg"},
+		{name: "HTTPS", protocol: "https", knotHost: "knot.example", expectedURL: "https://knot.example/aly.codes/tg.git"},
+		{name: "HTTPS without knot", protocol: "https", expectedErr: "HTTPS clone requires a Knot host"},
+		{name: "unsupported protocol", protocol: "git", expectedErr: "unsupported clone protocol \"git\""},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			cloneURL, err := cloneRemoteURL(testCase.protocol, testCase.knotHost, testCase.sshPort, "aly.codes", "tg")
+			if testCase.expectedErr != "" {
+				if err == nil || err.Error() != testCase.expectedErr {
+					t.Fatalf("cloneRemoteURL() error = %v, want %q", err, testCase.expectedErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("cloneRemoteURL() error = %v", err)
+			}
+			if cloneURL != testCase.expectedURL {
+				t.Fatalf("cloneRemoteURL() = %q, want %q", cloneURL, testCase.expectedURL)
 			}
 		})
 	}

@@ -124,18 +124,26 @@ type ProvisionRepoInput struct {
 
 // CreateRepoInput configures provisioning and optional local setup.
 type CreateRepoInput struct {
-	KnotHost    string
-	SSHPort     int
-	Name        string
-	Description string
-	Clone       bool
-	PushPath    string
-	RemoteName  string
+	KnotHost      string
+	SSHPort       int
+	Name          string
+	Description   string
+	Clone         bool
+	CloneProtocol string
+	PushPath      string
+	RemoteName    string
 }
 
 // CreateRepo provisions a repository and performs requested local Git setup.
 func (s *Service) CreateRepo(ctx context.Context, in CreateRepoInput) (*RepoCreateResult, error) {
-	if (in.Clone || in.PushPath != "") && (in.SSHPort < 1 || in.SSHPort > 65535) {
+	if in.Clone {
+		cloneProtocol, err := validateCloneProtocol(in.CloneProtocol)
+		if err != nil {
+			return nil, err
+		}
+		in.CloneProtocol = cloneProtocol
+	}
+	if ((in.Clone && in.CloneProtocol == "ssh") || in.PushPath != "") && (in.SSHPort < 1 || in.SSHPort > 65535) {
 		return nil, fmt.Errorf("SSH port must be between 1 and 65535")
 	}
 	if in.KnotHost != "" {
@@ -153,9 +161,9 @@ func (s *Service) CreateRepo(ctx context.Context, in CreateRepoInput) (*RepoCrea
 	}
 	result := &RepoCreateResult{Handle: handle, Name: in.Name, URI: uri, Knot: selectedKnot, Warnings: warnings}
 	if in.Clone {
-		if _, err := s.CloneRepo(ctx, CloneRepoInput{
+		if _, err := s.cloneRepo(ctx, CloneRepoInput{
 			KnotHost: selectedKnot, SSHPort: in.SSHPort,
-			Handle: handle, Repo: in.Name, Destination: in.Name,
+			Protocol: in.CloneProtocol, Handle: handle, Repo: in.Name, Destination: in.Name,
 		}); err != nil {
 			return nil, fmt.Errorf("clone new repository: %w", err)
 		}

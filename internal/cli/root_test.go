@@ -58,7 +58,7 @@ func TestExecuteWithRendersPreCommandErrors(t *testing.T) {
 }
 
 func TestRepoCreateSSHPortHelp(t *testing.T) {
-	create, _, err := newRoot(&app.Service{}, "configured.example", "2200").Find([]string{"repo", "create"})
+	create, _, err := newRoot(&app.Service{}, "configured.example", "2200", "ssh").Find([]string{"repo", "create"})
 	if err != nil {
 		t.Fatalf("find repo create command: %v", err)
 	}
@@ -78,15 +78,28 @@ func TestRepoCreateSSHPortHelp(t *testing.T) {
 }
 
 func TestRepoCreateRejectsMalformedSSHPort(t *testing.T) {
-	command := newRepoCreateCommand(&app.Service{}, "configured.example", "not-a-port")
+	command := newRepoCreateCommand(&app.Service{}, "configured.example", "not-a-port", "ssh")
+	if err := command.Flags().Set("clone", "true"); err != nil {
+		t.Fatalf("set clone flag: %v", err)
+	}
 	err := command.RunE(command, []string{"example"})
 	if err == nil || !strings.Contains(err.Error(), `invalid SSH port "not-a-port"`) {
 		t.Fatalf("repo create error = %v", err)
 	}
 }
 
+func TestParseRepoCreateSSHPort(t *testing.T) {
+	port, err := parseRepoCreateSSHPort("not-a-port", "https", true, "")
+	if err != nil {
+		t.Fatalf("parseRepoCreateSSHPort() error = %v", err)
+	}
+	if port != 0 {
+		t.Fatalf("port = %d, want 0", port)
+	}
+}
+
 func TestRepoCreateKnotFlag(t *testing.T) {
-	create, _, err := newRoot(&app.Service{}, "configured.example", "22").Find([]string{"repo", "create"})
+	create, _, err := newRoot(&app.Service{}, "configured.example", "22", "ssh").Find([]string{"repo", "create"})
 	if err != nil {
 		t.Fatalf("find repo create command: %v", err)
 	}

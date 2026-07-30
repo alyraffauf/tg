@@ -8,7 +8,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func newRepoCreateCommand(service *app.Service, defaultKnot, defaultSSHPort string) *cobra.Command {
+func newRepoCreateCommand(service *app.Service, defaultKnot, defaultSSHPort, defaultProtocol string) *cobra.Command {
 	var description, knotHost, pushPath, remote, sshPort string
 	var clone bool
 
@@ -38,14 +38,14 @@ Requires authentication (run "tg auth login" first).`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
-			parsedSSHPort, err := strconv.Atoi(sshPort)
+			parsedSSHPort, err := parseRepoCreateSSHPort(sshPort, defaultProtocol, clone, pushPath)
 			if err != nil {
-				return fmt.Errorf("invalid SSH port %q: %w", sshPort, err)
+				return err
 			}
 
 			result, err := service.CreateRepo(ctx, app.CreateRepoInput{
 				KnotHost: knotHost, SSHPort: parsedSSHPort, Name: args[0], Description: description,
-				Clone: clone, PushPath: pushPath, RemoteName: remote,
+				Clone: clone, CloneProtocol: defaultProtocol, PushPath: pushPath, RemoteName: remote,
 			})
 			if err != nil {
 				return err
@@ -60,6 +60,17 @@ Requires authentication (run "tg auth login" first).`,
 	command.Flags().StringVar(&pushPath, "push", "", "Push an existing local repository at this path to the new remote (e.g. .)")
 	command.Flags().StringVar(&remote, "remote", "origin", "Remote name to use with --push")
 	return command
+}
+
+func parseRepoCreateSSHPort(sshPort, cloneProtocol string, clone bool, pushPath string) (int, error) {
+	if pushPath == "" && (!clone || cloneProtocol != "ssh") {
+		return 0, nil
+	}
+	parsedSSHPort, err := strconv.Atoi(sshPort)
+	if err != nil {
+		return 0, fmt.Errorf("invalid SSH port %q: %w", sshPort, err)
+	}
+	return parsedSSHPort, nil
 }
 
 func renderRepoCreate(cmd *cobra.Command, repo *app.RepoCreateResult) {

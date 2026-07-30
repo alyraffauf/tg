@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 
 	"github.com/bluesky-social/indigo/atproto/atclient"
@@ -75,6 +76,7 @@ var DefaultScopes = []string{
 	"rpc:sh.tangled.repo.listSecrets?aud=*",
 	"rpc:sh.tangled.repo.merge?aud=*",
 	"rpc:sh.tangled.repo.mergeCheck?aud=*",
+	"rpc:sh.tangled.repo.push?aud=*",
 	"rpc:sh.tangled.repo.removeCollaborator?aud=*",
 	"rpc:sh.tangled.repo.removeSecret?aud=*",
 	"rpc:sh.tangled.repo.setDefaultBranch?aud=*",
@@ -339,6 +341,19 @@ func (m *AuthManager) CurrentSession(ctx context.Context) (*oauth.ClientSession,
 		return nil, err
 	}
 	return session, nil
+}
+
+// OAuthSessionHasScope reports whether the active OAuth session grants scope.
+// isOAuth is false for app-password and missing sessions.
+func (m *AuthManager) OAuthSessionHasScope(ctx context.Context, scope string) (hasScope, isOAuth bool, err error) {
+	session, err := m.CurrentSession(ctx)
+	if errors.Is(err, ErrNotAuthenticated) {
+		return false, false, nil
+	}
+	if err != nil {
+		return false, false, err
+	}
+	return slices.Contains(session.Data.Scopes, scope), true, nil
 }
 
 // APIClient returns an API client and the account DID for the active session,

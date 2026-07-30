@@ -7,11 +7,11 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func newRepoCloneCommand(service *app.Service) *cobra.Command {
+func newRepoCloneCommand(service *app.Service, defaultProtocol string) *cobra.Command {
 	return &cobra.Command{
 		Use:   "clone <repo | handle/repo> [directory]",
 		Short: "Clone a Tangled repository",
-		Long: `Clone a Tangled repository via SSH into a local directory.
+		Long: `Clone a Tangled repository into a local directory.
 
 The default destination is the repository name. If only a repository name is
 given, the authenticated user's handle is used.
@@ -34,6 +34,7 @@ Run "tg auth login" first when using the repository-only form.`,
 				Handle:      target.Handle,
 				Repo:        target.Repo,
 				Destination: dest,
+				Protocol:    defaultProtocol,
 			})
 			if err != nil {
 				return fmt.Errorf("clone %q: %w", args[0], err)

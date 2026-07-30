@@ -41,6 +41,7 @@ type sessionProvider interface {
 	AuthenticatedPDS(context.Context) (pdsClient, string, error)
 	PublicPDS(context.Context, string) (pdsClient, string, error)
 	APIClient(context.Context) (*atclient.APIClient, error)
+	OAuthSessionHasScope(context.Context, string) (hasScope, isOAuth bool, err error)
 }
 
 type gitClient interface {
@@ -106,6 +107,10 @@ func (s productionSessions) APIClient(ctx context.Context) (*atclient.APIClient,
 		return nil, fmt.Errorf("resume auth session: %w", err)
 	}
 	return client, nil
+}
+
+func (s productionSessions) OAuthSessionHasScope(ctx context.Context, scope string) (hasScope, isOAuth bool, err error) {
+	return s.auth.OAuthSessionHasScope(ctx, scope)
 }
 
 type productionKnotFactory struct {

@@ -20,10 +20,11 @@ const (
 // config resolves values with the following precedence (highest to lowest):
 // command-line flags, environment variables prefixed TG_, config file, defaults.
 type settings struct {
-	Appview string
-	Account string
-	Knot    string
-	SSHPort string
+	Appview  string
+	Account  string
+	Knot     string
+	SSHPort  string
+	Protocol string
 }
 
 type flagSettings struct {
@@ -59,25 +60,28 @@ func loadConfig(flags flagSettings, errorWriter io.Writer) settings {
 	config.SetDefault("account", "")
 	config.SetDefault("knot", "")
 	config.SetDefault("ssh-port", "22")
+	config.SetDefault("protocol", "ssh")
 
 	if err := config.ReadInConfig(); err != nil {
 		if _, ok := errors.AsType[viper.ConfigFileNotFoundError](err); ok {
 			// A missing config file is fine; configuration is optional.
 			return applyFlagSettings(settings{
-				Appview: config.GetString("appview"),
-				Account: config.GetString("account"),
-				Knot:    config.GetString("knot"),
-				SSHPort: config.GetString("ssh-port"),
+				Appview:  config.GetString("appview"),
+				Account:  config.GetString("account"),
+				Knot:     config.GetString("knot"),
+				SSHPort:  config.GetString("ssh-port"),
+				Protocol: config.GetString("protocol"),
 			}, flags)
 		}
 		// Surface parse/permission errors but keep running with defaults.
 		fmt.Fprintln(errorWriter, "warning: failed to read config:", err)
 	}
 	resolved := settings{
-		Appview: config.GetString("appview"),
-		Account: config.GetString("account"),
-		Knot:    config.GetString("knot"),
-		SSHPort: config.GetString("ssh-port"),
+		Appview:  config.GetString("appview"),
+		Account:  config.GetString("account"),
+		Knot:     config.GetString("knot"),
+		SSHPort:  config.GetString("ssh-port"),
+		Protocol: config.GetString("protocol"),
 	}
 	return applyFlagSettings(resolved, flags)
 }
