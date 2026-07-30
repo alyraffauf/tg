@@ -181,6 +181,7 @@ func NewAuthManagerWithClient(httpClient *http.Client) *AuthManager {
 	store := NewKeyringStore()
 	app := oauth.NewClientApp(&config, store)
 	app.Client = httpClient
+	app.Resolver.Client = httpClient
 	// Best-effort: if the credentials directory cannot be created (e.g. no home
 	// directory), --insecure login will surface a clear error instead.
 	insecureStore, _ := newInsecureFileStore()

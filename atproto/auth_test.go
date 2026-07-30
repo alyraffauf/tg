@@ -152,6 +152,15 @@ func TestRequestContextUsesClientTimeout(t *testing.T) {
 	}
 }
 
+func TestNewAuthManagerUsesConfiguredClientForOAuthDiscovery(t *testing.T) {
+	httpClient := &http.Client{}
+	manager := NewAuthManagerWithClient(httpClient)
+
+	if manager.app.Resolver.Client != httpClient {
+		t.Error("OAuth resolver does not use the configured HTTP client")
+	}
+}
+
 func TestAPIClientNotAuthenticated(t *testing.T) {
 	manager := newAuthManagerForTest("http://127.0.0.1:8095/callback", testKeyringStore(newFakeKeyring()))
 	_, _, err := manager.APIClient(context.Background())
