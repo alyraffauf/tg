@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"io"
 	"strings"
 
 	"github.com/alyraffauf/tg/internal/app"
@@ -30,19 +31,27 @@ git origin remote.`,
 				return err
 			}
 			return output(cmd, result, func(result *app.PipelineCancelResult) {
-				if !result.CancellationRequested {
-					fmt.Fprintf(cmd.OutOrStdout(), "Pipeline %s has no pending or running workflows.\n", result.Pipeline)
-					return
-				}
-				if len(workflows) == 0 {
-					fmt.Fprintf(cmd.OutOrStdout(), "Cancellation requested for pipeline %s.\n", result.Pipeline)
-					return
-				}
-				fmt.Fprintf(cmd.OutOrStdout(), "Cancellation requested for workflows %s in pipeline %s.\n", strings.Join(result.Workflows, ", "), result.Pipeline)
+				renderPipelineCancellation(cmd.OutOrStdout(), result, len(workflows) > 0)
 			})
 		},
 	}
 	command.Flags().StringVarP(&repository, "repo", "R", "", "Target repository as handle/repo")
 	command.Flags().StringSliceVarP(&workflows, "workflow", "w", nil, "Workflow name to cancel (repeatable)")
 	return command
+}
+
+func renderPipelineCancellation(writer io.Writer, result *app.PipelineCancelResult, selectedWorkflows bool) {
+	if !result.CancellationRequested {
+		if selectedWorkflows {
+			fmt.Fprintln(writer, "None of the selected workflows are pending or running.")
+			return
+		}
+		fmt.Fprintf(writer, "Pipeline %s has no pending or running workflows.\n", result.Pipeline)
+		return
+	}
+	if !selectedWorkflows {
+		fmt.Fprintf(writer, "Cancellation requested for pipeline %s.\n", result.Pipeline)
+		return
+	}
+	fmt.Fprintf(writer, "Cancellation requested for workflows %s in pipeline %s.\n", strings.Join(result.Workflows, ", "), result.Pipeline)
 }
