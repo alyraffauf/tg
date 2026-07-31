@@ -49,8 +49,12 @@ func renderPipelineDetail(writer io.Writer, pipeline *app.Pipeline) {
 	}
 	renderDetail(writer, fields, "")
 
-	rows := make([][]string, 0, len(pipeline.Workflows))
-	for _, workflow := range pipeline.Workflows {
+	renderPipelineWorkflows(writer, pipeline.Workflows)
+}
+
+func renderPipelineWorkflows(writer io.Writer, workflows []app.PipelineWorkflow) {
+	rows := make([][]string, 0, len(workflows))
+	for _, workflow := range workflows {
 		rows = append(rows, []string{
 			workflow.Name,
 			workflow.Status,

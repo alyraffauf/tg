@@ -49,7 +49,7 @@ func newRoot(service *app.Service, defaultKnot, defaultSSHPort, defaultProtocol 
 	rootCmd.AddCommand(repo)
 
 	pipeline := newPipelineCommand(service)
-	pipeline.AddCommand(newPipelineListCommand(service), newPipelineViewCommand(service))
+	pipeline.AddCommand(newPipelineListCommand(service), newPipelineViewCommand(service), newPipelineStatusCommand(service))
 	rootCmd.AddCommand(pipeline)
 
 	keys := newSSHKeyCommand(service)
@@ -87,7 +87,7 @@ func ExecuteWith(arguments []string, input io.Reader, output, errorOutput io.Wri
 	if errors.Is(err, app.ErrNotAuthenticated) {
 		err = fmt.Errorf("not logged in; run \"tg auth login\" first")
 	}
-	if err != nil {
+	if err != nil && !errors.Is(err, errPipelineFailed) {
 		renderError(errorOutput, err)
 	}
 	return err

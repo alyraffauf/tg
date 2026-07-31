@@ -53,6 +53,13 @@ type PipelineWorkflow struct {
 	FinishedAt string `json:"finishedAt,omitempty"`
 }
 
+// PipelineStatusResult is the status of a repository's latest pipeline.
+type PipelineStatusResult struct {
+	Commit      string    `json:"commit"`
+	Pipeline    *Pipeline `json:"pipeline"`
+	HasFailures bool      `json:"hasFailures"`
+}
+
 // SSHKeyItem is one SSH public key in a listing.
 type SSHKeyItem struct {
 	Name      string `json:"name"`
