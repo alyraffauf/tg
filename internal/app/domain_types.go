@@ -233,7 +233,7 @@ type GitCredentialResult struct {
 // PipelineLogControl marks the start or end of a workflow step.
 type PipelineLogControl struct {
 	Kind     string  `json:"kind"`
-	Step     int     `json:"step"`
+	Step     int64   `json:"step"`
 	Time     string  `json:"time"`
 	Status   string  `json:"status,omitempty"`
 	Content  string  `json:"content"`
@@ -243,7 +243,7 @@ type PipelineLogControl struct {
 
 // PipelineLogData is one line of workflow output.
 type PipelineLogData struct {
-	Step     int    `json:"step"`
+	Step     int64  `json:"step"`
 	Time     string `json:"time"`
 	Stream   string `json:"stream"`
 	Content  string `json:"content"`

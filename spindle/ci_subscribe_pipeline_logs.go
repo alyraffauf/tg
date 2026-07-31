@@ -25,7 +25,7 @@ func (c *Client) SubscribePipelineLogs(ctx context.Context, pipelineID string, w
 	default:
 		return fmt.Errorf("spindle host must be http(s), got %q", u.Scheme)
 	}
-	u.Path = "/xrpc/sh.tangled.ci.subscribePipelineLogs"
+	u.Path = "/xrpc/" + nsidSubscribeLogs.String()
 	query := url.Values{"pipeline": []string{pipelineID}}
 	if len(workflows) > 0 {
 		query["workflows"] = workflows
@@ -74,6 +74,8 @@ func (c *Client) SubscribePipelineLogs(ctx context.Context, pipelineID string, w
 	}
 }
 
+// decodeLogEvent decodes one WebSocket frame into an event. Frames with fewer
+// than two CBOR maps or an unknown header type are skipped and return nil.
 func decodeLogEvent(data []byte) (*PipelineLogEvent, error) {
 	maps, err := decodeCBORMaps(data)
 	if err != nil {

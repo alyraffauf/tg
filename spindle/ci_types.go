@@ -1,5 +1,17 @@
 package spindle
 
+import (
+	"github.com/bluesky-social/indigo/atproto/syntax"
+)
+
+const (
+	nsidQueryPipelines  syntax.NSID = "sh.tangled.ci.queryPipelines"
+	nsidGetPipeline     syntax.NSID = "sh.tangled.ci.getPipeline"
+	nsidCancelPipeline  syntax.NSID = "sh.tangled.ci.cancelPipeline"
+	nsidTriggerPipeline syntax.NSID = "sh.tangled.ci.triggerPipeline"
+	nsidSubscribeLogs   syntax.NSID = "sh.tangled.ci.subscribePipelineLogs"
+)
+
 // Workflow is one workflow executed by a pipeline.
 type Workflow struct {
 	ID         string `json:"id"`
@@ -52,7 +64,7 @@ type TriggerPipelineOutput struct {
 // PipelineLogControl marks the start or end of a workflow step.
 type PipelineLogControl struct {
 	Kind     string  `json:"kind"`
-	Step     int     `json:"step"`
+	Step     int64   `json:"step"`
 	Time     string  `json:"time"`
 	Status   string  `json:"status,omitempty"`
 	Content  string  `json:"content"`
@@ -62,7 +74,7 @@ type PipelineLogControl struct {
 
 // PipelineLogData is one line of workflow output.
 type PipelineLogData struct {
-	Step     int    `json:"step"`
+	Step     int64  `json:"step"`
 	Time     string `json:"time"`
 	Stream   string `json:"stream"`
 	Content  string `json:"content"`

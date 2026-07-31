@@ -89,12 +89,12 @@ func mapString(m map[string]any, key string) string {
 	return ""
 }
 
-func mapInt(m map[string]any, key string) int {
+func mapInt(m map[string]any, key string) int64 {
 	switch n := m[key].(type) {
 	case int64:
-		return int(n)
-	case int:
 		return n
+	case int:
+		return int64(n)
 	}
 	return 0
 }
