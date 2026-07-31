@@ -14,21 +14,17 @@ hero:
       variant: minimal
 ---
 
-import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
+import { Card, CardGrid, LinkCard } from "@astrojs/starlight/components";
 
 ## Install
 
 <CardGrid>
-	<Card title="Nix" icon="nix">
-		```bash
-		nix profile add github:alyraffauf/tg
-		```
-	</Card>
-	<Card title="From source" icon="download">
-		```bash
-		go install github.com/alyraffauf/tg/cmd/tg@latest
-		```
-	</Card>
+  <Card title="Nix" icon="nix">
+    ```bash nix profile add github:alyraffauf/tg ```
+  </Card>
+  <Card title="From source" icon="download">
+    ```bash go install github.com/alyraffauf/tg/cmd/tg@latest ```
+  </Card>
 </CardGrid>
 
 ## Quick start
@@ -41,6 +37,14 @@ tg repo clone aly.codes/tg
 ## Guides
 
 <CardGrid>
-	<LinkCard title="Authentication" href="/cookbooks/authentication/" description="OAuth, app passwords, multiple accounts, keyring storage." />
-	<LinkCard title="Configuration" href="/cookbooks/configuration/" description="Config file, environment variables, and flags." />
+  <LinkCard
+    title="Authentication"
+    href="/cookbooks/authentication/"
+    description="OAuth, app passwords, multiple accounts, keyring storage."
+  />
+  <LinkCard
+    title="Configuration"
+    href="/cookbooks/configuration/"
+    description="Config file, environment variables, and flags."
+  />
 </CardGrid>
