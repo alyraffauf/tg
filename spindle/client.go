@@ -70,3 +70,14 @@ func (c *Client) QueryPipelines(ctx context.Context, repoDID, cursor string) (*Q
 	}
 	return &output, nil
 }
+
+// QueryLatestPipeline fetches the most recent pipeline for repoDID.
+func (c *Client) QueryLatestPipeline(ctx context.Context, repoDID string) (*QueryPipelinesOutput, error) {
+	params := map[string]any{"repo": repoDID, "limit": 1}
+
+	var output QueryPipelinesOutput
+	if err := c.Get(ctx, syntax.NSID("sh.tangled.ci.queryPipelines"), params, &output); err != nil {
+		return nil, fmt.Errorf("query latest pipeline for %q: %w", repoDID, err)
+	}
+	return &output, nil
+}

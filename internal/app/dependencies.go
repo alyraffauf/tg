@@ -68,6 +68,7 @@ type knotClientFactory interface {
 
 type pipelineClient interface {
 	QueryPipelines(context.Context, string, string) (*spindle.QueryPipelinesOutput, error)
+	QueryLatestPipeline(context.Context, string) (*spindle.QueryPipelinesOutput, error)
 }
 
 type spindleClientFactory interface {
