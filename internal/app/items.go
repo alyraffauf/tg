@@ -141,3 +141,36 @@ func findByRKey(items []tangled.ListItem, rkey, what string) (*tangled.ListItem,
 	}
 	return nil, fmt.Errorf("%s %q not found", what, rkey)
 }
+
+// targetRecord resolves t, finds the issue/pull record rkey, and returns the
+// record URI and the repo record URI. collection selects issues or pulls.
+func (s *Service) targetRecord(ctx context.Context, t Target, collection, rkey string) (string, string, error) {
+	repoRecord, err := s.resolveRepo(ctx, t)
+	if err != nil {
+		return "", "", err
+	}
+
+	var items []tangled.ListItem
+	var recordType string
+	if collection == issueCollection {
+		issues, err := s.appview.ListIssues(ctx, stringValue(repoRecord.Value.RepoDid), tangled.ListOpts{Limit: defaultListLimit})
+		if err != nil {
+			return "", "", fmt.Errorf("list issues for %s: %w", t, err)
+		}
+		items = issues.Items
+		recordType = "issue"
+	} else {
+		pulls, err := s.appview.ListPulls(ctx, stringValue(repoRecord.Value.RepoDid), tangled.ListOpts{Limit: defaultListLimit})
+		if err != nil {
+			return "", "", fmt.Errorf("list pull requests for %s: %w", t, err)
+		}
+		items = pulls.Items
+		recordType = "pull request"
+	}
+
+	record, err := findByRKey(items, rkey, recordType)
+	if err != nil {
+		return "", "", err
+	}
+	return record.URI, repoRecord.URI, nil
+}
