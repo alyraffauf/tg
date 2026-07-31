@@ -39,12 +39,23 @@ func (c *Client) SubscribePipelineLogs(ctx context.Context, pipelineID string, w
 	}
 	defer conn.Close()
 
-	for {
-		if err := ctx.Err(); err != nil {
-			return err
+	// Interrupt a read blocked on the connection when ctx is cancelled.
+	done := make(chan struct{})
+	defer close(done)
+	go func() {
+		select {
+		case <-ctx.Done():
+			conn.Close()
+		case <-done:
 		}
+	}()
+
+	for {
 		_, data, err := conn.ReadMessage()
 		if err != nil {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
 			if websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseAbnormalClosure) {
 				return nil
 			}
