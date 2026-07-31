@@ -9,8 +9,15 @@ import (
 
 // MergeInput is the argument to sh.tangled.repo.merge.
 type MergeInput struct {
-	Repo string `json:"repo"`
-	Pull string `json:"pull"`
+	DID           string  `json:"did"`
+	Name          string  `json:"name"`
+	Repo          string  `json:"repo,omitempty"`
+	Branch        string  `json:"branch"`
+	Patch         string  `json:"patch"`
+	AuthorName    *string `json:"authorName,omitempty"`
+	AuthorEmail   *string `json:"authorEmail,omitempty"`
+	CommitMessage *string `json:"commitMessage,omitempty"`
+	CommitBody    *string `json:"commitBody,omitempty"`
 }
 
 // Merge applies a pull request on the knot.

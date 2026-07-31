@@ -24,6 +24,8 @@ const maxPullPatchSize = 100 << 20
 // PullPatch contains the latest decompressed patch and its target branch.
 type PullPatch struct {
 	URI          string
+	Title        string
+	Body         string
 	TargetBranch string
 	Patch        []byte
 }
@@ -306,15 +308,23 @@ func (s *Service) createPullComment(ctx context.Context, pullURI, body string) (
 // PullPatch fetches a pull request's latest patch, decompressed and ready to
 // apply or stream.
 func (s *Service) PullPatch(ctx context.Context, t Target, rkey string) (*PullPatch, error) {
-	repoDid, err := s.repoDID(ctx, t)
+	repo, err := s.resolveRepo(ctx, t)
 	if err != nil {
 		return nil, err
 	}
-	pulls, err := s.appview.ListPulls(ctx, repoDid, tangled.ListOpts{
+	return s.pullPatch(ctx, repo, rkey)
+}
+
+func (s *Service) pullPatch(ctx context.Context, repo *tangled.Repo, rkey string) (*PullPatch, error) {
+	repoDID := stringValue(repo.Value.RepoDid)
+	if repoDID == "" {
+		return nil, fmt.Errorf("repository has no repository DID")
+	}
+	pulls, err := s.appview.ListPulls(ctx, repoDID, tangled.ListOpts{
 		Limit: defaultListLimit,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("list PRs for %s: %w", t, err)
+		return nil, fmt.Errorf("list PRs for repository %q: %w", repoDID, err)
 	}
 	pull, err := findByRKey(pulls.Items, rkey, "pull request")
 	if err != nil {
@@ -324,11 +334,20 @@ func (s *Service) PullPatch(ctx context.Context, t Target, rkey string) (*PullPa
 	if err != nil {
 		return nil, err
 	}
+	if record.Target == nil || record.Target.Branch == "" {
+		return nil, fmt.Errorf("pull request %q has no target branch", rkey)
+	}
 	patch, err := s.downloadPullPatch(ctx, extractDID(pull.URI), patchCID)
 	if err != nil {
 		return nil, err
 	}
-	return &PullPatch{URI: pull.URI, TargetBranch: pullTargetBranch(record.Target), Patch: patch}, nil
+	return &PullPatch{
+		URI:          pull.URI,
+		Title:        record.Title,
+		Body:         stringValue(record.Body),
+		TargetBranch: pullTargetBranch(record.Target),
+		Patch:        patch,
+	}, nil
 }
 
 func latestPullPatch(pull *tangled.ListItem, rkey string) (tangledlex.RepoPull, string, error) {
@@ -419,22 +438,39 @@ func (s *Service) MergePull(ctx context.Context, t Target, rkey string) (*StateR
 	if err != nil {
 		return nil, err
 	}
-	pullURI, repoURI, err := s.targetRecord(ctx, t, pullCollection, rkey)
+	repo, err := s.resolveRepo(ctx, t)
 	if err != nil {
 		return nil, err
 	}
-	knotHost, err := s.repoKnot(ctx, repoURI)
+	pull, err := s.pullPatch(ctx, repo, rkey)
 	if err != nil {
 		return nil, err
+	}
+	repoDID := stringValue(repo.Value.RepoDid)
+	if repoDID == "" {
+		return nil, fmt.Errorf("repository %q has no repository DID", t.String())
+	}
+	repoName := stringValue(repo.Value.Name)
+	if repoName == "" {
+		repoName = t.Repo
+	}
+	knotHost := repo.Value.Knot
+	if knotHost == "" {
+		return nil, fmt.Errorf("repository %q has no knot", t.String())
 	}
 	token, err := atClient.GetServiceAuth(ctx, "did:web:"+knotHost, "sh.tangled.repo.merge")
 	if err != nil {
 		return nil, err
 	}
-	if err := s.knot.New(knotHost, token).Merge(ctx, knot.MergeInput{Repo: repoURI, Pull: pullURI}); err != nil {
+	commitMessage := pull.Title
+	commitBody := pull.Body
+	if err := s.knot.New(knotHost, token).Merge(ctx, knot.MergeInput{
+		DID: extractDID(repo.URI), Name: repoName, Repo: repoDID, Branch: pull.TargetBranch, Patch: string(pull.Patch),
+		CommitMessage: &commitMessage, CommitBody: optionalString(commitBody),
+	}); err != nil {
 		return nil, err
 	}
-	if err := putState(ctx, atClient, did, rkey, pullCollection, pullURI, "merged"); err != nil {
+	if err := putState(ctx, atClient, did, rkey, pullCollection, pull.URI, "merged"); err != nil {
 		return nil, fmt.Errorf("record merged pull request status: %w", err)
 	}
 	return &StateResult{Rkey: rkey, State: "merged"}, nil

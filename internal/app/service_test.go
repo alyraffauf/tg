@@ -22,6 +22,8 @@ import (
 	"github.com/bluesky-social/indigo/atproto/atclient"
 	"github.com/bluesky-social/indigo/atproto/identity"
 	"github.com/bluesky-social/indigo/atproto/syntax"
+	lexutil "github.com/bluesky-social/indigo/lex/util"
+	"github.com/ipfs/go-cid"
 )
 
 func TestCreateRepoRecordsDefaultBranchOutcome(t *testing.T) {
@@ -109,15 +111,36 @@ func TestForkRepoCleansUpWhenRecordWriteFails(t *testing.T) {
 func TestMergePullReportsStatusWriteFailureAfterMerge(t *testing.T) {
 	pds := &testPDS{putErr: errors.New("PDS unavailable")}
 	knotClient := &testKnot{}
+	patchServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		_, _ = writer.Write(gzipContents(t, []byte("patch")))
+	}))
+	defer patchServer.Close()
 	service := testService(pds, &testGit{}, knotClient)
+	service.resolver = testResolver{
+		identity: &identity.Identity{DID: syntax.DID("did:plc:owner")},
+		pdsURL:   patchServer.URL,
+	}
+	service.httpClient = patchServer.Client()
+	patchCID := cid.MustParse("bafybeigdyrzt5m6b5nkn55vsgzzfw5cfs2tidw6zqugycdkyybf2z7kz4q")
+	pullRecord := tangledlex.RepoPull{
+		Title: "Example", CreatedAt: "2026-07-29T00:00:00Z",
+		Target: &tangledlex.RepoPull_Target{Repo: "did:plc:repo", Branch: "master"},
+		Rounds: []*tangledlex.RepoPull_Round{{PatchBlob: &lexutil.LexBlob{Ref: lexutil.LexLink(patchCID)}}},
+	}
 	service.appview = testAppview{
 		repo: &tangled.Repo{
 			URI:   "at://did:plc:owner/sh.tangled.repo/example",
-			Value: tangledlex.Repo{Knot: "knot.example", RepoDid: optionalString("did:plc:repo")},
+			Value: tangledlex.Repo{Name: optionalString("example"), Knot: "knot.example", RepoDid: optionalString("did:plc:repo")},
 		},
 		pulls: &tangled.List{Items: []tangled.ListItem{{
-			URI:   "at://did:plc:owner/sh.tangled.repo.pull/pr-1",
-			Value: json.RawMessage(`{"title":"Example"}`),
+			URI: "at://did:plc:owner/sh.tangled.repo.pull/pr-1",
+			Value: func() json.RawMessage {
+				value, err := json.Marshal(pullRecord)
+				if err != nil {
+					t.Fatal(err)
+				}
+				return value
+			}(),
 		}}},
 	}
 
@@ -127,6 +150,9 @@ func TestMergePullReportsStatusWriteFailureAfterMerge(t *testing.T) {
 	}
 	if knotClient.mergeCalls != 1 {
 		t.Fatalf("MergePull() calls = %d, want 1", knotClient.mergeCalls)
+	}
+	if knotClient.mergeInput.DID != "did:plc:owner" || knotClient.mergeInput.Name != "example" || knotClient.mergeInput.Repo != "did:plc:repo" || knotClient.mergeInput.Branch != "master" || knotClient.mergeInput.Patch != "patch" {
+		t.Fatalf("MergeInput = %+v", knotClient.mergeInput)
 	}
 }
 
@@ -417,6 +443,7 @@ type testKnot struct {
 	deleteErr           error
 	deleteCalls         int
 	mergeCalls          int
+	mergeInput          knot.MergeInput
 	createCalls         int
 }
 
@@ -431,8 +458,9 @@ func (k *testKnot) DeleteRepo(context.Context, knot.DeleteRepoInput) error {
 func (k *testKnot) SetDefaultBranch(context.Context, knot.SetDefaultBranchInput) error {
 	return k.setDefaultBranchErr
 }
-func (k *testKnot) Merge(context.Context, knot.MergeInput) error {
+func (k *testKnot) Merge(_ context.Context, input knot.MergeInput) error {
 	k.mergeCalls++
+	k.mergeInput = input
 	return nil
 }
 
