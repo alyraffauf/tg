@@ -350,6 +350,7 @@ func (p *testPDS) GetServiceAuth(_ context.Context, audience, lexiconMethod stri
 
 type testGit struct {
 	branch         string
+	commit         string
 	patch          []byte
 	patchErr       error
 	clones         []gitutil.CloneRepoParams
@@ -378,6 +379,9 @@ func (g *testGit) GeneratePatch(context.Context, string, string, string) ([]byte
 	return nil, errors.New("not implemented")
 }
 func (g *testGit) CurrentBranch(context.Context, string) (string, error) { return g.branch, nil }
+func (g *testGit) ResolveCommit(context.Context, string, string) (string, error) {
+	return g.commit, nil
+}
 func (g *testGit) DefaultBranch(context.Context, string) (string, error) {
 	return "", errors.New("not implemented")
 }
