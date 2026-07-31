@@ -9,6 +9,7 @@ import (
 	"github.com/alyraffauf/tg/atproto"
 	"github.com/alyraffauf/tg/internal/gitutil"
 	"github.com/alyraffauf/tg/knot"
+	"github.com/alyraffauf/tg/spindle"
 	"github.com/alyraffauf/tg/tangled"
 	"github.com/bluesky-social/indigo/atproto/atclient"
 	"github.com/bluesky-social/indigo/atproto/identity"
@@ -65,6 +66,14 @@ type knotClientFactory interface {
 	New(string, string) knotClient
 }
 
+type pipelineClient interface {
+	QueryPipelines(context.Context, string, string) (*spindle.QueryPipelinesOutput, error)
+}
+
+type spindleClientFactory interface {
+	New(string) (pipelineClient, error)
+}
+
 type knotOwnershipVerifier interface {
 	Verify(ctx context.Context, host, expectedOwnerDID string) error
 }
@@ -117,6 +126,14 @@ type productionKnotFactory struct {
 	httpClient *http.Client
 }
 
+type productionSpindleFactory struct {
+	httpClient *http.Client
+}
+
+func (f productionSpindleFactory) New(host string) (pipelineClient, error) {
+	return spindle.New(host, f.httpClient)
+}
+
 func (f productionKnotFactory) New(host, token string) knotClient {
 	return knot.NewWithClient(host, token, f.httpClient)
 }
@@ -131,4 +148,5 @@ var (
 	_ gitClient        = (*gitutil.Client)(nil)
 	_ pdsClient        = (*atproto.ATProto)(nil)
 	_ knotClient       = (*knot.Client)(nil)
+	_ pipelineClient   = (*spindle.Client)(nil)
 )
