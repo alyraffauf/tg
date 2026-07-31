@@ -4,7 +4,15 @@
 
 ## Installation
 
-### With Nix
+### Homebrew (stable, recommended, macOS+Linux)
+
+```bash
+brew tap alyraffauf/tap
+brew trust alyraffauf/tap
+brew install alyraffauf/tap/tg
+```
+
+### With Nix (latest dev release)
 
 ```bash
 nix profile add github:alyraffauf/tg

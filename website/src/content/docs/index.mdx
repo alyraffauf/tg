@@ -19,11 +19,17 @@ import { Card, CardGrid, LinkCard } from "@astrojs/starlight/components";
 ## Install
 
 <CardGrid>
-  <Card title="Nix" icon="nix">
-    ```bash nix profile add github:alyraffauf/tg ```
+  <Card title="Homebrew (stable)" icon="homebrew">
+    ```bash
+      brew tap alyraffauf/tap
+      brew trust alyraffauf/tap
+      brew install alyraffauf/tap/tg
+    ```
   </Card>
-  <Card title="From source" icon="download">
-    ```bash go install github.com/alyraffauf/tg/cmd/tg@latest ```
+  <Card title="Nix (development)" icon="nix">
+    ```bash
+      nix profile add github:alyraffauf/tg
+    ```
   </Card>
 </CardGrid>
 
