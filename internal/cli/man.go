@@ -14,7 +14,8 @@ import (
 // `gh`, which produces man pages via its Makefile rather than a visible
 // subcommand).
 func newManCommand(_ *app.Service) *cobra.Command {
-	return &cobra.Command{
+	var markdown bool
+	cmd := &cobra.Command{
 		Use:    "man [directory]",
 		Short:  "Generate man pages",
 		Args:   cobra.ExactArgs(1),
@@ -24,6 +25,9 @@ func newManCommand(_ *app.Service) *cobra.Command {
 			if err := os.MkdirAll(dir, 0o755); err != nil {
 				return fmt.Errorf("create man page directory: %w", err)
 			}
+			if markdown {
+				return doc.GenMarkdownTree(cmd.Root(), dir)
+			}
 			header := &doc.GenManHeader{
 				Title:   "tg",
 				Section: "1",
@@ -32,4 +36,6 @@ func newManCommand(_ *app.Service) *cobra.Command {
 			return doc.GenManTree(cmd.Root(), header, dir)
 		},
 	}
+	cmd.Flags().BoolVar(&markdown, "markdown", false, "generate Markdown command reference instead of man pages")
+	return cmd
 }
