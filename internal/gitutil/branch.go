@@ -32,3 +32,12 @@ func (c *Client) CurrentBranch(ctx context.Context, dir string) (string, error) 
 func CurrentBranch(ctx context.Context, dir string) (string, error) {
 	return defaultClient.CurrentBranch(ctx, dir)
 }
+
+// ResolveCommit resolves revision to its full commit SHA.
+func (c *Client) ResolveCommit(ctx context.Context, dir, revision string) (string, error) {
+	commit, err := c.gitOutput(ctx, dir, "rev-parse", "--verify", revision+"^{commit}")
+	if err != nil {
+		return "", fmt.Errorf("resolve commit %q in %q: %w", revision, dir, err)
+	}
+	return strings.TrimSpace(string(commit)), nil
+}

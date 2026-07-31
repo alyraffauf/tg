@@ -102,6 +102,34 @@ type CancelPipelineInput struct {
 	Workflows []string `json:"workflows,omitempty"`
 }
 
+// TriggerPipelineInput is the argument to sh.tangled.ci.triggerPipeline.
+type TriggerPipelineInput struct {
+	Repo      string        `json:"repo"`
+	Trigger   ManualTrigger `json:"trigger"`
+	Workflows []string      `json:"workflows,omitempty"`
+}
+
+// ManualTrigger describes a manually requested pipeline trigger.
+type ManualTrigger struct {
+	LexiconTypeID string `json:"$type"`
+	SHA           string `json:"sha"`
+	Ref           string `json:"ref,omitempty"`
+}
+
+// TriggerPipelineOutput is returned after creating a manual pipeline.
+type TriggerPipelineOutput struct {
+	Pipeline string `json:"pipeline"`
+}
+
+// TriggerPipeline starts a manual pipeline for a commit.
+func (c *Client) TriggerPipeline(ctx context.Context, input TriggerPipelineInput) (*TriggerPipelineOutput, error) {
+	var output TriggerPipelineOutput
+	if err := c.Post(ctx, syntax.NSID("sh.tangled.ci.triggerPipeline"), input, &output); err != nil {
+		return nil, fmt.Errorf("trigger pipeline: %w", err)
+	}
+	return &output, nil
+}
+
 // GetPipeline fetches one pipeline by its spindle-local ID.
 func (c *Client) GetPipeline(ctx context.Context, pipelineID string) (*Pipeline, error) {
 	var pipeline Pipeline

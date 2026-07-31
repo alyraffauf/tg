@@ -67,6 +67,13 @@ type PipelineCancelResult struct {
 	CancellationRequested bool     `json:"cancellationRequested"`
 }
 
+// PipelineTriggerResult describes a manually triggered pipeline.
+type PipelineTriggerResult struct {
+	Pipeline  string   `json:"pipeline"`
+	Commit    string   `json:"commit"`
+	Workflows []string `json:"workflows,omitempty"`
+}
+
 // SSHKeyItem is one SSH public key in a listing.
 type SSHKeyItem struct {
 	Name      string `json:"name"`

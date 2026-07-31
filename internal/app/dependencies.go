@@ -51,6 +51,7 @@ type gitClient interface {
 	CheckoutPatch(context.Context, gitutil.CheckoutPatchParams) error
 	GeneratePatch(context.Context, string, string, string) ([]byte, error)
 	CurrentBranch(context.Context, string) (string, error)
+	ResolveCommit(context.Context, string, string) (string, error)
 	DefaultBranch(context.Context, string) (string, error)
 	DetectRepoCandidatesFromCWD(context.Context) ([]gitutil.RepoContext, error)
 }
@@ -71,6 +72,7 @@ type pipelineClient interface {
 	QueryLatestPipeline(context.Context, string) (*spindle.QueryPipelinesOutput, error)
 	GetPipeline(context.Context, string) (*spindle.Pipeline, error)
 	CancelPipeline(context.Context, spindle.CancelPipelineInput) error
+	TriggerPipeline(context.Context, spindle.TriggerPipelineInput) (*spindle.TriggerPipelineOutput, error)
 }
 
 type spindleClientFactory interface {

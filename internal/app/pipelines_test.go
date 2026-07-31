@@ -130,12 +130,39 @@ func TestCancelPipelineMintsSpindleToken(t *testing.T) {
 	}
 }
 
+func TestTriggerPipelineUsesFullSHAWithoutGitResolution(t *testing.T) {
+	commit := "0123456789abcdef0123456789abcdef01234567"
+	client := &testPipelineClient{triggerOutput: &spindle.TriggerPipelineOutput{Pipeline: "at://did:plc:spindle/sh.tangled.ci.pipeline/3mrvk5dbnep22"}}
+	pds := &testPDS{}
+	service := testService(pds, &testGit{}, &testKnot{})
+	service.appview = testAppview{repo: &tangled.Repo{Value: tangledlex.Repo{
+		Knot: "knot.example", Spindle: optionalString("spindle.example"), RepoDid: optionalString("did:plc:repo"),
+	}}}
+	service.spindle = testSpindleFactory{client: client}
+
+	result, err := service.TriggerPipeline(context.Background(), Target{Handle: "owner.test", Repo: "example"}, commit, []string{"test.yml"})
+	if err != nil {
+		t.Fatalf("TriggerPipeline() error = %v", err)
+	}
+	if result.Pipeline != "3mrvk5dbnep22" || result.Commit != commit {
+		t.Fatalf("TriggerPipeline() = %+v", result)
+	}
+	if pds.serviceAuthLexiconMethods[0] != "sh.tangled.ci.triggerPipeline" {
+		t.Fatalf("service auth method = %q", pds.serviceAuthLexiconMethods[0])
+	}
+	if client.triggerInput.Trigger.SHA != commit || client.triggerInput.Trigger.Ref != "" || client.triggerInput.Repo != "did:plc:repo" {
+		t.Fatalf("trigger input = %+v", client.triggerInput)
+	}
+}
+
 type testPipelineClient struct {
-	responses   []*spindle.QueryPipelinesOutput
-	cursors     []string
-	err         error
-	cancelInput spindle.CancelPipelineInput
-	pipeline    *spindle.Pipeline
+	responses     []*spindle.QueryPipelinesOutput
+	cursors       []string
+	err           error
+	cancelInput   spindle.CancelPipelineInput
+	pipeline      *spindle.Pipeline
+	triggerInput  spindle.TriggerPipelineInput
+	triggerOutput *spindle.TriggerPipelineOutput
 }
 
 func (c *testPipelineClient) QueryLatestPipeline(_ context.Context, _ string) (*spindle.QueryPipelinesOutput, error) {
@@ -149,6 +176,11 @@ func (c *testPipelineClient) GetPipeline(context.Context, string) (*spindle.Pipe
 func (c *testPipelineClient) CancelPipeline(_ context.Context, input spindle.CancelPipelineInput) error {
 	c.cancelInput = input
 	return c.err
+}
+
+func (c *testPipelineClient) TriggerPipeline(_ context.Context, input spindle.TriggerPipelineInput) (*spindle.TriggerPipelineOutput, error) {
+	c.triggerInput = input
+	return c.triggerOutput, c.err
 }
 
 type testSpindleFactory struct {
