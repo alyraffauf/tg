@@ -179,45 +179,6 @@ func TestDownloadPullPatch(t *testing.T) {
 	}
 }
 
-func TestCallAPIValidatesEndpointBeforeAuthenticating(t *testing.T) {
-	service := testService(&testPDS{}, &testGit{}, &testKnot{})
-	_, err := service.CallAPI(context.Background(), APIRequestInput{Endpoint: "not an nsid", Method: http.MethodGet})
-	if err == nil || !strings.HasPrefix(err.Error(), "parse NSID") {
-		t.Fatalf("CallAPI() error = %v, want NSID validation error", err)
-	}
-}
-
-func TestCallAPIPostsJSON(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		if request.Method != http.MethodPost || request.URL.Path != "/xrpc/com.example.test" {
-			t.Fatalf("request = %s %s", request.Method, request.URL.Path)
-		}
-		body, err := io.ReadAll(request.Body)
-		if err != nil {
-			t.Fatalf("read request body: %v", err)
-		}
-		if got, want := string(body), `{"message":"hello"}`; got != want {
-			t.Fatalf("request body = %q, want %q", got, want)
-		}
-		writer.WriteHeader(http.StatusCreated)
-		_, _ = writer.Write([]byte(`{"ok":true}`))
-	}))
-	defer server.Close()
-
-	service := testService(&testPDS{}, &testGit{}, &testKnot{})
-	service.sessions = testSessions{pds: &testPDS{}, api: &atclient.APIClient{Host: server.URL, Client: server.Client()}}
-
-	response, err := service.CallAPI(context.Background(), APIRequestInput{
-		Endpoint: "com.example.test", Method: http.MethodPost, Fields: map[string]any{"message": "hello"},
-	})
-	if err != nil {
-		t.Fatalf("CallAPI() error = %v", err)
-	}
-	if response.StatusCode != http.StatusCreated || string(response.Body) != `{"ok":true}` {
-		t.Fatalf("CallAPI() response = %+v", response)
-	}
-}
-
 func gzipContents(t *testing.T, contents []byte) []byte {
 	t.Helper()
 	var compressed bytes.Buffer

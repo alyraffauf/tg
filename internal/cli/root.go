@@ -58,7 +58,7 @@ func newRoot(service *app.Service, defaultKnot, defaultSSHPort, defaultProtocol 
 
 	stringsCmd := newStringCommand(service)
 	stringsCmd.AddCommand(newStringCreateCommand(service), newStringListCommand(service), newStringViewCommand(service), newStringDeleteCommand(service))
-	rootCmd.AddCommand(stringsCmd, newBrowseCommand(service), newCompletionCommand(service), newManCommand(service), newAPICommand(service))
+	rootCmd.AddCommand(stringsCmd, newBrowseCommand(service), newCompletionCommand(service), newManCommand(service))
 	return rootCmd
 }
 
