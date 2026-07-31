@@ -8,7 +8,8 @@ import (
 )
 
 func newRepoForkCommand(service *app.Service) *cobra.Command {
-	return &cobra.Command{
+	var knotHost string
+	command := &cobra.Command{
 		Use:   "fork <handle/repo> [name]",
 		Short: "Fork a Tangled repository",
 		Args:  cobra.RangeArgs(1, 2),
@@ -22,7 +23,7 @@ func newRepoForkCommand(service *app.Service) *cobra.Command {
 			if len(args) == 2 {
 				name = args[1]
 			}
-			result, err := service.ForkRepo(ctx, source, name)
+			result, err := service.ForkRepoOnKnot(ctx, source, name, knotHost)
 			if err != nil {
 				return err
 			}
@@ -31,4 +32,6 @@ func newRepoForkCommand(service *app.Service) *cobra.Command {
 			})
 		},
 	}
+	command.Flags().StringVar(&knotHost, "knot", "", "Knot host to create the fork on (defaults to the source repository’s Knot)")
+	return command
 }

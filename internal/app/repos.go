@@ -561,6 +561,12 @@ func (s *Service) DeleteRepo(ctx context.Context, t Target) (*RepoDeleteResult, 
 // ForkRepo creates a fork of source on the authenticated user's account,
 // named name (defaults to the source repo's name).
 func (s *Service) ForkRepo(ctx context.Context, source Target, name string) (*RepoForkResult, error) {
+	return s.ForkRepoOnKnot(ctx, source, name, "")
+}
+
+// ForkRepoOnKnot creates a fork on knotHost. When knotHost is empty, it uses
+// the source repository's Knot for backwards-compatible same-Knot forks.
+func (s *Service) ForkRepoOnKnot(ctx context.Context, source Target, name, knotHost string) (*RepoForkResult, error) {
 	atClient, ownerDID, err := s.authenticatedPDS(ctx)
 	if err != nil {
 		return nil, err
@@ -570,11 +576,18 @@ func (s *Service) ForkRepo(ctx context.Context, source Target, name string) (*Re
 	if err != nil {
 		return nil, err
 	}
-	token, err := atClient.GetServiceAuth(ctx, "did:web:"+src.Knot, "sh.tangled.repo.create")
+	selectedKnot := src.Knot
+	if knotHost != "" {
+		selectedKnot, err = parseKnotHostname(knotHost)
+		if err != nil {
+			return nil, err
+		}
+	}
+	token, err := atClient.GetServiceAuth(ctx, "did:web:"+selectedKnot, "sh.tangled.repo.create")
 	if err != nil {
 		return nil, fmt.Errorf("get knot service auth: %w", err)
 	}
-	repoDID, err := s.knot.New(src.Knot, token).CreateRepo(ctx, knot.CreateRepoInput{
+	repoDID, err := s.knot.New(selectedKnot, token).CreateRepo(ctx, knot.CreateRepoInput{
 		Name:   name,
 		Rkey:   name,
 		Source: forkSourceURL(src.Knot, src.RepoDID),
@@ -589,20 +602,20 @@ func (s *Service) ForkRepo(ctx context.Context, source Target, name string) (*Re
 		Record: tangledlex.Repo{
 			LexiconTypeID: repoCollection,
 			Name:          optionalString(name),
-			Knot:          src.Knot,
+			Knot:          selectedKnot,
 			CreatedAt:     time.Now().UTC().Format(time.RFC3339),
 			RepoDid:       optionalString(repoDID),
-			Source:        optionalString(src.URI),
+			Source:        optionalString(forkSourceURL(src.Knot, src.RepoDID)),
 		},
 	})
 	if err != nil {
-		cleanupErr := s.deleteFork(ctx, atClient, src.Knot, ownerDID, name)
+		cleanupErr := s.deleteFork(ctx, atClient, selectedKnot, ownerDID, name)
 		if cleanupErr != nil {
 			return nil, fmt.Errorf("write fork record: %w; delete orphaned fork: %v", err, cleanupErr)
 		}
 		return nil, fmt.Errorf("write fork record: %w", err)
 	}
-	return &RepoForkResult{Handle: s.ownerHandle(ctx, ownerDID), Name: name, URI: uri, Knot: src.Knot}, nil
+	return &RepoForkResult{Handle: s.ownerHandle(ctx, ownerDID), Name: name, URI: uri, Knot: selectedKnot}, nil
 }
 
 type forkSource struct {
