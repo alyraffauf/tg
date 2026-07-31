@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/alyraffauf/tg/internal/tangledlex"
+	"github.com/alyraffauf/tg/knot"
 	"github.com/alyraffauf/tg/spindle"
 	"github.com/alyraffauf/tg/tangled"
 )
@@ -111,7 +112,7 @@ func TestPipelineStatusReturnsLatestPipeline(t *testing.T) {
 			ID: "latest", Commit: "abc", Workflows: []spindle.Workflow{{Status: "failed"}},
 		}},
 	}}}
-	service := testService(&testPDS{}, &testGit{}, &testKnot{})
+	service := testService(&testPDS{}, &testGit{}, &testKnot{defaultBranch: &knot.DefaultBranch{Name: "main", Hash: "abc"}})
 	service.appview = testAppview{repo: &tangled.Repo{Value: tangledlex.Repo{
 		Knot: "knot.example", Spindle: optionalString("spindle.example"), RepoDid: optionalString("did:plc:repo"),
 	}}}

@@ -23,13 +23,14 @@ type Item struct {
 
 // RepoItem is a single repository in a listing or view.
 type RepoItem struct {
-	Name        string `json:"name"`
-	URI         string `json:"uri"`
-	Author      string `json:"author"`
-	Knot        string `json:"knot"`
-	Description string `json:"description,omitempty"`
-	CreatedAt   string `json:"createdAt"`
-	RepoDid     string `json:"repoDid,omitempty"`
+	Name        string    `json:"name"`
+	URI         string    `json:"uri"`
+	Author      string    `json:"author"`
+	Knot        string    `json:"knot"`
+	Description string    `json:"description,omitempty"`
+	CreatedAt   string    `json:"createdAt"`
+	RepoDid     string    `json:"repoDid,omitempty"`
+	Pipeline    *Pipeline `json:"pipeline,omitempty"`
 }
 
 // Pipeline is one CI pipeline associated with a repository.

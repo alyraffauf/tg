@@ -1,12 +1,14 @@
 package cli
 
 import (
+	"fmt"
+
 	"github.com/alyraffauf/tg/internal/app"
 	"github.com/spf13/cobra"
 )
 
 func newRepoViewCommand(service *app.Service) *cobra.Command {
-	return &cobra.Command{
+	command := &cobra.Command{
 		Use:   "view <handle/repo>",
 		Short: "View a Tangled repository",
 		Long:  `View details for a Tangled repository.`,
@@ -21,6 +23,11 @@ func newRepoViewCommand(service *app.Service) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			if status, err := service.PipelineStatus(ctx, target); err == nil {
+				item.Pipeline = status.Pipeline
+			} else {
+				fmt.Fprintf(cmd.ErrOrStderr(), "warning: pipeline status unavailable: %v\n", err)
+			}
 			return output(cmd, item, func(item *app.RepoItem) {
 				fields := []detailField{
 					{"Name", item.Name},
@@ -32,8 +39,12 @@ func newRepoViewCommand(service *app.Service) *cobra.Command {
 				if item.RepoDid != "" {
 					fields = append(fields, detailField{"Repo DID", item.RepoDid})
 				}
+				if item.Pipeline != nil {
+					fields = append(fields, detailField{"Pipeline", pipelineStatusSummary(cmd.OutOrStdout(), item.Pipeline.Workflows)})
+				}
 				renderDetail(cmd.OutOrStdout(), fields, "")
 			})
 		},
 	}
+	return command
 }

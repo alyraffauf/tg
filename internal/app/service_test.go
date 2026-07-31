@@ -425,6 +425,11 @@ func (f *testKnotFactory) New(host string, _ string) knotClient {
 	return f.client
 }
 
+func (f *testKnotFactory) NewPublic(host string) knotClient {
+	f.hosts = append(f.hosts, host)
+	return f.client
+}
+
 type testKnotOwnershipVerifier struct {
 	errors map[string]error
 	hosts  []string
@@ -440,6 +445,7 @@ func (v *testKnotOwnershipVerifier) Verify(_ context.Context, host, _ string) er
 
 type testKnot struct {
 	setDefaultBranchErr error
+	defaultBranch       *knot.DefaultBranch
 	deleteErr           error
 	deleteCalls         int
 	mergeCalls          int
@@ -457,6 +463,12 @@ func (k *testKnot) DeleteRepo(context.Context, knot.DeleteRepoInput) error {
 }
 func (k *testKnot) SetDefaultBranch(context.Context, knot.SetDefaultBranchInput) error {
 	return k.setDefaultBranchErr
+}
+func (k *testKnot) GetDefaultBranch(context.Context, string) (*knot.DefaultBranch, error) {
+	if k.defaultBranch == nil {
+		return &knot.DefaultBranch{Name: "main"}, nil
+	}
+	return k.defaultBranch, nil
 }
 func (k *testKnot) Merge(_ context.Context, input knot.MergeInput) error {
 	k.mergeCalls++

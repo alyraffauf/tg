@@ -60,11 +60,13 @@ type knotClient interface {
 	CreateRepo(context.Context, knot.CreateRepoInput) (string, error)
 	DeleteRepo(context.Context, knot.DeleteRepoInput) error
 	SetDefaultBranch(context.Context, knot.SetDefaultBranchInput) error
+	GetDefaultBranch(context.Context, string) (*knot.DefaultBranch, error)
 	Merge(context.Context, knot.MergeInput) error
 }
 
 type knotClientFactory interface {
 	New(string, string) knotClient
+	NewPublic(string) knotClient
 }
 
 type pipelineClient interface {
@@ -146,6 +148,10 @@ func (f productionSpindleFactory) NewWithToken(host, token string) (pipelineClie
 
 func (f productionKnotFactory) New(host, token string) knotClient {
 	return knot.NewWithClient(host, token, f.httpClient)
+}
+
+func (f productionKnotFactory) NewPublic(host string) knotClient {
+	return knot.NewPublicWithClient(host, f.httpClient)
 }
 
 func isNotAuthenticated(err error) bool {

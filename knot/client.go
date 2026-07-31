@@ -32,6 +32,11 @@ func NewWithClient(host, token string, httpClient *http.Client) *Client {
 	}
 }
 
+// NewPublicWithClient returns a client for unauthenticated read-only queries.
+func NewPublicWithClient(host string, httpClient *http.Client) *Client {
+	return &Client{APIClient: &atclient.APIClient{Client: httpClient, Host: "https://" + host}}
+}
+
 // bearerAuth is a Bearer-token AuthMethod for service-auth JWTs.
 type bearerAuth string
 
