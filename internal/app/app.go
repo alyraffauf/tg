@@ -58,7 +58,7 @@ func NewWithStreams(appviewHost string, stdout, stderr io.Writer) *Service {
 		git:                   gitutil.NewClient(stdout, stderr),
 		knot:                  productionKnotFactory{httpClient: httpClient},
 		spindle:               productionSpindleFactory{httpClient: httpClient},
-		knotOwnershipVerifier: newHTTPKnotOwnershipVerifier(),
+		knotOwnershipVerifier: knot.NewOwnershipVerifier(httpClient),
 		httpClient:            httpClient,
 	}
 }

@@ -26,6 +26,8 @@ type appviewClient interface {
 	ListRepos(context.Context, string) (*tangled.RepoList, error)
 	ListIssues(context.Context, string, tangled.ListOpts) (*tangled.List, error)
 	ListPulls(context.Context, string, tangled.ListOpts) (*tangled.List, error)
+	Search(context.Context, string, int64) (*tangled.SearchResult, error)
+	CountStars(context.Context, string) (int64, error)
 }
 
 type pdsClient interface {

@@ -30,6 +30,7 @@ type RepoItem struct {
 	Description string    `json:"description,omitempty"`
 	CreatedAt   string    `json:"createdAt"`
 	RepoDid     string    `json:"repoDid,omitempty"`
+	Stars       int64     `json:"stars,omitempty"`
 	Pipeline    *Pipeline `json:"pipeline,omitempty"`
 }
 

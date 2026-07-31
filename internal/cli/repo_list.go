@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"fmt"
 	"io"
 
 	"github.com/alyraffauf/tg/internal/app"
@@ -34,9 +35,20 @@ If no argument is given, lists the authenticated user's repositories
 }
 
 func renderRepoList(writer io.Writer, items []app.RepoItem) {
+	rows := repoRows(items, false)
+	renderTable(writer, []string{"NAME", "KNOT", "DESCRIPTION", "CREATED"}, rows, "No repositories found.")
+}
+
+func repoRows(items []app.RepoItem, includeStars bool) [][]string {
 	rows := make([][]string, 0, len(items))
 	for _, repo := range items {
-		rows = append(rows, []string{repo.Name, repo.Knot, repo.Description, shortDate(repo.CreatedAt)})
+		row := []string{repo.Name, repo.Knot, repo.Description}
+		if includeStars {
+			row = append(row, fmt.Sprint(repo.Stars))
+		} else {
+			row = append(row, shortDate(repo.CreatedAt))
+		}
+		rows = append(rows, row)
 	}
-	renderTable(writer, []string{"NAME", "KNOT", "DESCRIPTION", "CREATED"}, rows, "No repositories found.")
+	return rows
 }

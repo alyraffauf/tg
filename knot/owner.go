@@ -1,4 +1,4 @@
-package app
+package knot
 
 import (
 	"context"
@@ -10,27 +10,30 @@ import (
 	"time"
 )
 
-const (
-	knotVerificationTimeout = 10 * time.Second
-	knotOwnerResponseMax    = 64 << 10
-)
+const ownerResponseMax = 64 << 10
 
-type httpKnotOwnershipVerifier struct {
+// OwnershipVerifier confirms that a Knot is owned by the expected DID.
+type OwnershipVerifier struct {
 	client *http.Client
 }
 
-func newHTTPKnotOwnershipVerifier() *httpKnotOwnershipVerifier {
-	return &httpKnotOwnershipVerifier{
-		client: &http.Client{
-			Timeout: knotVerificationTimeout,
-			CheckRedirect: func(*http.Request, []*http.Request) error {
-				return http.ErrUseLastResponse
-			},
-		},
+// NewOwnershipVerifier returns a verifier using client for requests.
+func NewOwnershipVerifier(client *http.Client) *OwnershipVerifier {
+	if client == nil {
+		client = &http.Client{}
 	}
+	clientCopy := *client
+	if clientCopy.Timeout == 0 {
+		clientCopy.Timeout = 10 * time.Second
+	}
+	clientCopy.CheckRedirect = func(*http.Request, []*http.Request) error {
+		return http.ErrUseLastResponse
+	}
+	return &OwnershipVerifier{client: &clientCopy}
 }
 
-func (v *httpKnotOwnershipVerifier) Verify(ctx context.Context, host, expectedOwnerDID string) (err error) {
+// Verify checks the public sh.tangled.owner endpoint on host.
+func (v *OwnershipVerifier) Verify(ctx context.Context, host, expectedOwnerDID string) (err error) {
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://"+host+"/xrpc/sh.tangled.owner", nil)
 	if err != nil {
 		return fmt.Errorf("create owner request: %w", err)
@@ -39,18 +42,16 @@ func (v *httpKnotOwnershipVerifier) Verify(ctx context.Context, host, expectedOw
 	if err != nil {
 		return fmt.Errorf("fetch Knot owner: %w", err)
 	}
-	defer func() {
-		err = errors.Join(err, response.Body.Close())
-	}()
+	defer func() { err = errors.Join(err, response.Body.Close()) }()
 	if response.StatusCode != http.StatusOK {
 		return fmt.Errorf("fetch Knot owner: unexpected HTTP status %d %s", response.StatusCode, http.StatusText(response.StatusCode))
 	}
-	body, err := io.ReadAll(io.LimitReader(response.Body, knotOwnerResponseMax+1))
+	body, err := io.ReadAll(io.LimitReader(response.Body, ownerResponseMax+1))
 	if err != nil {
 		return fmt.Errorf("read Knot owner: %w", err)
 	}
-	if len(body) > knotOwnerResponseMax {
-		return fmt.Errorf("read Knot owner: response exceeds %d bytes", knotOwnerResponseMax)
+	if len(body) > ownerResponseMax {
+		return fmt.Errorf("read Knot owner: response exceeds %d bytes", ownerResponseMax)
 	}
 	var output struct {
 		Owner string `json:"owner"`

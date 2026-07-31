@@ -477,8 +477,10 @@ func (k *testKnot) Merge(_ context.Context, input knot.MergeInput) error {
 }
 
 type testAppview struct {
-	repo  *tangled.Repo
-	pulls *tangled.List
+	repo   *tangled.Repo
+	pulls  *tangled.List
+	search *tangled.SearchResult
+	stars  int64
 }
 
 func (a testAppview) GetRepo(context.Context, string) (*tangled.Repo, error) { return a.repo, nil }
@@ -494,3 +496,10 @@ func (a testAppview) ListPulls(context.Context, string, tangled.ListOpts) (*tang
 	}
 	return a.pulls, nil
 }
+func (a testAppview) Search(context.Context, string, int64) (*tangled.SearchResult, error) {
+	if a.search == nil {
+		return nil, errors.New("not implemented")
+	}
+	return a.search, nil
+}
+func (a testAppview) CountStars(context.Context, string) (int64, error) { return a.stars, nil }

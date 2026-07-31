@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net/http"
 	"time"
 
 	"github.com/alyraffauf/tg/atproto"
@@ -374,21 +373,7 @@ func (s *Service) downloadPullPatch(ctx context.Context, authorDID, cid string) 
 	if err != nil {
 		return nil, fmt.Errorf("resolve PDS for author %q: %w", authorDID, err)
 	}
-	url := fmt.Sprintf("%s/xrpc/com.atproto.sync.getBlob?did=%s&cid=%s", pdsHost, authorDID, cid)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("build patch download request: %w", err)
-	}
-	resp, err := s.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("download patch: %w", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		return nil, fmt.Errorf("download patch: PDS returned HTTP %d", resp.StatusCode)
-	}
-
-	compressed, err := readLimited(resp.Body, maxPullPatchSize)
+	compressed, err := atproto.NewPublic(pdsHost, s.httpClient).GetBlob(ctx, authorDID, cid)
 	if err != nil {
 		return nil, fmt.Errorf("download patch: %w", err)
 	}
