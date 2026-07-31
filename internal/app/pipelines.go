@@ -18,6 +18,71 @@ func (s *Service) ListPipelines(ctx context.Context, target Target) ([]Pipeline,
 	return listPipelinePages(ctx, client, repoDID)
 }
 
+// CancelPipeline cancels every workflow in a pipeline, or only the selected workflows.
+func (s *Service) CancelPipeline(ctx context.Context, target Target, pipelineID string, workflows []string) (*PipelineCancelResult, error) {
+	spindleHost, repoDID, err := s.pipelineTarget(ctx, target)
+	if err != nil {
+		return nil, err
+	}
+	client, err := s.spindle.New(spindleHost)
+	if err != nil {
+		return nil, fmt.Errorf("connect to pipeline spindle: %w", err)
+	}
+	pipeline, err := client.GetPipeline(ctx, pipelineID)
+	if err != nil {
+		return nil, err
+	}
+	cancellableWorkflows := selectCancellableWorkflows(pipeline.Workflows, workflows)
+	if len(cancellableWorkflows) == 0 {
+		return &PipelineCancelResult{Pipeline: pipelineID}, nil
+	}
+
+	pds, _, err := s.authenticatedPDS(ctx)
+	if err != nil {
+		return nil, err
+	}
+	audience, err := spindle.ServiceDID(spindleHost)
+	if err != nil {
+		return nil, err
+	}
+	token, err := pds.GetServiceAuth(ctx, audience, "sh.tangled.ci.cancelPipeline")
+	if err != nil {
+		return nil, fmt.Errorf("mint pipeline cancel token: %w", err)
+	}
+	authenticatedClient, err := s.spindle.NewWithToken(spindleHost, token)
+	if err != nil {
+		return nil, fmt.Errorf("connect to pipeline spindle: %w", err)
+	}
+	workflowsForRequest := cancellableWorkflows
+	if len(workflows) == 0 {
+		workflowsForRequest = nil
+	}
+	if err := authenticatedClient.CancelPipeline(ctx, spindle.CancelPipelineInput{
+		Pipeline: pipelineID, Repo: repoDID, Workflows: workflowsForRequest,
+	}); err != nil {
+		return nil, err
+	}
+	return &PipelineCancelResult{Pipeline: pipelineID, Workflows: cancellableWorkflows, CancellationRequested: true}, nil
+}
+
+func selectCancellableWorkflows(workflows []spindle.Workflow, selected []string) []string {
+	selectedWorkflows := make(map[string]bool, len(selected))
+	for _, workflow := range selected {
+		selectedWorkflows[workflow] = true
+	}
+
+	cancellable := make([]string, 0, len(workflows))
+	for _, workflow := range workflows {
+		if workflow.Status != "pending" && workflow.Status != "running" {
+			continue
+		}
+		if len(selectedWorkflows) == 0 || selectedWorkflows[workflow.Name] {
+			cancellable = append(cancellable, workflow.Name)
+		}
+	}
+	return cancellable
+}
+
 // PipelineStatus returns the most recent pipeline for a repository.
 func (s *Service) PipelineStatus(ctx context.Context, target Target) (*PipelineStatusResult, error) {
 	client, repoDID, err := s.pipelineClient(ctx, target)
@@ -37,23 +102,31 @@ func (s *Service) PipelineStatus(ctx context.Context, target Target) (*PipelineS
 }
 
 func (s *Service) pipelineClient(ctx context.Context, target Target) (pipelineClient, string, error) {
-	repo, err := s.resolveRepo(ctx, target)
+	spindleHost, repoDID, err := s.pipelineTarget(ctx, target)
 	if err != nil {
 		return nil, "", err
-	}
-	spindleHost := stringValue(repo.Value.Spindle)
-	if spindleHost == "" {
-		return nil, "", fmt.Errorf("pipelines are not configured for repository %q", target.String())
-	}
-	repoDID := stringValue(repo.Value.RepoDid)
-	if repoDID == "" {
-		return nil, "", fmt.Errorf("repository %q has no repository DID", target.String())
 	}
 	client, err := s.spindle.New(spindleHost)
 	if err != nil {
 		return nil, "", fmt.Errorf("connect to pipeline spindle: %w", err)
 	}
 	return client, repoDID, nil
+}
+
+func (s *Service) pipelineTarget(ctx context.Context, target Target) (string, string, error) {
+	repo, err := s.resolveRepo(ctx, target)
+	if err != nil {
+		return "", "", err
+	}
+	spindleHost := stringValue(repo.Value.Spindle)
+	if spindleHost == "" {
+		return "", "", fmt.Errorf("pipelines are not configured for repository %q", target.String())
+	}
+	repoDID := stringValue(repo.Value.RepoDid)
+	if repoDID == "" {
+		return "", "", fmt.Errorf("repository %q has no repository DID", target.String())
+	}
+	return spindleHost, repoDID, nil
 }
 
 // ViewPipeline finds a pipeline by its spindle-local ID.

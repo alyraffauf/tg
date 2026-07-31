@@ -69,10 +69,13 @@ type knotClientFactory interface {
 type pipelineClient interface {
 	QueryPipelines(context.Context, string, string) (*spindle.QueryPipelinesOutput, error)
 	QueryLatestPipeline(context.Context, string) (*spindle.QueryPipelinesOutput, error)
+	GetPipeline(context.Context, string) (*spindle.Pipeline, error)
+	CancelPipeline(context.Context, spindle.CancelPipelineInput) error
 }
 
 type spindleClientFactory interface {
 	New(string) (pipelineClient, error)
+	NewWithToken(string, string) (pipelineClient, error)
 }
 
 type knotOwnershipVerifier interface {
@@ -133,6 +136,10 @@ type productionSpindleFactory struct {
 
 func (f productionSpindleFactory) New(host string) (pipelineClient, error) {
 	return spindle.New(host, f.httpClient)
+}
+
+func (f productionSpindleFactory) NewWithToken(host, token string) (pipelineClient, error) {
+	return spindle.NewWithToken(host, token, f.httpClient)
 }
 
 func (f productionKnotFactory) New(host, token string) knotClient {

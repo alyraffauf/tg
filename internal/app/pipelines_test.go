@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 
 	"github.com/alyraffauf/tg/internal/tangledlex"
@@ -67,6 +68,20 @@ func TestPipelineHasFailures(t *testing.T) {
 	}
 }
 
+func TestSelectCancellableWorkflows(t *testing.T) {
+	workflows := []spindle.Workflow{
+		{Name: "pending.yml", Status: "pending"},
+		{Name: "running.yml", Status: "running"},
+		{Name: "done.yml", Status: "success"},
+	}
+	if got := selectCancellableWorkflows(workflows, nil); !slices.Equal(got, []string{"pending.yml", "running.yml"}) {
+		t.Fatalf("all cancellable workflows = %q", got)
+	}
+	if got := selectCancellableWorkflows(workflows, []string{"running.yml", "done.yml"}); !slices.Equal(got, []string{"running.yml"}) {
+		t.Fatalf("selected cancellable workflows = %q", got)
+	}
+}
+
 func TestPipelineStatusReturnsLatestPipeline(t *testing.T) {
 	client := &testPipelineClient{responses: []*spindle.QueryPipelinesOutput{{
 		Pipelines: []spindle.Pipeline{{
@@ -88,14 +103,52 @@ func TestPipelineStatusReturnsLatestPipeline(t *testing.T) {
 	}
 }
 
+func TestCancelPipelineMintsSpindleToken(t *testing.T) {
+	client := &testPipelineClient{pipeline: &spindle.Pipeline{Workflows: []spindle.Workflow{
+		{Name: "test.yml", Status: "pending"},
+		{Name: "done.yml", Status: "success"},
+	}}}
+	pds := &testPDS{}
+	service := testService(pds, &testGit{}, &testKnot{})
+	service.appview = testAppview{repo: &tangled.Repo{Value: tangledlex.Repo{
+		Knot: "knot.example", Spindle: optionalString("spindle.example"), RepoDid: optionalString("did:plc:repo"),
+	}}}
+	service.spindle = testSpindleFactory{client: client}
+
+	result, err := service.CancelPipeline(context.Background(), Target{Handle: "owner.test", Repo: "example"}, "3mrvk5dbnep22", []string{"test.yml", "done.yml", "unknown.yml"})
+	if err != nil {
+		t.Fatalf("CancelPipeline() error = %v", err)
+	}
+	if result.Pipeline != "3mrvk5dbnep22" || len(result.Workflows) != 1 {
+		t.Fatalf("CancelPipeline() = %+v", result)
+	}
+	if pds.serviceAuthAudiences[0] != "did:web:spindle.example" || pds.serviceAuthLexiconMethods[0] != "sh.tangled.ci.cancelPipeline" {
+		t.Fatalf("service auth = audience %q, method %q", pds.serviceAuthAudiences[0], pds.serviceAuthLexiconMethods[0])
+	}
+	if client.cancelInput.Pipeline != "3mrvk5dbnep22" || client.cancelInput.Repo != "did:plc:repo" || !slices.Equal(client.cancelInput.Workflows, []string{"test.yml"}) {
+		t.Fatalf("cancel input = %+v", client.cancelInput)
+	}
+}
+
 type testPipelineClient struct {
-	responses []*spindle.QueryPipelinesOutput
-	cursors   []string
-	err       error
+	responses   []*spindle.QueryPipelinesOutput
+	cursors     []string
+	err         error
+	cancelInput spindle.CancelPipelineInput
+	pipeline    *spindle.Pipeline
 }
 
 func (c *testPipelineClient) QueryLatestPipeline(_ context.Context, _ string) (*spindle.QueryPipelinesOutput, error) {
 	return c.responses[0], nil
+}
+
+func (c *testPipelineClient) GetPipeline(context.Context, string) (*spindle.Pipeline, error) {
+	return c.pipeline, c.err
+}
+
+func (c *testPipelineClient) CancelPipeline(_ context.Context, input spindle.CancelPipelineInput) error {
+	c.cancelInput = input
+	return c.err
 }
 
 type testSpindleFactory struct {
@@ -103,6 +156,10 @@ type testSpindleFactory struct {
 }
 
 func (f testSpindleFactory) New(string) (pipelineClient, error) {
+	return f.client, nil
+}
+
+func (f testSpindleFactory) NewWithToken(string, string) (pipelineClient, error) {
 	return f.client, nil
 }
 
