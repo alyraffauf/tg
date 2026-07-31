@@ -22,22 +22,33 @@ func newPipelineLogsCommand(service *app.Service) *cobra.Command {
 	var workflows []string
 
 	command := &cobra.Command{
-		Use:   "logs <id>",
+		Use:   "logs [id]",
 		Short: "Stream pipeline logs",
 		Long: `Stream log output from a pipeline in real time.
 
-If --repo is not set, the repository is detected from the current directory's
-git origin remote. Use --workflow to filter to specific workflows.`,
-		Args: cobra.ExactArgs(1),
+If no pipeline ID is given, streams the latest pipeline for the repository. If
+--repo is not set, the repository is detected from the current directory's git
+origin remote. Use --workflow to filter to specific workflows.`,
+		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			target, err := resolveTargetFlag(cmd.Context(), repository, service)
 			if err != nil {
 				return err
 			}
+			pipelineID := ""
+			if len(args) > 0 {
+				pipelineID = args[0]
+			} else {
+				status, err := service.PipelineStatus(cmd.Context(), target)
+				if err != nil {
+					return err
+				}
+				pipelineID = status.Pipeline.ID
+			}
 			jsonOutput, _ := cmd.Flags().GetBool("json")
 			out := cmd.OutOrStdout()
 			terminal := isTerminal(out)
-			return service.PipelineLogs(cmd.Context(), target, args[0], workflows, func(event app.PipelineLogEvent) error {
+			return service.PipelineLogs(cmd.Context(), target, pipelineID, workflows, func(event app.PipelineLogEvent) error {
 				if jsonOutput {
 					return json.NewEncoder(out).Encode(event)
 				}
