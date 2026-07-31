@@ -9,6 +9,7 @@ _: {
       packages =
         (with pkgs; [
           go
+          just
         ])
         ++ lib.attrValues config.treefmt.build.programs;
 

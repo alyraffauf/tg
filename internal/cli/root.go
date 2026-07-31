@@ -17,6 +17,11 @@ const (
 	// here, to avoid clashes with other local services.
 	oauthCallbackHost = "127.0.0.1"
 	oauthCallbackPath = "/callback"
+
+	// version is the CLI version reported by --version and the man page
+	// header. It is bumped by `just release` at tag time; on master between
+	// releases it reads as the last released version.
+	version = "0.3.0"
 )
 
 func NewRoot(service *app.Service) *cobra.Command {
@@ -27,6 +32,7 @@ func newRoot(service *app.Service, defaultKnot, defaultSSHPort, defaultProtocol 
 	rootCmd := &cobra.Command{
 		Use:           "tg",
 		Short:         "A CLI for Tangled",
+		Version:       version,
 		SilenceErrors: true,
 		SilenceUsage:  true,
 	}

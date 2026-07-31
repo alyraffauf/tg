@@ -31,7 +31,7 @@ func newManCommand(_ *app.Service) *cobra.Command {
 			header := &doc.GenManHeader{
 				Title:   "tg",
 				Section: "1",
-				Source:  "tg",
+				Source:  "tg " + version,
 			}
 			return doc.GenManTree(cmd.Root(), header, dir)
 		},

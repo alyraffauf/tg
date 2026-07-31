@@ -32,6 +32,17 @@ func TestNewRootCreatesIndependentCommandState(t *testing.T) {
 	}
 }
 
+func TestVersionFlag(t *testing.T) {
+	var output bytes.Buffer
+	err := ExecuteWith([]string{"--version"}, nil, &output, &bytes.Buffer{})
+	if err != nil {
+		t.Fatalf("ExecuteWith(--version) error = %v", err)
+	}
+	if want := "tg version " + version + "\n"; output.String() != want {
+		t.Errorf("--version output = %q, want %q", output.String(), want)
+	}
+}
+
 func TestExecuteWithRendersErrors(t *testing.T) {
 	var errorOutput bytes.Buffer
 	err := ExecuteWith([]string{"issue", "edit", "abc123"}, nil, &bytes.Buffer{}, &errorOutput)
