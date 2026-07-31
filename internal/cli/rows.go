@@ -136,14 +136,15 @@ func styleTableCell(style lipgloss.Style, header []string, rows [][]string, row,
 		}
 	case "title", "account":
 		return style.Bold(true)
-	case "did", "rkey", "method", "updated":
+	case "did", "id", "rkey", "method", "updated":
 		return style.Faint(true)
 	}
 	return style
 }
 
 func workflowStatusColor(status string) color.Color {
-	switch strings.ToLower(status) {
+	status = strings.TrimLeft(strings.ToLower(status), "✓✗●○⊘ ")
+	switch status {
 	case "success":
 		return lipgloss.Green
 	case "failed", "timeout":

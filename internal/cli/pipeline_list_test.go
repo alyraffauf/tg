@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"io"
 	"strings"
 	"testing"
 
@@ -32,15 +33,24 @@ func TestRenderPipelineList(t *testing.T) {
 }
 
 func TestPipelineStatusSummary(t *testing.T) {
+	originalIsTerminal := isTerminal
+	t.Cleanup(func() { isTerminal = originalIsTerminal })
+
 	workflows := []app.PipelineWorkflow{
 		{Name: "test", Status: "success"},
 		{Name: "lint", Status: "running"},
 		{Name: "build", Status: "failed"},
 	}
-	got := pipelineStatusSummary(workflows)
+	got := pipelineStatusSummary(&bytes.Buffer{}, workflows)
 	const want = "✗ 1 failed · ● 1 running · ✓ 1 passed"
 	if got != want {
 		t.Fatalf("pipelineStatusSummary() = %q, want %q", got, want)
+	}
+
+	isTerminal = func(io.Writer) bool { return true }
+	colored := pipelineStatusSummary(&bytes.Buffer{}, workflows)
+	if !strings.Contains(colored, "\x1b[") {
+		t.Fatalf("terminal summary has no color: %q", colored)
 	}
 }
 

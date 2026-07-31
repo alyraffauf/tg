@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	"charm.land/lipgloss/v2"
 	"github.com/alyraffauf/tg/internal/app"
 	"github.com/spf13/cobra"
 )
@@ -41,7 +42,7 @@ func renderPipelineList(writer io.Writer, pipelines []app.Pipeline) {
 			pipeline.ID,
 			shortCommit(pipeline.Commit),
 			pipelineTrigger(pipeline.Trigger),
-			pipelineStatusSummary(pipeline.Workflows),
+			pipelineStatusSummary(writer, pipeline.Workflows),
 			shortDate(pipeline.CreatedAt),
 		})
 	}
@@ -57,44 +58,35 @@ func shortCommit(commit string) string {
 
 func pipelineTrigger(trigger map[string]any) string {
 	triggerType, _ := trigger["$type"].(string)
+	ref, _ := trigger["ref"].(string)
 	switch triggerType {
 	case "sh.tangled.ci.trigger#push":
-		return joinTriggerDetails("push", triggerString(trigger, "ref"))
+		if ref == "" {
+			return "push"
+		}
+		return "push " + ref
 	case "sh.tangled.ci.trigger#pullRequest":
-		sourceBranch := triggerString(trigger, "sourceBranch")
-		targetBranch := triggerString(trigger, "targetBranch")
+		sourceBranch, _ := trigger["sourceBranch"].(string)
+		targetBranch, _ := trigger["targetBranch"].(string)
 		if sourceBranch != "" && targetBranch != "" {
 			return "pull request " + sourceBranch + " → " + targetBranch
 		}
 		return "pull request"
 	case "sh.tangled.ci.trigger#manual":
-		return joinTriggerDetails("manual", triggerString(trigger, "ref"))
+		if ref == "" {
+			return "manual"
+		}
+		return "manual " + ref
 	default:
 		return "unknown"
 	}
 }
 
-func triggerString(trigger map[string]any, key string) string {
-	value, _ := trigger[key].(string)
-	return value
-}
-
-func joinTriggerDetails(kind, detail string) string {
-	if detail == "" {
-		return kind
-	}
-	return kind + " " + detail
-}
-
-func pipelineStatusSummary(workflows []app.PipelineWorkflow) string {
+func pipelineStatusSummary(writer io.Writer, workflows []app.PipelineWorkflow) string {
 	counts := make(map[string]int)
 	for _, workflow := range workflows {
 		counts[workflow.Status]++
 	}
-	return strings.Join(statusSummaryParts(counts), " · ")
-}
-
-func statusSummaryParts(counts map[string]int) []string {
 	statuses := []struct {
 		name   string
 		symbol string
@@ -111,18 +103,15 @@ func statusSummaryParts(counts map[string]int) []string {
 	parts := make([]string, 0, len(statuses))
 	for _, status := range statuses {
 		if count := counts[status.name]; count > 0 {
-			parts = append(parts, status.symbol+" "+pluralizeStatus(count, status.label))
+			part := status.symbol + " " + strconv.Itoa(count) + " " + status.label
+			if terminalColor := workflowStatusColor(status.name); isTerminal(writer) && terminalColor != nil {
+				part = lipgloss.NewStyle().Foreground(terminalColor).Render(part)
+			}
+			parts = append(parts, part)
 		}
 	}
 	if len(parts) == 0 {
-		return []string{"unknown"}
+		return "unknown"
 	}
-	return parts
-}
-
-func pluralizeStatus(count int, label string) string {
-	if count == 1 {
-		return "1 " + label
-	}
-	return strconv.Itoa(count) + " " + label
+	return strings.Join(parts, " · ")
 }
