@@ -121,3 +121,41 @@ func TestQueryLatestPipelineLimitsResults(t *testing.T) {
 		t.Fatalf("QueryLatestPipeline() error = %v", err)
 	}
 }
+
+func TestGetPipelineQueriesAndDecodes(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/xrpc/"+nsidGetPipeline.String() {
+			t.Fatalf("path = %q", request.URL.Path)
+		}
+		if request.URL.Query().Get("pipeline") != "3mrvk5dbnep22" {
+			t.Fatalf("pipeline query = %q", request.URL.Query().Get("pipeline"))
+		}
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = writer.Write([]byte(`{"id":"3mrvk5dbnep22","commit":"abc","trigger":{"$type":"sh.tangled.ci.trigger#push"},"workflows":[{"id":"test","name":"test","status":"success"}]}`))
+	}))
+	defer server.Close()
+
+	client, err := New(server.URL, server.Client())
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	pipeline, err := client.GetPipeline(context.Background(), "3mrvk5dbnep22")
+	if err != nil {
+		t.Fatalf("GetPipeline() error = %v", err)
+	}
+	if pipeline.ID != "3mrvk5dbnep22" || pipeline.Commit != "abc" || len(pipeline.Workflows) != 1 {
+		t.Fatalf("pipeline = %+v", pipeline)
+	}
+}
+
+func TestServiceDID(t *testing.T) {
+	if got, err := ServiceDID("spindle.example"); err != nil || got != "did:web:spindle.example" {
+		t.Fatalf("ServiceDID() = %q, %v", got, err)
+	}
+	if got, err := ServiceDID("https://spindle.example:443"); err != nil || got != "did:web:spindle.example%3A443" {
+		t.Fatalf("ServiceDID(port) = %q, %v", got, err)
+	}
+	if _, err := ServiceDID(""); err == nil {
+		t.Fatal("ServiceDID(empty) error = nil")
+	}
+}
