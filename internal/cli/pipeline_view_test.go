@@ -22,7 +22,7 @@ func TestRenderPipelineDetail(t *testing.T) {
 
 	var output bytes.Buffer
 	renderPipelineDetail(&output, pipeline)
-	for _, expected := range []string{"ID:", "pipeline-123", "Trigger:", "manual main", "WORKFLOW", "exit status 1"} {
+	for _, expected := range []string{"ID:", "pipeline-123", "Trigger:", "manual main", "WORKFLOW", "✗ failed", "exit status 1"} {
 		if !strings.Contains(output.String(), expected) {
 			t.Errorf("output missing %q:\n%s", expected, output.String())
 		}

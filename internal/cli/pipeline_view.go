@@ -57,7 +57,7 @@ func renderPipelineWorkflows(writer io.Writer, workflows []app.PipelineWorkflow)
 	for _, workflow := range workflows {
 		rows = append(rows, []string{
 			workflow.Name,
-			workflow.Status,
+			workflowStatusLabel(workflow.Status),
 			workflow.StartedAt,
 			workflow.FinishedAt,
 			workflow.Error,
@@ -65,4 +65,21 @@ func renderPipelineWorkflows(writer io.Writer, workflows []app.PipelineWorkflow)
 	}
 	fmt.Fprintln(writer)
 	renderTable(writer, []string{"WORKFLOW", "STATUS", "STARTED", "FINISHED", "ERROR"}, rows, "No workflows found.")
+}
+
+func workflowStatusLabel(status string) string {
+	switch status {
+	case "success":
+		return "✓ success"
+	case "failed", "timeout":
+		return "✗ " + status
+	case "running":
+		return "● running"
+	case "pending":
+		return "○ pending"
+	case "cancelled":
+		return "⊘ cancelled"
+	default:
+		return status
+	}
 }
