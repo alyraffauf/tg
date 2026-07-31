@@ -32,7 +32,7 @@ If no handle is given, views the authenticated user's string
 				fields := []detailField{
 					{"Filename", view.Filename},
 					{"Author", view.Author.Handle},
-					{"Created", view.CreatedAt},
+					{"Created", localTimestamp(view.CreatedAt)},
 				}
 				if view.Description != "" {
 					fields = append(fields, detailField{"Description", view.Description})

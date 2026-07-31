@@ -31,7 +31,7 @@ directory's git origin remote.`,
 					{"Title", view.Title},
 					{"Status", formatDetailState(cmd.OutOrStdout(), view.State)},
 					{"Author", view.Author.Handle},
-					{"Created", view.CreatedAt},
+					{"Created", localTimestamp(view.CreatedAt)},
 					{"Branch", view.SourceBranch + " → " + view.TargetBranch},
 				}
 				renderDetail(cmd.OutOrStdout(), fields, view.Body)

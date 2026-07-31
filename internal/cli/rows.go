@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 	"text/tabwriter"
+	"time"
 
 	"charm.land/lipgloss/v2"
 	"charm.land/lipgloss/v2/table"
@@ -14,12 +15,22 @@ import (
 	xterm "github.com/charmbracelet/x/term"
 )
 
-// shortDate trims an ISO 8601 timestamp to its YYYY-MM-DD prefix.
+// shortDate renders an ISO 8601 timestamp as the date in the user's timezone.
 func shortDate(timestamp string) string {
-	if len(timestamp) > 10 {
-		return timestamp[:10]
+	parsed, err := time.Parse(time.RFC3339, timestamp)
+	if err != nil {
+		return timestamp
 	}
-	return timestamp
+	return parsed.Local().Format("2006-01-02")
+}
+
+// localTimestamp renders an ISO 8601 timestamp in the user's timezone.
+func localTimestamp(timestamp string) string {
+	parsed, err := time.Parse(time.RFC3339, timestamp)
+	if err != nil {
+		return timestamp
+	}
+	return parsed.Local().Format("2006-01-02 15:04:05 MST")
 }
 
 // asFile returns w as an *os.File, or nil when w is not backed by a file.

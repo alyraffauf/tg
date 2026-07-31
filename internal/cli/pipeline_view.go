@@ -42,7 +42,7 @@ func renderPipelineDetail(writer io.Writer, pipeline *app.Pipeline) {
 		{"ID", pipeline.ID},
 		{"Commit", pipeline.Commit},
 		{"Trigger", pipelineTrigger(pipeline.Trigger)},
-		{"Created", pipeline.CreatedAt},
+		{"Created", localTimestamp(pipeline.CreatedAt)},
 	}
 	if pipeline.SourceRepo != "" {
 		fields = append(fields, detailField{"Source Repo", pipeline.SourceRepo})
@@ -58,8 +58,8 @@ func renderPipelineWorkflows(writer io.Writer, workflows []app.PipelineWorkflow)
 		rows = append(rows, []string{
 			workflow.Name,
 			workflowStatusLabel(workflow.Status),
-			workflow.StartedAt,
-			workflow.FinishedAt,
+			localTimestamp(workflow.StartedAt),
+			localTimestamp(workflow.FinishedAt),
 			workflow.Error,
 		})
 	}

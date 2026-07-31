@@ -5,17 +5,23 @@ import (
 	"io"
 	"strings"
 	"testing"
+	"time"
 
 	"charm.land/lipgloss/v2"
 )
 
 func TestShortDate(t *testing.T) {
+	originalLocation := time.Local
+	t.Cleanup(func() { time.Local = originalLocation })
+	time.Local = time.FixedZone("Test", -5*60*60)
+
 	tests := []struct {
 		name      string
 		timestamp string
 		want      string
 	}{
 		{name: "iso timestamp", timestamp: "2026-07-21T10:30:00Z", want: "2026-07-21"},
+		{name: "timezone crosses date boundary", timestamp: "2026-07-21T02:30:00Z", want: "2026-07-20"},
 		{name: "date only", timestamp: "2026-07-21", want: "2026-07-21"},
 		{name: "short string", timestamp: "2026", want: "2026"},
 		{name: "empty", timestamp: "", want: ""},
@@ -27,6 +33,19 @@ func TestShortDate(t *testing.T) {
 				t.Fatalf("got %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestLocalTimestamp(t *testing.T) {
+	originalLocation := time.Local
+	t.Cleanup(func() { time.Local = originalLocation })
+	time.Local = time.FixedZone("Test", -5*60*60)
+
+	if got, want := localTimestamp("2026-07-21T10:30:00Z"), "2026-07-21 05:30:00 Test"; got != want {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+	if got, want := localTimestamp("not a timestamp"), "not a timestamp"; got != want {
+		t.Fatalf("got %q, want %q", got, want)
 	}
 }
 

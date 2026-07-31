@@ -34,7 +34,7 @@ func newRepoViewCommand(service *app.Service) *cobra.Command {
 					{"Description", item.Description},
 					{"URI", item.URI},
 					{"Knot", item.Knot},
-					{"Created", item.CreatedAt},
+					{"Created", localTimestamp(item.CreatedAt)},
 				}
 				if item.RepoDid != "" {
 					fields = append(fields, detailField{"Repo DID", item.RepoDid})
