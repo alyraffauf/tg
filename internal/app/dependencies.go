@@ -77,6 +77,7 @@ type pipelineClient interface {
 	GetPipeline(context.Context, string) (*spindle.Pipeline, error)
 	CancelPipeline(context.Context, spindle.CancelPipelineInput) error
 	TriggerPipeline(context.Context, spindle.TriggerPipelineInput) (*spindle.TriggerPipelineOutput, error)
+	SubscribePipelineLogs(context.Context, string, []string, func(spindle.PipelineLogEvent) error) error
 }
 
 type spindleClientFactory interface {

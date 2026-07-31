@@ -229,3 +229,30 @@ type GitCredentialResult struct {
 	Handle               string
 	MatchesRequestedHost bool
 }
+
+// PipelineLogControl marks the start or end of a workflow step.
+type PipelineLogControl struct {
+	Kind     string  `json:"kind"`
+	Step     int     `json:"step"`
+	Time     string  `json:"time"`
+	Status   string  `json:"status,omitempty"`
+	Content  string  `json:"content"`
+	Workflow string  `json:"workflow"`
+	Command  *string `json:"command,omitempty"`
+}
+
+// PipelineLogData is one line of workflow output.
+type PipelineLogData struct {
+	Step     int    `json:"step"`
+	Time     string `json:"time"`
+	Stream   string `json:"stream"`
+	Content  string `json:"content"`
+	Workflow string `json:"workflow"`
+}
+
+// PipelineLogEvent is one event from a log subscription.
+type PipelineLogEvent struct {
+	Type    string              `json:"type"`
+	Control *PipelineLogControl `json:"control,omitempty"`
+	Data    *PipelineLogData    `json:"data,omitempty"`
+}

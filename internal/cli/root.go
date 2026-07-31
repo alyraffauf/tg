@@ -49,7 +49,7 @@ func newRoot(service *app.Service, defaultKnot, defaultSSHPort, defaultProtocol 
 	rootCmd.AddCommand(repo)
 
 	pipeline := newPipelineCommand(service)
-	pipeline.AddCommand(newPipelineListCommand(service), newPipelineViewCommand(service), newPipelineStatusCommand(service), newPipelineCancelCommand(service), newPipelineTriggerCommand(service))
+	pipeline.AddCommand(newPipelineListCommand(service), newPipelineViewCommand(service), newPipelineStatusCommand(service), newPipelineCancelCommand(service), newPipelineTriggerCommand(service), newPipelineLogsCommand(service))
 	rootCmd.AddCommand(pipeline)
 
 	keys := newSSHKeyCommand(service)

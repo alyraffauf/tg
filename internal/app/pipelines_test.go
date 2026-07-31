@@ -188,6 +188,7 @@ type testPipelineClient struct {
 	pipelineID    string
 	triggerInput  spindle.TriggerPipelineInput
 	triggerOutput *spindle.TriggerPipelineOutput
+	logEvents     []spindle.PipelineLogEvent
 }
 
 func (c *testPipelineClient) QueryLatestPipeline(_ context.Context, _ string) (*spindle.QueryPipelinesOutput, error) {
@@ -229,4 +230,13 @@ func (c *testPipelineClient) QueryPipelines(_ context.Context, _ string, cursor 
 	response := c.responses[0]
 	c.responses = c.responses[1:]
 	return response, nil
+}
+
+func (c *testPipelineClient) SubscribePipelineLogs(_ context.Context, _ string, _ []string, onEvent func(spindle.PipelineLogEvent) error) error {
+	for _, event := range c.logEvents {
+		if err := onEvent(event); err != nil {
+			return err
+		}
+	}
+	return nil
 }

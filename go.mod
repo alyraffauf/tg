@@ -7,6 +7,7 @@ require (
 	charm.land/lipgloss/v2 v2.0.5
 	github.com/bluesky-social/indigo v0.0.0-20260629160527-dfe5578fd537
 	github.com/charmbracelet/x/term v0.2.2
+	github.com/gorilla/websocket v1.5.1
 	github.com/ipfs/go-cid v0.6.2
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.21.0
