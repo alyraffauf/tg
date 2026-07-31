@@ -191,26 +191,21 @@ func (s *Service) pipelineTarget(ctx context.Context, target Target) (string, st
 	return spindleHost, repoDID, nil
 }
 
-// ViewPipeline finds a pipeline by its spindle-local ID.
+// ViewPipeline fetches a pipeline by its spindle-local ID.
 func (s *Service) ViewPipeline(ctx context.Context, target Target, pipelineID string) (*Pipeline, error) {
-	pipelines, err := s.ListPipelines(ctx, target)
+	client, repoDID, err := s.pipelineClient(ctx, target)
 	if err != nil {
 		return nil, err
 	}
-	pipeline, err := findPipeline(pipelines, pipelineID)
+	pipeline, err := client.GetPipeline(ctx, pipelineID)
 	if err != nil {
-		return nil, fmt.Errorf("pipeline %q not found for repository %q", pipelineID, target.String())
+		return nil, err
 	}
-	return pipeline, nil
-}
-
-func findPipeline(pipelines []Pipeline, pipelineID string) (*Pipeline, error) {
-	for index := range pipelines {
-		if pipelines[index].ID == pipelineID {
-			return &pipelines[index], nil
-		}
+	if pipeline.Repo != repoDID {
+		return nil, fmt.Errorf("pipeline %q does not belong to repository %q", pipelineID, target.String())
 	}
-	return nil, fmt.Errorf("pipeline %q not found", pipelineID)
+	item := pipelineItem(*pipeline)
+	return &item, nil
 }
 
 func pipelineHasFailures(pipeline Pipeline) bool {
@@ -242,17 +237,21 @@ func listPipelinePages(ctx context.Context, client pipelineClient, repoDID strin
 func pipelineItems(pipelines []spindle.Pipeline) []Pipeline {
 	items := make([]Pipeline, 0, len(pipelines))
 	for _, pipeline := range pipelines {
-		workflows := make([]PipelineWorkflow, 0, len(pipeline.Workflows))
-		for _, workflow := range pipeline.Workflows {
-			workflows = append(workflows, PipelineWorkflow{
-				ID: workflow.ID, Name: workflow.Name, Status: workflow.Status, Error: workflow.Error,
-				StartedAt: workflow.StartedAt, FinishedAt: workflow.FinishedAt,
-			})
-		}
-		items = append(items, Pipeline{
-			ID: pipeline.ID, Commit: pipeline.Commit, CreatedAt: pipeline.CreatedAt,
-			Repo: pipeline.Repo, SourceRepo: pipeline.SourceRepo, Trigger: pipeline.Trigger, Workflows: workflows,
-		})
+		items = append(items, pipelineItem(pipeline))
 	}
 	return items
+}
+
+func pipelineItem(pipeline spindle.Pipeline) Pipeline {
+	workflows := make([]PipelineWorkflow, 0, len(pipeline.Workflows))
+	for _, workflow := range pipeline.Workflows {
+		workflows = append(workflows, PipelineWorkflow{
+			ID: workflow.ID, Name: workflow.Name, Status: workflow.Status, Error: workflow.Error,
+			StartedAt: workflow.StartedAt, FinishedAt: workflow.FinishedAt,
+		})
+	}
+	return Pipeline{
+		ID: pipeline.ID, Commit: pipeline.Commit, CreatedAt: pipeline.CreatedAt,
+		Repo: pipeline.Repo, SourceRepo: pipeline.SourceRepo, Trigger: pipeline.Trigger, Workflows: workflows,
+	}
 }

@@ -37,14 +37,37 @@ func TestListPipelinePagesReturnsClientError(t *testing.T) {
 	}
 }
 
-func TestFindPipeline(t *testing.T) {
-	pipelines := []Pipeline{{ID: "first"}, {ID: "second"}}
-	found, err := findPipeline(pipelines, "second")
+func TestViewPipelineFetchesPipelineDirectly(t *testing.T) {
+	client := &testPipelineClient{pipeline: &spindle.Pipeline{ID: "second", Repo: "did:plc:repo"}}
+	service := testService(&testPDS{}, &testGit{}, &testKnot{})
+	service.appview = testAppview{repo: &tangled.Repo{Value: tangledlex.Repo{
+		Spindle: optionalString("spindle.example"), RepoDid: optionalString("did:plc:repo"),
+	}}}
+	service.spindle = testSpindleFactory{client: client}
+
+	found, err := service.ViewPipeline(context.Background(), Target{Handle: "owner.test", Repo: "example"}, "second")
 	if err != nil {
-		t.Fatalf("findPipeline() error = %v", err)
+		t.Fatalf("ViewPipeline() error = %v", err)
 	}
 	if found.ID != "second" {
-		t.Fatalf("findPipeline() = %+v, want second", found)
+		t.Fatalf("ViewPipeline() = %+v, want second", found)
+	}
+	if client.pipelineID != "second" {
+		t.Fatalf("GetPipeline() ID = %q, want second", client.pipelineID)
+	}
+}
+
+func TestViewPipelineRejectsPipelineFromAnotherRepository(t *testing.T) {
+	client := &testPipelineClient{pipeline: &spindle.Pipeline{ID: "second", Repo: "did:plc:other"}}
+	service := testService(&testPDS{}, &testGit{}, &testKnot{})
+	service.appview = testAppview{repo: &tangled.Repo{Value: tangledlex.Repo{
+		Spindle: optionalString("spindle.example"), RepoDid: optionalString("did:plc:repo"),
+	}}}
+	service.spindle = testSpindleFactory{client: client}
+
+	_, err := service.ViewPipeline(context.Background(), Target{Handle: "owner.test", Repo: "example"}, "second")
+	if err == nil || err.Error() != "pipeline \"second\" does not belong to repository \"owner.test/example\"" {
+		t.Fatalf("ViewPipeline() error = %v", err)
 	}
 }
 
@@ -161,6 +184,7 @@ type testPipelineClient struct {
 	err           error
 	cancelInput   spindle.CancelPipelineInput
 	pipeline      *spindle.Pipeline
+	pipelineID    string
 	triggerInput  spindle.TriggerPipelineInput
 	triggerOutput *spindle.TriggerPipelineOutput
 }
@@ -169,7 +193,8 @@ func (c *testPipelineClient) QueryLatestPipeline(_ context.Context, _ string) (*
 	return c.responses[0], nil
 }
 
-func (c *testPipelineClient) GetPipeline(context.Context, string) (*spindle.Pipeline, error) {
+func (c *testPipelineClient) GetPipeline(_ context.Context, pipelineID string) (*spindle.Pipeline, error) {
+	c.pipelineID = pipelineID
 	return c.pipeline, c.err
 }
 
