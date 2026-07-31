@@ -1,0 +1,46 @@
+---
+title: tg
+description: A terminal client for Tangled.
+template: splash
+hero:
+  tagline: 'A terminal client for <a href="https://tangled.org">Tangled</a>.'
+  actions:
+    - text: Get started
+      link: /cookbooks/authentication/
+      icon: right-arrow
+    - text: Command reference
+      link: /reference/commands/tg/
+      icon: external
+      variant: minimal
+---
+
+import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+## Install
+
+<CardGrid>
+	<Card title="Nix" icon="nix">
+		```bash
+		nix profile add github:alyraffauf/tg
+		```
+	</Card>
+	<Card title="From source" icon="download">
+		```bash
+		go install github.com/alyraffauf/tg/cmd/tg@latest
+		```
+	</Card>
+</CardGrid>
+
+## Quick start
+
+```bash
+tg auth login alice.example.com
+tg repo clone aly.codes/tg
+```
+
+## Guides
+
+<CardGrid>
+	<LinkCard title="Authentication" href="/cookbooks/authentication/" description="OAuth, app passwords, multiple accounts, keyring storage." />
+	<LinkCard title="Configuration" href="/cookbooks/configuration/" description="Config file, environment variables, and flags." />
+</CardGrid>

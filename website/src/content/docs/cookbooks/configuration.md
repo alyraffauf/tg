@@ -1,4 +1,7 @@
-# Configuration
+---
+title: Configuration
+description: Config file, environment variables, and flags.
+---
 
 `tg` resolves configuration values from the following sources, in increasing
 precedence (later sources override earlier ones):

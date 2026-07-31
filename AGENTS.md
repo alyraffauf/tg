@@ -11,11 +11,12 @@
 ## Nix gotchas
 
 - Changing `go.mod`/`go.sum` invalidates `vendorHash` in `nix/tg.nix`. `nix build` fails with a hash mismatch; copy the `got:` hash into `vendorHash` and rebuild. Don't commit dependency changes until the build passes with the updated hash.
-- Man pages are generated at build time by the hidden `tg man` command (invoked from `nix/tg.nix`). There is no separate docs step: command help text (`Short`, `Long`, flag descriptions) is the entire user-facing reference, so keep it accurate when adding/changing commands.
+- Man pages are generated at build time by the hidden `tg man` command (invoked from `nix/tg.nix`).
+- Docs are the Astro site in `website/`: hand-written pages in `website/src/content/docs/` (the `reference/commands/` pages are generated and gitignored, produced from help text by `website/scripts/gen-commands.mjs`, which needs `tg` built first). Build with `cd website && bun install && bun run build`.
 
 ## CI
 
-Tangled pipelines in `.tangled/workflows/` (nixery engine), not GitHub Actions: `nix build .#tg` and `go test ./...`. Default branch is `master`.
+Tangled pipelines in `.tangled/workflows/` (nixery engine), not GitHub Actions: `nix build .#tg`, `go test ./...`, and the website build (`.tangled/workflows/website.yml`). Default branch is `master`.
 
 ## Architecture
 

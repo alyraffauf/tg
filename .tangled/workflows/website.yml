@@ -1,0 +1,43 @@
+when:
+  - event: ["push"]
+    branch: ["master"]
+  - event: ["manual"]
+
+engine: "nixery"
+
+environment:
+  CGO_ENABLED: "0"
+  SITE_PATH: "website/dist"
+  SITE_NAME: "tg"
+  WISP_HANDLE: "aly.codes"
+
+dependencies:
+  nixpkgs:
+    - nodejs
+    - coreutils
+    - curl
+    - glibc
+  nixpkgs/nixpkgs-unstable:
+    - go
+    - bun
+
+steps:
+  - name: "Build tg binary"
+    command: "go build -o tg ./cmd/tg"
+  - name: "Build site"
+    command: |
+      cd website
+      bun install --frozen-lockfile
+      bun run build
+  - name: "Deploy to wisp"
+    command: |
+      # Download Wisp CLI
+      curl https://sites.wisp.place/nekomimi.pet/wisp-cli-binaries/wisp-cli-x86_64-linux -o wisp-cli
+      chmod +x wisp-cli
+
+      # Deploy to Wisp
+      ./wisp-cli \
+        "$WISP_HANDLE" \
+        --path "$SITE_PATH" \
+        --site "$SITE_NAME" \
+        --password "$WISP_APP_PASSWORD"

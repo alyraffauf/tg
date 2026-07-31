@@ -36,9 +36,9 @@ tg pr merge <rkey>
 
 ## Documentation
 
-- Command reference — `tg <command> --help`, or the man pages installed by the Nix package (`man tg`, `man tg-issue-list`, ...)
-- [Authentication](docs/authentication.md) — OAuth and app-password login, multiple accounts, keyring token storage
-- [Configuration](docs/configuration.md) — config file, environment variables, and flags
+- Command reference — `tg <command> --help`, the man pages installed by the Nix package (`man tg`, `man tg-issue-list`, ...), or the [website](https://tgcli.wisp.place/reference/commands/tg/)
+- [Authentication](https://tgcli.wisp.place/cookbooks/authentication/) — OAuth and app-password login, multiple accounts, keyring token storage
+- [Configuration](https://tgcli.wisp.place/cookbooks/configuration/) — config file, environment variables, and flags
 
 ## Contributing
 

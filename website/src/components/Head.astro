@@ -1,0 +1,17 @@
+---
+import config from 'virtual:starlight/user-config';
+const { head } = Astro.locals.starlightRoute;
+const siteTitle = config.title;
+---
+
+{
+	head.map(({ tag: Tag, attrs, content }) => {
+		if (Tag === 'title' && typeof content === 'string') {
+			const pageMatch = content.match(/^(.+?) \| (.+)$/);
+			if (pageMatch && pageMatch[1] === pageMatch[2]) {
+				return <title>{pageMatch[1]}</title>;
+			}
+		}
+		return <Tag {...attrs} set:html={content} />;
+	})
+}

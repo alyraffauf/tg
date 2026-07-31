@@ -58,11 +58,11 @@ hash.
 
 ## Documentation
 
-Command help text (`Short`, `Long`, and flag descriptions) is the user-facing
-reference: it powers `tg <command> --help` and the man pages, which the Nix
-derivation generates at build time via the hidden `tg man` command. Keep it
-accurate when adding or changing commands; no other documentation step is
-needed.
+Docs are the Astro site in `website/`: hand-written pages in
+`website/src/content/docs/` (the `reference/commands/` pages are generated and
+gitignored, produced from help text by `website/scripts/gen-commands.mjs`,
+which needs the `tg` binary built first). Keep help text accurate. Build
+locally with `cd website && bun install && bun run build`.
 
 ## Architecture
 

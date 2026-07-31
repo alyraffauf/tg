@@ -1,4 +1,7 @@
-# Authentication
+---
+title: Authentication
+description: OAuth and app-password login, multiple accounts, and keyring token storage.
+---
 
 `tg` authenticates against your atproto PDS. Log in interactively with OAuth:
 
@@ -58,5 +61,5 @@ The directory and file are created with `0700` and `0600` permissions.
 Use the keyring when available. `--insecure` requires an app password; it does
 not support OAuth.
 
-See the [command reference](commands/tg_auth.md) for the full `tg auth`
+See the [command reference](/reference/commands/tg_auth/) for the full `tg auth`
 subcommand list.
