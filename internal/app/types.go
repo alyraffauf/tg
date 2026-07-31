@@ -60,6 +60,13 @@ type PipelineStatusResult struct {
 	HasFailures bool      `json:"hasFailures"`
 }
 
+// PipelineCancelResult describes a cancelled pipeline or its selected workflows.
+type PipelineCancelResult struct {
+	Pipeline              string   `json:"pipeline"`
+	Workflows             []string `json:"workflows,omitempty"`
+	CancellationRequested bool     `json:"cancellationRequested"`
+}
+
 // SSHKeyItem is one SSH public key in a listing.
 type SSHKeyItem struct {
 	Name      string `json:"name"`

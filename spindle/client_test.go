@@ -2,6 +2,7 @@ package spindle
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -30,6 +31,36 @@ func TestQueryPipelinesUsesSpindleEndpoint(t *testing.T) {
 	}
 	if len(response.Pipelines) != 1 || response.Pipelines[0].Workflows[0].Status != "success" {
 		t.Fatalf("QueryPipelines() = %+v", response)
+	}
+}
+
+func TestCancelPipelineAuthenticatesAndPostsInput(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/xrpc/sh.tangled.ci.cancelPipeline" || request.Method != http.MethodPost {
+			t.Fatalf("request = %s %s", request.Method, request.URL.Path)
+		}
+		if request.Header.Get("Authorization") != "Bearer token" {
+			t.Fatalf("authorization = %q", request.Header.Get("Authorization"))
+		}
+		var input CancelPipelineInput
+		if err := json.NewDecoder(request.Body).Decode(&input); err != nil {
+			t.Fatalf("decode input: %v", err)
+		}
+		if input.Pipeline != "3mrvk5dbnep22" || input.Repo != "did:plc:repo" || len(input.Workflows) != 1 {
+			t.Fatalf("input = %+v", input)
+		}
+		writer.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	client, err := NewWithToken(server.URL, "token", server.Client())
+	if err != nil {
+		t.Fatalf("NewWithToken() error = %v", err)
+	}
+	if err := client.CancelPipeline(context.Background(), CancelPipelineInput{
+		Pipeline: "3mrvk5dbnep22", Repo: "did:plc:repo", Workflows: []string{"test.yml"},
+	}); err != nil {
+		t.Fatalf("CancelPipeline() error = %v", err)
 	}
 }
 
