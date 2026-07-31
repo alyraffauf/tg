@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"image/color"
 	"io"
 	"os"
 	"strings"
@@ -129,12 +130,31 @@ func styleTableCell(style lipgloss.Style, header []string, rows [][]string, row,
 		if terminalColor := stateColor(value); terminalColor != nil {
 			return style.Foreground(terminalColor)
 		}
+	case "status":
+		if terminalColor := workflowStatusColor(value); terminalColor != nil {
+			return style.Foreground(terminalColor)
+		}
 	case "title", "account":
 		return style.Bold(true)
 	case "did", "rkey", "method", "updated":
 		return style.Faint(true)
 	}
 	return style
+}
+
+func workflowStatusColor(status string) color.Color {
+	switch strings.ToLower(status) {
+	case "success":
+		return lipgloss.Green
+	case "failed", "timeout":
+		return lipgloss.Red
+	case "running":
+		return lipgloss.Blue
+	case "pending":
+		return lipgloss.Yellow
+	default:
+		return nil
+	}
 }
 
 // renderList renders issue or pull-request items as a table.

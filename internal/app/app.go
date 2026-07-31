@@ -23,6 +23,7 @@ type Service struct {
 	auth                  *atproto.AuthManager
 	git                   gitClient
 	knot                  knotClientFactory
+	spindle               spindleClientFactory
 	knotOwnershipVerifier knotOwnershipVerifier
 	httpClient            *http.Client
 }
@@ -56,6 +57,7 @@ func NewWithStreams(appviewHost string, stdout, stderr io.Writer) *Service {
 		auth:                  auth,
 		git:                   gitutil.NewClient(stdout, stderr),
 		knot:                  productionKnotFactory{httpClient: httpClient},
+		spindle:               productionSpindleFactory{httpClient: httpClient},
 		knotOwnershipVerifier: newHTTPKnotOwnershipVerifier(),
 		httpClient:            httpClient,
 	}

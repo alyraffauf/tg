@@ -32,6 +32,27 @@ type RepoItem struct {
 	RepoDid     string `json:"repoDid,omitempty"`
 }
 
+// Pipeline is one CI pipeline associated with a repository.
+type Pipeline struct {
+	ID         string             `json:"id"`
+	Commit     string             `json:"commit"`
+	CreatedAt  string             `json:"createdAt,omitempty"`
+	Repo       string             `json:"repo,omitempty"`
+	SourceRepo string             `json:"sourceRepo,omitempty"`
+	Trigger    map[string]any     `json:"trigger"`
+	Workflows  []PipelineWorkflow `json:"workflows"`
+}
+
+// PipelineWorkflow is one workflow executed by a pipeline.
+type PipelineWorkflow struct {
+	ID         string `json:"id"`
+	Name       string `json:"name"`
+	Status     string `json:"status"`
+	Error      string `json:"error,omitempty"`
+	StartedAt  string `json:"startedAt,omitempty"`
+	FinishedAt string `json:"finishedAt,omitempty"`
+}
+
 // SSHKeyItem is one SSH public key in a listing.
 type SSHKeyItem struct {
 	Name      string `json:"name"`
