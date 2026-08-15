@@ -15,10 +15,18 @@ import (
 	"github.com/bluesky-social/indigo/atproto/syntax"
 )
 
-type ProvisionRepoInput struct {
+type provisionRepoInput struct {
 	KnotHost    string
 	Name        string
 	Description string
+}
+
+type provisionedRepo struct {
+	URI      string
+	RepoDID  string
+	Handle   string
+	KnotHost string
+	Warnings []string
 }
 
 // CreateRepoInput configures provisioning and optional local setup.
@@ -52,17 +60,20 @@ func (s *Service) CreateRepo(ctx context.Context, in CreateRepoInput) (*RepoCrea
 		}
 		in.KnotHost = knotHost
 	}
-	uri, handle, selectedKnot, warnings, err := s.provisionRepo(ctx, ProvisionRepoInput{
+	provisioned, err := s.provisionRepo(ctx, provisionRepoInput{
 		KnotHost: in.KnotHost, Name: in.Name, Description: in.Description,
 	})
 	if err != nil {
 		return nil, err
 	}
-	result := &RepoCreateResult{Handle: handle, Name: in.Name, URI: uri, Knot: selectedKnot, Warnings: warnings}
+	result := &RepoCreateResult{
+		Handle: provisioned.Handle, Name: in.Name, URI: provisioned.URI,
+		Knot: provisioned.KnotHost, Warnings: provisioned.Warnings,
+	}
 	if in.Clone {
 		if _, err := s.cloneRepo(ctx, CloneRepoInput{
-			KnotHost: selectedKnot, SSHPort: in.SSHPort,
-			Protocol: in.CloneProtocol, Handle: handle, Repo: in.Name, Destination: in.Name,
+			KnotHost: provisioned.KnotHost, SSHPort: in.SSHPort,
+			Protocol: in.CloneProtocol, Handle: provisioned.Handle, Repo: in.Name, Destination: in.Name,
 		}); err != nil {
 			return nil, fmt.Errorf("clone new repository: %w", err)
 		}
@@ -72,8 +83,8 @@ func (s *Service) CreateRepo(ctx context.Context, in CreateRepoInput) (*RepoCrea
 		return result, nil
 	}
 	pushResult, err := s.pushNewRepo(ctx, PushNewRepoInput{
-		KnotHost: selectedKnot, SSHPort: in.SSHPort, RepoURI: uri, Dir: in.PushPath,
-		Handle: handle, Repo: in.Name, RemoteName: in.RemoteName,
+		KnotHost: provisioned.KnotHost, SSHPort: in.SSHPort, RepoDID: provisioned.RepoDID, Dir: in.PushPath,
+		Handle: provisioned.Handle, Repo: in.Name, RemoteName: in.RemoteName,
 	})
 	if pushResult.defaultBranchWarning != nil {
 		result.Warnings = append(result.Warnings, fmt.Sprintf("could not set default branch: %v", pushResult.defaultBranchWarning))
@@ -86,45 +97,48 @@ func (s *Service) CreateRepo(ctx context.Context, in CreateRepoInput) (*RepoCrea
 	return result, nil
 }
 
-func (s *Service) provisionRepo(ctx context.Context, in ProvisionRepoInput) (uri, handle, knotHost string, warnings []string, err error) {
+func (s *Service) provisionRepo(ctx context.Context, in provisionRepoInput) (*provisionedRepo, error) {
 	atClient, did, err := s.authenticatedPDS(ctx)
 	if err != nil {
-		return "", "", "", nil, err
+		return nil, err
 	}
-	knotHost, warnings, err = s.selectCreationKnot(ctx, atClient, did, in.KnotHost)
+	knotHost, warnings, err := s.selectCreationKnot(ctx, atClient, did, in.KnotHost)
 	if err != nil {
-		return "", "", "", nil, err
+		return nil, err
 	}
 	token, err := atClient.GetServiceAuth(ctx, "did:web:"+knotHost, "sh.tangled.repo.create")
 	if err != nil {
-		return "", "", "", nil, err
+		return nil, err
 	}
-	repoDid, err := s.knot.New(knotHost, token).CreateRepo(ctx, knot.CreateRepoInput{
+	repoDID, err := s.knot.New(knotHost, token).CreateRepo(ctx, knot.CreateRepoInput{
 		Name: in.Name,
 		Rkey: in.Name,
 	})
 	if err != nil {
-		return "", "", "", nil, err
+		return nil, err
 	}
 	record := tangledlex.Repo{
 		LexiconTypeID: repoCollection,
 		Knot:          knotHost,
 		CreatedAt:     time.Now().UTC().Format(time.RFC3339),
-		RepoDid:       optionalString(repoDid),
+		RepoDid:       optionalString(repoDID),
 	}
 	if in.Description != "" {
 		record.Description = optionalString(in.Description)
 	}
-	uri, _, err = atClient.PutRecord(ctx, atproto.PutRecordInput{
+	uri, _, err := atClient.PutRecord(ctx, atproto.PutRecordInput{
 		Repo:       did,
 		Collection: repoCollection,
 		Rkey:       in.Name,
 		Record:     record,
 	})
 	if err != nil {
-		return "", "", "", nil, err
+		return nil, err
 	}
-	return uri, s.ownerHandle(ctx, did), knotHost, warnings, nil
+	return &provisionedRepo{
+		URI: uri, RepoDID: repoDID, Handle: s.ownerHandle(ctx, did),
+		KnotHost: knotHost, Warnings: warnings,
+	}, nil
 }
 
 func (s *Service) selectCreationKnot(ctx context.Context, atClient pdsClient, did, configured string) (string, []string, error) {
@@ -195,7 +209,7 @@ func (s *Service) selectCreationKnot(ctx context.Context, atClient pdsClient, di
 	return verified[0], warnings, nil
 }
 
-func (s *Service) setDefaultBranchFromDir(ctx context.Context, knotHost, repoURI, dir string) (string, error) {
+func (s *Service) setDefaultBranchFromDir(ctx context.Context, knotHost, repoDID, dir string) (string, error) {
 	atClient, _, err := s.authenticatedPDS(ctx)
 	if err != nil {
 		return "", err
@@ -204,7 +218,7 @@ func (s *Service) setDefaultBranchFromDir(ctx context.Context, knotHost, repoURI
 	if err != nil {
 		return "", err
 	}
-	if err := s.setKnotDefaultBranch(ctx, atClient, knotHost, repoURI, branch); err != nil {
+	if err := s.setKnotDefaultBranch(ctx, atClient, knotHost, repoDID, branch); err != nil {
 		return branch, err
 	}
 	return branch, nil
@@ -219,7 +233,7 @@ type pushNewRepoResult struct {
 type PushNewRepoInput struct {
 	KnotHost   string
 	SSHPort    int
-	RepoURI    string
+	RepoDID    string
 	Dir        string
 	Handle     string
 	Repo       string
@@ -227,7 +241,7 @@ type PushNewRepoInput struct {
 }
 
 func (s *Service) pushNewRepo(ctx context.Context, in PushNewRepoInput) (pushNewRepoResult, error) {
-	branch, defaultBranchErr := s.setDefaultBranchFromDir(ctx, in.KnotHost, in.RepoURI, in.Dir)
+	branch, defaultBranchErr := s.setDefaultBranchFromDir(ctx, in.KnotHost, in.RepoDID, in.Dir)
 	result := pushNewRepoResult{defaultBranch: branch, defaultBranchWarning: defaultBranchErr}
 	if err := s.git.PushNewRepo(ctx, gitutil.PushNewRepoParams{
 		Dir: in.Dir, KnotHost: in.KnotHost, SSHPort: in.SSHPort,

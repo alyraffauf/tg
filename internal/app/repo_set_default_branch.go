@@ -20,19 +20,23 @@ func (s *Service) SetRepoDefaultBranch(ctx context.Context, t Target, branch str
 	if repo.Value.Knot == "" {
 		return nil, fmt.Errorf("repo %q has no knot", t.String())
 	}
-	if err := s.setKnotDefaultBranch(ctx, atClient, repo.Value.Knot, repo.URI, branch); err != nil {
+	repoDID := stringValue(repo.Value.RepoDid)
+	if repoDID == "" {
+		return nil, fmt.Errorf("repo %q has no repository DID", t.String())
+	}
+	if err := s.setKnotDefaultBranch(ctx, atClient, repo.Value.Knot, repoDID, branch); err != nil {
 		return nil, err
 	}
 	return &RepoDefaultBranchResult{URI: repo.URI, Branch: branch}, nil
 }
 
-func (s *Service) setKnotDefaultBranch(ctx context.Context, atClient pdsClient, knotHost, repoURI, branch string) error {
+func (s *Service) setKnotDefaultBranch(ctx context.Context, atClient pdsClient, knotHost, repoDID, branch string) error {
 	token, err := atClient.GetServiceAuth(ctx, "did:web:"+knotHost, "sh.tangled.repo.setDefaultBranch")
 	if err != nil {
 		return fmt.Errorf("get knot authorization: %w", err)
 	}
 	return s.knot.New(knotHost, token).SetDefaultBranch(ctx, knot.SetDefaultBranchInput{
-		Repo:          repoURI,
+		Repo:          repoDID,
 		DefaultBranch: branch,
 	})
 }

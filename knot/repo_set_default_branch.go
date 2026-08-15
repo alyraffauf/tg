@@ -9,7 +9,7 @@ import (
 
 // SetDefaultBranchInput is the argument to sh.tangled.repo.setDefaultBranch.
 type SetDefaultBranchInput struct {
-	Repo          string `json:"repo"` // at:// URI of the sh.tangled.repo record
+	Repo          string `json:"repo"` // repository DID
 	DefaultBranch string `json:"defaultBranch"`
 }
 

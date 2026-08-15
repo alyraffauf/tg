@@ -63,10 +63,34 @@ func TestCreateRepoRecordsDefaultBranchOutcome(t *testing.T) {
 			if len(git.pushes) != 1 {
 				t.Fatalf("git pushes = %+v", git.pushes)
 			}
+			if knotClient.setDefaultBranchInput.Repo != "did:plc:repo" {
+				t.Fatalf("SetDefaultBranch() repo = %q, want newly created repository DID", knotClient.setDefaultBranchInput.Repo)
+			}
 			if git.pushes[0].KnotHost != "knot.example" || git.pushes[0].SSHPort != 2222 {
 				t.Fatalf("git push destination = %+v", git.pushes[0])
 			}
 		})
+	}
+}
+
+func TestSetRepoDefaultBranchUsesRepositoryDID(t *testing.T) {
+	pds := &testPDS{}
+	knotClient := &testKnot{}
+	service := testService(pds, &testGit{}, knotClient)
+	service.appview = testAppview{repo: &tangled.Repo{
+		URI: "at://did:plc:owner/sh.tangled.repo/example",
+		Value: tangledlex.Repo{
+			Knot:    "knot.example",
+			RepoDid: optionalString("did:plc:repository"),
+		},
+	}}
+
+	_, err := service.SetRepoDefaultBranch(context.Background(), Target{Handle: "owner.test", Repo: "example"}, "main")
+	if err != nil {
+		t.Fatalf("SetRepoDefaultBranch() error = %v", err)
+	}
+	if knotClient.setDefaultBranchInput.Repo != "did:plc:repository" {
+		t.Fatalf("SetDefaultBranch() repo = %q, want repository DID", knotClient.setDefaultBranchInput.Repo)
 	}
 }
 
@@ -438,13 +462,14 @@ func (v *testKnotOwnershipVerifier) Verify(_ context.Context, host, _ string) er
 }
 
 type testKnot struct {
-	setDefaultBranchErr error
-	defaultBranch       *knot.DefaultBranch
-	deleteErr           error
-	deleteCalls         int
-	mergeCalls          int
-	mergeInput          knot.MergeInput
-	createCalls         int
+	setDefaultBranchErr   error
+	setDefaultBranchInput knot.SetDefaultBranchInput
+	defaultBranch         *knot.DefaultBranch
+	deleteErr             error
+	deleteCalls           int
+	mergeCalls            int
+	mergeInput            knot.MergeInput
+	createCalls           int
 }
 
 func (k *testKnot) CreateRepo(context.Context, knot.CreateRepoInput) (string, error) {
@@ -455,7 +480,8 @@ func (k *testKnot) DeleteRepo(context.Context, knot.DeleteRepoInput) error {
 	k.deleteCalls++
 	return k.deleteErr
 }
-func (k *testKnot) SetDefaultBranch(context.Context, knot.SetDefaultBranchInput) error {
+func (k *testKnot) SetDefaultBranch(_ context.Context, input knot.SetDefaultBranchInput) error {
+	k.setDefaultBranchInput = input
 	return k.setDefaultBranchErr
 }
 func (k *testKnot) GetDefaultBranch(context.Context, string) (*knot.DefaultBranch, error) {
