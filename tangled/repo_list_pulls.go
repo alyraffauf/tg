@@ -10,7 +10,7 @@ import (
 // ListPulls fetches every pull request for repoDid, following pagination
 // cursors until the listing is exhausted.
 func (t *Tangled) ListPulls(ctx context.Context, repoDid string, opts ListOpts) (*List, error) {
-	items, err := fetchAllPages(ctx, func(ctx context.Context, cursor string) ([]ListItem, *string, error) {
+	items, err := fetchAllPages(ctx, opts.MaxItems, func(ctx context.Context, cursor string) ([]ListItem, *string, error) {
 		page, err := tangledlex.RepoListPulls(ctx, t.lexClient(), opts.Author, cursor, opts.limit(), opts.Order, opts.State, repoDid)
 		if err != nil {
 			return nil, nil, err

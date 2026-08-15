@@ -32,6 +32,31 @@ func TestNewRootCreatesIndependentCommandState(t *testing.T) {
 	}
 }
 
+func TestListCommandsSupportFilters(t *testing.T) {
+	root := NewRoot(&app.Service{})
+
+	for _, path := range [][]string{{"issue", "list"}, {"pr", "list"}} {
+		command, _, err := root.Find(path)
+		if err != nil {
+			t.Fatalf("find %s: %v", strings.Join(path, " "), err)
+		}
+		for _, name := range []string{"author", "state", "limit", "order"} {
+			if command.Flags().Lookup(name) == nil {
+				t.Fatalf("%s is missing --%s", strings.Join(path, " "), name)
+			}
+		}
+	}
+
+	command := newIssueListCommand(&app.Service{})
+	if err := command.Flags().Set("limit", "0"); err != nil {
+		t.Fatalf("set limit: %v", err)
+	}
+	flags := listFlags{limit: 0}
+	if _, err := flags.options(command); err == nil {
+		t.Fatal("issue list accepted an explicit zero limit")
+	}
+}
+
 func TestVersionFlag(t *testing.T) {
 	var output bytes.Buffer
 	err := ExecuteWith([]string{"--version"}, nil, &output, &bytes.Buffer{})

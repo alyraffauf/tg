@@ -16,7 +16,7 @@ type RepoList struct {
 // ListRepos fetches every repo owned by ownerDid, following pagination
 // cursors until the listing is exhausted.
 func (t *Tangled) ListRepos(ctx context.Context, ownerDid string) (*RepoList, error) {
-	items, err := fetchAllPages(ctx, func(ctx context.Context, cursor string) ([]Repo, *string, error) {
+	items, err := fetchAllPages(ctx, 0, func(ctx context.Context, cursor string) ([]Repo, *string, error) {
 		page, err := tangledlex.RepoListRepos(ctx, t.lexClient(), cursor, 100, "", ownerDid)
 		if err != nil {
 			return nil, nil, err

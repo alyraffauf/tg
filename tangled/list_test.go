@@ -44,6 +44,15 @@ func TestListOptsParams(t *testing.T) {
 				"limit":   int64(50),
 			},
 		},
+		{
+			name:    "maximum results reduces page size",
+			opts:    ListOpts{Limit: 100, MaxItems: 20},
+			subject: "did:plc:repo",
+			want: map[string]any{
+				"subject": "did:plc:repo",
+				"limit":   int64(20),
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -60,7 +69,7 @@ func TestFetchAllPages(t *testing.T) {
 
 	t.Run("single page", func(t *testing.T) {
 		calls := 0
-		items, err := fetchAllPages(context.Background(), func(_ context.Context, cursor string) ([]string, *string, error) {
+		items, err := fetchAllPages(context.Background(), 0, func(_ context.Context, cursor string) ([]string, *string, error) {
 			calls++
 			if cursor != "" {
 				t.Errorf("first fetch got cursor %q, want empty", cursor)
@@ -87,7 +96,7 @@ func TestFetchAllPages(t *testing.T) {
 		next := map[string]*string{"": strptr("cursor1"), "cursor1": strptr("cursor2"), "cursor2": nil}
 		var gotCursors []string
 
-		items, err := fetchAllPages(context.Background(), func(_ context.Context, cursor string) ([]string, *string, error) {
+		items, err := fetchAllPages(context.Background(), 0, func(_ context.Context, cursor string) ([]string, *string, error) {
 			gotCursors = append(gotCursors, cursor)
 			pageItems, ok := pages[cursor]
 			if !ok {
@@ -108,7 +117,7 @@ func TestFetchAllPages(t *testing.T) {
 	})
 
 	t.Run("empty first page", func(t *testing.T) {
-		items, err := fetchAllPages(context.Background(), func(_ context.Context, _ string) ([]string, *string, error) {
+		items, err := fetchAllPages(context.Background(), 0, func(_ context.Context, _ string) ([]string, *string, error) {
 			return nil, nil, nil
 		})
 		if err != nil {
@@ -121,7 +130,7 @@ func TestFetchAllPages(t *testing.T) {
 
 	t.Run("error propagates", func(t *testing.T) {
 		errFetch := errors.New("fetch failed")
-		items, err := fetchAllPages(context.Background(), func(_ context.Context, cursor string) ([]string, *string, error) {
+		items, err := fetchAllPages(context.Background(), 0, func(_ context.Context, cursor string) ([]string, *string, error) {
 			if cursor != "" {
 				return nil, nil, errFetch
 			}
@@ -137,7 +146,7 @@ func TestFetchAllPages(t *testing.T) {
 
 	t.Run("runaway cursor", func(t *testing.T) {
 		calls := 0
-		_, err := fetchAllPages(context.Background(), func(_ context.Context, _ string) ([]string, *string, error) {
+		_, err := fetchAllPages(context.Background(), 0, func(_ context.Context, _ string) ([]string, *string, error) {
 			calls++
 			return []string{"a"}, strptr("next"), nil
 		})
@@ -146,6 +155,29 @@ func TestFetchAllPages(t *testing.T) {
 		}
 		if calls != maxPaginationPages {
 			t.Fatalf("calls = %d, want %d", calls, maxPaginationPages)
+		}
+	})
+
+	t.Run("maximum items", func(t *testing.T) {
+		pages := map[string][]string{
+			"":        {"a", "b"},
+			"cursor1": {"c", "d"},
+		}
+		next := map[string]*string{"": strptr("cursor1"), "cursor1": strptr("cursor2")}
+		var gotCursors []string
+
+		items, err := fetchAllPages(context.Background(), 3, func(_ context.Context, cursor string) ([]string, *string, error) {
+			gotCursors = append(gotCursors, cursor)
+			return pages[cursor], next[cursor], nil
+		})
+		if err != nil {
+			t.Fatalf("error = %v", err)
+		}
+		if !reflect.DeepEqual(items, []string{"a", "b", "c"}) {
+			t.Fatalf("got %v, want [a b c]", items)
+		}
+		if !reflect.DeepEqual(gotCursors, []string{"", "cursor1"}) {
+			t.Fatalf("cursors = %v, want [ cursor1]", gotCursors)
 		}
 	})
 }

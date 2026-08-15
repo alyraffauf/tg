@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -228,6 +229,38 @@ func (r testResolver) ResolvePDS(context.Context, string) (string, error) {
 		return r.pdsURL, nil
 	}
 	return "https://pds.example", nil
+}
+
+func TestListOptions(t *testing.T) {
+	service := testService(nil, nil, nil)
+
+	issueOptions, err := service.issueListOptions(context.Background(), ListOptions{
+		Author: "alice.test",
+		State:  "open",
+		Limit:  20,
+		Order:  "asc",
+	})
+	if err != nil {
+		t.Fatalf("issueListOptions() error = %v", err)
+	}
+	want := tangled.ListOpts{Author: "did:plc:owner", State: "open", Limit: defaultListLimit, MaxItems: 20, Order: "asc"}
+	if !reflect.DeepEqual(issueOptions, want) {
+		t.Fatalf("issueListOptions() = %#v, want %#v", issueOptions, want)
+	}
+
+	pullOptions, err := service.pullListOptions(context.Background(), ListOptions{Author: "did:plc:alice", State: "merged"})
+	if err != nil {
+		t.Fatalf("pullListOptions() error = %v", err)
+	}
+	if pullOptions.Author != "did:plc:alice" || pullOptions.State != "merged" {
+		t.Fatalf("pullListOptions() = %#v", pullOptions)
+	}
+
+	for _, options := range []ListOptions{{State: "merged"}, {Order: "newest"}, {Limit: -1}} {
+		if _, err := service.issueListOptions(context.Background(), options); err == nil {
+			t.Fatalf("issueListOptions(%#v) succeeded, want validation error", options)
+		}
+	}
 }
 
 type testSessions struct {

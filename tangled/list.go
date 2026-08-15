@@ -28,17 +28,22 @@ type List struct {
 
 // ListOpts are the query parameters shared by ListIssues and ListPulls.
 type ListOpts struct {
-	Author string // only items by this DID
-	State  string // "open" or "closed"
-	Limit  int64  // 1-1000, default 50
-	Order  string // "asc" or "desc"
+	Author   string // only items by this DID
+	State    string // "open" or "closed"
+	Limit    int64  // page size: 1-1000, default 50
+	MaxItems int64  // maximum results to return; zero returns every item
+	Order    string // "asc" or "desc"
 }
 
 func (o ListOpts) limit() int64 {
+	limit := int64(50)
 	if o.Limit > 0 {
-		return o.Limit
+		limit = o.Limit
 	}
-	return 50
+	if o.MaxItems > 0 && o.MaxItems < limit {
+		return o.MaxItems
+	}
+	return limit
 }
 
 // params builds query parameters for a paginated issue or pull request list.
@@ -62,7 +67,7 @@ func (o ListOpts) params(subject, cursor string) map[string]any {
 // fetchAllPages calls fetch for successive pages, advancing the cursor it
 // returns, until a page reports no further cursor. It returns every item
 // across all pages combined.
-func fetchAllPages[T any](ctx context.Context, fetch func(ctx context.Context, cursor string) (items []T, nextCursor *string, err error)) ([]T, error) {
+func fetchAllPages[T any](ctx context.Context, maximumItems int64, fetch func(ctx context.Context, cursor string) (items []T, nextCursor *string, err error)) ([]T, error) {
 	var all []T
 	cursor := ""
 
@@ -71,7 +76,14 @@ func fetchAllPages[T any](ctx context.Context, fetch func(ctx context.Context, c
 		if err != nil {
 			return nil, err
 		}
+		if maximumItems > 0 && int64(len(items)) > maximumItems-int64(len(all)) {
+			items = items[:maximumItems-int64(len(all))]
+		}
 		all = append(all, items...)
+
+		if maximumItems > 0 && int64(len(all)) == maximumItems {
+			return all, nil
+		}
 
 		if nextCursor == nil || *nextCursor == "" {
 			return all, nil
