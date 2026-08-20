@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/bluesky-social/indigo/atproto/atclient"
+	"github.com/bluesky-social/indigo/atproto/auth/oauth"
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	"github.com/zalando/go-keyring"
 )
@@ -719,5 +720,55 @@ func TestSessionStatusExpiredOAuthRefreshDead(t *testing.T) {
 	}
 	if status != SessionStatusExpired {
 		t.Errorf("status = %q, want %q", status, SessionStatusExpired)
+	}
+}
+
+func TestResumeOAuthSessionRestoresStoredClientID(t *testing.T) {
+	store := testKeyringStore(newFakeKeyring())
+	ctx := context.Background()
+	did := mustDID(t, "did:plc:aaaabbbbccccddddeeeeffff")
+	callbackURL := "http://127.0.0.1:54321/callback"
+	loginConfig := oauth.NewLocalhostConfig(callbackURL, DefaultScopes)
+
+	session := fullyPopulatedSession(t, did)
+	if err := store.SaveSession(ctx, session); err != nil {
+		t.Fatalf("SaveSession: %v", err)
+	}
+	if err := store.SetAccountOAuthClient(did.String(), callbackURL, loginConfig.ClientID); err != nil {
+		t.Fatalf("SetAccountOAuthClient: %v", err)
+	}
+
+	manager := newAuthManagerForTest("", store)
+	if manager.app.Config.ClientID == loginConfig.ClientID {
+		t.Fatal("empty-callback manager unexpectedly reused the login client_id")
+	}
+
+	resumed, err := manager.CurrentSession(ctx)
+	if err != nil {
+		t.Fatalf("CurrentSession: %v", err)
+	}
+	if resumed.Config.ClientID != loginConfig.ClientID {
+		t.Errorf("resumed ClientID = %q, want %q", resumed.Config.ClientID, loginConfig.ClientID)
+	}
+	if resumed.Config.CallbackURL != callbackURL {
+		t.Errorf("resumed CallbackURL = %q, want %q", resumed.Config.CallbackURL, callbackURL)
+	}
+}
+
+func TestResumeOAuthSessionRequiresStoredClientIdentity(t *testing.T) {
+	store := testKeyringStore(newFakeKeyring())
+	ctx := context.Background()
+	did := mustDID(t, "did:plc:aaaabbbbccccddddeeeeffff")
+	if err := store.SaveSession(ctx, fullyPopulatedSession(t, did)); err != nil {
+		t.Fatalf("SaveSession: %v", err)
+	}
+
+	manager := newAuthManagerForTest("", store)
+	_, err := manager.CurrentSession(ctx)
+	if err == nil {
+		t.Fatal("CurrentSession = nil, want missing client identity error")
+	}
+	if !strings.Contains(err.Error(), "tg auth login") {
+		t.Errorf("CurrentSession error = %v, want login hint", err)
 	}
 }

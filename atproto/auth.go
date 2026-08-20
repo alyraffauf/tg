@@ -276,6 +276,9 @@ func (m *AuthManager) FinishLogin(ctx context.Context, query url.Values) error {
 	if err := m.store.SetAccountHandle(did, handle); err != nil {
 		return err
 	}
+	if err := m.store.SetAccountOAuthClient(did, m.app.Config.CallbackURL, m.app.Config.ClientID); err != nil {
+		return err
+	}
 	_, err = m.store.SelectAccount(did)
 	return err
 }
@@ -301,11 +304,8 @@ func (m *AuthManager) CurrentDID(ctx context.Context) (syntax.DID, error) {
 		return did, nil
 	}
 	if account.Method == AuthMethodOAuth {
-		session, err := m.app.ResumeSession(ctx, did, "")
+		session, err := m.resumeOAuthSession(ctx, account)
 		if err != nil {
-			if errors.Is(err, keyring.ErrNotFound) {
-				return "", ErrNotAuthenticated
-			}
 			return "", err
 		}
 		return session.Data.AccountDID, nil
@@ -330,18 +330,7 @@ func (m *AuthManager) CurrentSession(ctx context.Context) (*oauth.ClientSession,
 	if source == sessionSourceInsecureFile || account.Method != AuthMethodOAuth {
 		return nil, ErrNotAuthenticated
 	}
-	did, err := syntax.ParseDID(account.DID)
-	if err != nil {
-		return nil, err
-	}
-	session, err := m.app.ResumeSession(ctx, did, "")
-	if err != nil {
-		if errors.Is(err, keyring.ErrNotFound) {
-			return nil, ErrNotAuthenticated
-		}
-		return nil, err
-	}
-	return session, nil
+	return m.resumeOAuthSession(ctx, account)
 }
 
 // OAuthSessionHasScope reports whether the active OAuth session grants scope.
@@ -386,11 +375,8 @@ func (m *AuthManager) APIClient(ctx context.Context) (*atclient.APIClient, synta
 		return nil, "", err
 	}
 	if account.Method == AuthMethodOAuth {
-		session, err := m.app.ResumeSession(ctx, did, "")
+		session, err := m.resumeOAuthSession(ctx, account)
 		if err != nil {
-			if errors.Is(err, keyring.ErrNotFound) {
-				return nil, "", ErrNotAuthenticated
-			}
 			return nil, "", err
 		}
 		return session.APIClient(), session.Data.AccountDID, nil
@@ -408,6 +394,42 @@ func (m *AuthManager) APIClient(ctx context.Context) (*atclient.APIClient, synta
 	client := atclient.ResumePasswordSession(*passwordSession, persist)
 	client.Client = m.client
 	return client, passwordSession.AccountDID, nil
+}
+
+func (m *AuthManager) restoreOAuthClient(account Account) error {
+	if account.ClientID != "" {
+		m.app.Config.ClientID = account.ClientID
+		if account.CallbackURL != "" {
+			m.app.Config.CallbackURL = account.CallbackURL
+		}
+		return nil
+	}
+	if account.CallbackURL != "" {
+		m.SetCallbackURL(account.CallbackURL)
+		return nil
+	}
+	if m.app.Config.CallbackURL != "" && m.app.Config.ClientID != "" {
+		return nil
+	}
+	return fmt.Errorf("OAuth session is missing the login client identity; run \"tg auth login\" once to persist it")
+}
+
+func (m *AuthManager) resumeOAuthSession(ctx context.Context, account Account) (*oauth.ClientSession, error) {
+	if err := m.restoreOAuthClient(account); err != nil {
+		return nil, err
+	}
+	did, err := syntax.ParseDID(account.DID)
+	if err != nil {
+		return nil, err
+	}
+	session, err := m.app.ResumeSession(ctx, did, "")
+	if err != nil {
+		if errors.Is(err, keyring.ErrNotFound) {
+			return nil, ErrNotAuthenticated
+		}
+		return nil, err
+	}
+	return session, nil
 }
 
 func (m *AuthManager) requestContext(ctx context.Context) (context.Context, context.CancelFunc) {
@@ -434,8 +456,12 @@ func (m *AuthManager) SessionStatus(ctx context.Context) (string, syntax.DID, er
 		return SessionStatusExpired, did, nil
 	}
 	// OAuth wraps refresh failures in fmt.Errorf, not APIError. A failed
-	// refresh means the refresh token is dead.
+	// refresh usually means the refresh token is dead. Client-metadata
+	// mismatches are a local config bug, not an expired session.
 	if strings.Contains(err.Error(), "failed to refresh OAuth tokens") {
+		if strings.Contains(err.Error(), "invalid_client_metadata") {
+			return "", did, fmt.Errorf("OAuth client identity does not match the stored session; run \"tg auth login\" once to persist it: %w", err)
+		}
 		return SessionStatusExpired, did, nil
 	}
 	return SessionStatusUnknown, did, nil
@@ -459,6 +485,7 @@ func (m *AuthManager) Logout(ctx context.Context) error {
 	}
 	switch account.Method {
 	case AuthMethodOAuth:
+		_ = m.restoreOAuthClient(account)
 		_ = m.app.Logout(ctx, did, "")
 		if err := m.store.DeleteSession(ctx, did, ""); err != nil {
 			return fmt.Errorf("clear local session: %w", err)

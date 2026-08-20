@@ -78,6 +78,12 @@ type Account struct {
 	DID    string `json:"did"`
 	Handle string `json:"handle,omitempty"`
 	Method string `json:"method"`
+	// Loopback OAuth client identity from the login that minted this session.
+	// Refresh must reuse these values: ATProto localhost client_id embeds the
+	// redirect URI (and scopes), and a later process that rebuilds
+	// NewLocalhostConfig("") will 400 as invalid_client_metadata.
+	CallbackURL string `json:"callbackUrl,omitempty"`
+	ClientID    string `json:"clientId,omitempty"`
 }
 
 type accountIndex struct {
@@ -218,6 +224,12 @@ func (s *KeyringStore) upsertAccountLocked(index *accountIndex, account Account)
 			if account.Handle == "" {
 				account.Handle = index.Accounts[i].Handle
 			}
+			if account.CallbackURL == "" {
+				account.CallbackURL = index.Accounts[i].CallbackURL
+			}
+			if account.ClientID == "" {
+				account.ClientID = index.Accounts[i].ClientID
+			}
 			index.Accounts[i] = account
 			return
 		}
@@ -310,6 +322,25 @@ func (s *KeyringStore) SetAccountHandle(did, handle string) error {
 	for i := range index.Accounts {
 		if index.Accounts[i].DID == did {
 			index.Accounts[i].Handle = handle
+			return s.saveIndexLocked(index)
+		}
+	}
+	return keyring.ErrNotFound
+}
+
+// SetAccountOAuthClient stores the loopback client identity used to mint the
+// current OAuth session so later processes can refresh with the same client_id.
+func (s *KeyringStore) SetAccountOAuthClient(did, callbackURL, clientID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	index, err := s.loadIndexLocked()
+	if err != nil {
+		return err
+	}
+	for i := range index.Accounts {
+		if index.Accounts[i].DID == did {
+			index.Accounts[i].CallbackURL = callbackURL
+			index.Accounts[i].ClientID = clientID
 			return s.saveIndexLocked(index)
 		}
 	}

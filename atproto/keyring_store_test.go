@@ -696,3 +696,38 @@ func TestAuthManager_CancelLoginDeletesPendingRequest(t *testing.T) {
 	// CancelLogin after the request is already gone is a no-op.
 	manager.CancelLogin()
 }
+
+func TestKeyringStore_SetAccountOAuthClient(t *testing.T) {
+	store := testKeyringStore(newFakeKeyring())
+	ctx := context.Background()
+	did := mustDID(t, "did:plc:abcdefghijklmnopqrstuvwxyz")
+	if err := store.SaveSession(ctx, sampleSession(did)); err != nil {
+		t.Fatalf("SaveSession: %v", err)
+	}
+	callbackURL := "http://127.0.0.1:54321/callback"
+	clientID := "http://localhost?redirect_uri=" + callbackURL
+	if err := store.SetAccountOAuthClient(did.String(), callbackURL, clientID); err != nil {
+		t.Fatalf("SetAccountOAuthClient: %v", err)
+	}
+	account, err := store.Account(did.String())
+	if err != nil {
+		t.Fatalf("Account: %v", err)
+	}
+	if account.CallbackURL != callbackURL {
+		t.Errorf("CallbackURL = %q, want %q", account.CallbackURL, callbackURL)
+	}
+	if account.ClientID != clientID {
+		t.Errorf("ClientID = %q, want %q", account.ClientID, clientID)
+	}
+
+	if err := store.SaveSession(ctx, sampleSession(did)); err != nil {
+		t.Fatalf("SaveSession refresh: %v", err)
+	}
+	account, err = store.Account(did.String())
+	if err != nil {
+		t.Fatalf("Account after SaveSession: %v", err)
+	}
+	if account.CallbackURL != callbackURL || account.ClientID != clientID {
+		t.Fatalf("token refresh clobbered OAuth client identity: %+v", account)
+	}
+}
