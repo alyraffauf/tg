@@ -33,6 +33,8 @@ github.com/charmbracelet/ultraviolet v0.0.0-20260812204455-68fa937c71be h1:qEvkJ
 github.com/charmbracelet/ultraviolet v0.0.0-20260812204455-68fa937c71be/go.mod h1:nAw0d9PhFp1qdzi2xhQU5YOu5sVpDIHWlaW2Uz/bCro=
 github.com/charmbracelet/x/ansi v0.11.8 h1:JMFwp0CgDC2+jcOB162HH5k7I3FVbgFSMMYg7dSPBQQ=
 github.com/charmbracelet/x/ansi v0.11.8/go.mod h1:ZNN+3mXny/516oTQPLMPIBeSINvNJJQ8uQXDgbeJxY0=
+github.com/charmbracelet/x/editor v0.2.0 h1:7XLUKtaRaB8jN7bWU2p2UChiySyaAuIfYiIRg8gGWwk=
+github.com/charmbracelet/x/editor v0.2.0/go.mod h1:p3oQ28TSL3YPd+GKJ1fHWcp+7bVGpedHpXmo0D6t1dY=
 github.com/charmbracelet/x/exp/golden v0.0.0-20250806222409-83e3a29d542f h1:pk6gmGpCE7F3FcjaOEKYriCvpmIN4+6OS/RD0vm4uIA=
 github.com/charmbracelet/x/exp/golden v0.0.0-20250806222409-83e3a29d542f/go.mod h1:IfZAMTHB6XkZSeXUqriemErjAWCCzT0LwjKFYCZyw0I=
 github.com/charmbracelet/x/exp/slice v0.0.0-20260828171018-3c30eef5e73e h1:sV2kd+a/AZtBg0xdRUOHRQa8uh0PSLjfL8BfZxe0Qqo=
