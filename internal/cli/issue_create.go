@@ -30,7 +30,7 @@ must be blank, and the remaining text is the required body.`,
 				if cmd.Flags().Changed("body") || cmd.Flags().Changed("body-file") {
 					return fmt.Errorf("title is required when --body or --body-file is used")
 				}
-				target, err := resolveIssueCreateTarget(ctx, repository, service)
+				target, err := resolveTargetFlag(ctx, repository, service)
 				if err != nil {
 					return err
 				}
@@ -56,7 +56,7 @@ must be blank, and the remaining text is the required body.`,
 			if err != nil {
 				return err
 			}
-			target, err := resolveIssueCreateTarget(ctx, repository, service)
+			target, err := resolveTargetFlag(ctx, repository, service)
 			if err != nil {
 				return err
 			}
@@ -73,11 +73,4 @@ must be blank, and the remaining text is the required body.`,
 	command.Flags().StringVarP(&bodyFile, "body-file", "F", "", "Read issue body from file")
 	command.Flags().StringVarP(&repository, "repo", "R", "", "Target repository as handle/repo")
 	return command
-}
-
-func resolveIssueCreateTarget(ctx context.Context, repository string, service issueCreateService) (app.Target, error) {
-	if repository != "" {
-		return app.ParseTarget(repository)
-	}
-	return service.TargetFromCWD(ctx)
 }

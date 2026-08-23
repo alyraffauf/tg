@@ -9,6 +9,10 @@ import (
 	"github.com/alyraffauf/tg/internal/app"
 )
 
+type cwdTargetResolver interface {
+	TargetFromCWD(context.Context) (app.Target, error)
+}
+
 // getwd returns the current working directory, wrapping the common error.
 func getwd() (string, error) {
 	dir, err := os.Getwd()
@@ -29,7 +33,7 @@ func resolveTarget(ctx context.Context, args []string, service *app.Service) (ap
 
 // resolveTargetFlag returns the target from a --repo flag value, or by
 // detecting the git remote in the CWD when the flag is unset.
-func resolveTargetFlag(ctx context.Context, repoFlag string, service *app.Service) (app.Target, error) {
+func resolveTargetFlag(ctx context.Context, repoFlag string, service cwdTargetResolver) (app.Target, error) {
 	if repoFlag != "" {
 		return app.ParseTarget(repoFlag)
 	}

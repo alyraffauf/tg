@@ -5,10 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"strings"
-
-	"github.com/charmbracelet/x/editor"
 )
 
 const (
@@ -26,46 +23,19 @@ type issueDraft struct {
 }
 
 func editIssueDraft(ctx context.Context, input io.Reader, output, errorOutput io.Writer) (issueDraft, error) {
-	file, err := os.CreateTemp("", "tg-issue-*.md")
+	edited, err := editDraft(ctx, "issue", "tg-issue-*.md", issueDraftTemplate, input, output, errorOutput)
 	if err != nil {
-		return issueDraft{}, fmt.Errorf("create issue draft: %w", err)
+		return issueDraft{}, err
 	}
-	path := file.Name()
-	if _, err := file.WriteString(issueDraftTemplate); err != nil {
-		_ = file.Close()
-		_ = os.Remove(path)
-		return issueDraft{}, fmt.Errorf("write issue draft: %w", err)
-	}
-	if err := file.Close(); err != nil {
-		_ = os.Remove(path)
-		return issueDraft{}, fmt.Errorf("close issue draft: %w", err)
-	}
-
-	command, err := editor.CommandContext(ctx, "tg", path)
-	if err != nil {
-		_ = os.Remove(path)
-		return issueDraft{}, fmt.Errorf("open issue editor: %w", err)
-	}
-	command.Stdin = input
-	command.Stdout = output
-	command.Stderr = errorOutput
-	if err := command.Run(); err != nil {
-		return issueDraft{}, fmt.Errorf("run issue editor: %w; draft saved to %s", err, path)
-	}
-
-	contents, err := os.ReadFile(path)
-	if err != nil {
-		return issueDraft{}, fmt.Errorf("read issue draft: %w; draft saved to %s", err, path)
-	}
-	title, body, err := parseIssueDraft(string(contents))
+	title, body, err := parseIssueDraft(edited.Contents)
 	if errors.Is(err, errIssueCreationCanceled) {
-		removeIssueDraft(path, errorOutput)
+		removeIssueDraft(edited.Path, errorOutput)
 		return issueDraft{}, err
 	}
 	if err != nil {
-		return issueDraft{}, fmt.Errorf("parse issue draft: %w; draft saved to %s", err, path)
+		return issueDraft{}, fmt.Errorf("parse issue draft: %w; draft saved to %s", err, edited.Path)
 	}
-	return issueDraft{Title: title, Body: body, Path: path}, nil
+	return issueDraft{Title: title, Body: body, Path: edited.Path}, nil
 }
 
 func parseIssueDraft(document string) (string, string, error) {
@@ -106,7 +76,5 @@ func parseIssueDraft(document string) (string, string, error) {
 }
 
 func removeIssueDraft(path string, errorOutput io.Writer) {
-	if err := os.Remove(path); err != nil {
-		fmt.Fprintf(errorOutput, "warning: remove issue draft %s: %v\n", path, err)
-	}
+	removeDraft(path, "issue", errorOutput)
 }

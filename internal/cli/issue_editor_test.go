@@ -85,7 +85,7 @@ func TestEditIssueDraftLifecycle(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			pathLog := filepath.Join(t.TempDir(), "path")
-			editorPath := writeIssueEditor(t, pathLog, test.document, test.exitStatus)
+			editorPath := writeDraftEditor(t, pathLog, test.document, test.exitStatus)
 			t.Setenv("EDITOR", editorPath)
 
 			draft, err := editIssueDraft(context.Background(), nil, io.Discard, io.Discard)
@@ -128,7 +128,7 @@ func TestEditIssueDraftLifecycle(t *testing.T) {
 
 func TestIssueCreateRetainsEditedDraftWhenSubmissionFails(t *testing.T) {
 	pathLog := filepath.Join(t.TempDir(), "path")
-	t.Setenv("EDITOR", writeIssueEditor(t, pathLog, "Bug report\n\nDetails\n", 0))
+	t.Setenv("EDITOR", writeDraftEditor(t, pathLog, "Bug report\n\nDetails\n", 0))
 	service := &testIssueCreateService{createError: errors.New("network unavailable")}
 	command := newIssueCreateCommand(service)
 	command.SetArgs([]string{"--repo", "alice.example/project"})
@@ -156,7 +156,7 @@ func TestIssueCreateRetainsEditedDraftWhenSubmissionFails(t *testing.T) {
 
 func TestIssueCreateRemovesEditedDraftAfterSubmission(t *testing.T) {
 	pathLog := filepath.Join(t.TempDir(), "path")
-	t.Setenv("EDITOR", writeIssueEditor(t, pathLog, "Bug report\n\nDetails\n", 0))
+	t.Setenv("EDITOR", writeDraftEditor(t, pathLog, "Bug report\n\nDetails\n", 0))
 	service := &testIssueCreateService{}
 	command := newIssueCreateCommand(service)
 	command.SetArgs([]string{"--repo", "alice.example/project"})
@@ -239,7 +239,7 @@ func (*testIssueCreateService) TargetFromCWD(context.Context) (app.Target, error
 	return app.Target{Handle: "alice.example", Repo: "project"}, nil
 }
 
-func writeIssueEditor(t *testing.T, pathLog, document string, exitStatus int) string {
+func writeDraftEditor(t *testing.T, pathLog, document string, exitStatus int) string {
 	t.Helper()
 	script := filepath.Join(t.TempDir(), "editor.sh")
 	contents := "#!/bin/sh\n" +

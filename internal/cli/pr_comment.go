@@ -1,35 +1,59 @@
 package cli
 
 import (
+	"context"
+	"errors"
 	"fmt"
 
 	"github.com/alyraffauf/tg/internal/app"
 	"github.com/spf13/cobra"
 )
 
-func newPRCommentCommand(service *app.Service) *cobra.Command {
+type pullCommentService interface {
+	CommentPull(context.Context, app.Target, string, string) (*app.CreatedRecordResult, error)
+	TargetFromCWD(context.Context) (app.Target, error)
+}
+
+func newPRCommentCommand(service pullCommentService) *cobra.Command {
 	var bodyText, bodyFile, repository string
 
 	command := &cobra.Command{
 		Use:   "comment <rkey>",
 		Short: "Add a comment to a pull request",
+		Long:  "Add a comment to a pull request. When the body is omitted, tg opens $EDITOR.",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
 			body, err := commandBody(bodyText, bodyFile)
 			if err != nil {
 				return err
 			}
-			if body == "" {
+			draft := commentDraft{}
+			openEditor := !cmd.Flags().Changed("body") && !cmd.Flags().Changed("body-file")
+			if !openEditor && body == "" {
 				return fmt.Errorf("provide --body or --body-file")
 			}
-			ctx := cmd.Context()
 			target, err := resolveTargetFlag(ctx, repository, service)
 			if err != nil {
 				return err
 			}
+			if openEditor {
+				draft, err = editCommentDraft(ctx, cmd.InOrStdin(), cmd.OutOrStdout(), cmd.ErrOrStderr())
+				if errors.Is(err, errCommentCreationCanceled) {
+					fmt.Fprintln(cmd.ErrOrStderr(), "Comment creation canceled.")
+					return nil
+				}
+				if err != nil {
+					return err
+				}
+				body = draft.Body
+			}
 			result, err := service.CommentPull(ctx, target, args[0], body)
 			if err != nil {
-				return err
+				return commentSubmissionError(err, draft)
+			}
+			if draft.Path != "" {
+				removeCommentDraft(draft.Path, cmd.ErrOrStderr())
 			}
 			return output(cmd, result, func(result *app.CreatedRecordResult) {
 				fmt.Fprintf(cmd.OutOrStdout(), "Added comment %s\n", result.URI)
