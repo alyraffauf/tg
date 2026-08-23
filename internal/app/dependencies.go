@@ -55,7 +55,8 @@ type gitClient interface {
 	GeneratePatch(context.Context, string, string, string) ([]byte, error)
 	CurrentBranch(context.Context, string) (string, error)
 	ResolveCommit(context.Context, string, string) (string, error)
-	DefaultBranch(context.Context, string) (string, error)
+	ResolvePullBase(context.Context, string, string) (gitutil.PullBase, error)
+	DefaultPullBase(context.Context, string) (gitutil.PullBase, error)
 	DetectRepoCandidatesFromCWD(context.Context) ([]gitutil.RepoContext, error)
 }
 

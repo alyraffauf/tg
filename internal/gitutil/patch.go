@@ -14,7 +14,7 @@ import (
 // that are not in base. The base commit must be an ancestor of head so the
 // result can be applied onto the target branch with git am.
 func (c *Client) GeneratePatch(ctx context.Context, repoDir, base, head string) ([]byte, error) {
-	baseRevision, err := c.resolveBaseRevision(ctx, repoDir, base)
+	baseRevision, err := c.resolveRevision(ctx, repoDir, base)
 	if err != nil {
 		return nil, fmt.Errorf("resolve base %q: %w", base, err)
 	}
@@ -57,23 +57,6 @@ func GeneratePatch(ctx context.Context, repoDir, base, head string) ([]byte, err
 	return defaultClient.GeneratePatch(ctx, repoDir, base, head)
 }
 
-// DefaultBranch returns the branch named by origin's local HEAD reference.
-func (c *Client) DefaultBranch(ctx context.Context, repoDir string) (string, error) {
-	ref, err := c.gitOutput(ctx, repoDir, "symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD")
-	if err != nil {
-		return "", fmt.Errorf("read origin default branch: %w", err)
-	}
-	branch, found := strings.CutPrefix(strings.TrimSpace(string(ref)), "origin/")
-	if !found || branch == "" {
-		return "", fmt.Errorf("origin default branch reference is invalid: %q", strings.TrimSpace(string(ref)))
-	}
-	return branch, nil
-}
-
-func DefaultBranch(ctx context.Context, repoDir string) (string, error) {
-	return defaultClient.DefaultBranch(ctx, repoDir)
-}
-
 func (c *Client) resolveRevision(ctx context.Context, repoDir, revision string) (string, error) {
 	if _, err := c.gitOutput(ctx, repoDir, "rev-parse", "--verify", revision+"^{commit}"); err == nil {
 		return revision, nil
@@ -84,14 +67,6 @@ func (c *Client) resolveRevision(ctx context.Context, repoDir, revision string) 
 		return remoteRevision, nil
 	}
 	return "", fmt.Errorf("commit does not exist locally or at origin")
-}
-
-func (c *Client) resolveBaseRevision(ctx context.Context, repoDir, revision string) (string, error) {
-	remoteRevision := "origin/" + revision
-	if _, err := c.gitOutput(ctx, repoDir, "rev-parse", "--verify", remoteRevision+"^{commit}"); err == nil {
-		return remoteRevision, nil
-	}
-	return c.resolveRevision(ctx, repoDir, revision)
 }
 
 func (c *Client) gitCommand(ctx context.Context, repoDir string, args ...string) error {

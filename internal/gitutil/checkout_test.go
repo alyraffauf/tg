@@ -88,6 +88,35 @@ func TestGenerateAndCheckoutPatch(t *testing.T) {
 	}
 }
 
+func TestGeneratePatchPrefersExplicitLocalBaseOverOrigin(t *testing.T) {
+	ctx := context.Background()
+	tempDir := t.TempDir()
+	originDir := filepath.Join(tempDir, "origin.git")
+	repoDir := filepath.Join(tempDir, "repo")
+	runGit(t, tempDir, "init", "--bare", originDir)
+	runGit(t, tempDir, "clone", originDir, repoDir)
+	runGit(t, repoDir, "config", "user.name", "Test User")
+	runGit(t, repoDir, "config", "user.email", "test@example.com")
+	runGit(t, repoDir, "switch", "-c", "main")
+	commitTestFile(t, repoDir, "root.txt", "root\n", "root")
+	runGit(t, repoDir, "push", "-u", "origin", "main")
+	commitTestFile(t, repoDir, "base.txt", "base\n", "local base")
+	runGit(t, repoDir, "switch", "-c", "feature")
+	commitTestFile(t, repoDir, "feature.txt", "feature\n", "feature")
+
+	compressedPatch, err := GeneratePatch(ctx, repoDir, "main", "feature")
+	if err != nil {
+		t.Fatalf("GeneratePatch() error = %v", err)
+	}
+	patch := string(decompressTestPatch(t, compressedPatch))
+	if !strings.Contains(patch, "Subject: [PATCH] feature") {
+		t.Fatalf("patch does not contain only the feature commit:\n%s", patch)
+	}
+	if strings.Contains(patch, "local base") {
+		t.Fatalf("patch unexpectedly contains the local base commit:\n%s", patch)
+	}
+}
+
 func TestCheckoutPatchRejectsDirtyWorktree(t *testing.T) {
 	repoDir := t.TempDir()
 	runGit(t, repoDir, "init")

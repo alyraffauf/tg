@@ -8,7 +8,9 @@ import (
 )
 
 func newPRUpdateCommand(service *app.Service) *cobra.Command {
-	return &cobra.Command{
+	var base string
+
+	command := &cobra.Command{
 		Use:   "update <rkey>",
 		Short: "Submit a new round for a pull request",
 		Args:  cobra.ExactArgs(1),
@@ -17,9 +19,15 @@ func newPRUpdateCommand(service *app.Service) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return service.UpdatePullRound(cmd.Context(), repoDir, args[0])
+			return service.UpdatePullRound(cmd.Context(), app.UpdatePullRoundInput{
+				RepoDir: repoDir,
+				Rkey:    args[0],
+				Base:    base,
+			})
 		},
 	}
+	command.Flags().StringVarP(&base, "base", "B", "", "Target branch or local remote-tracking branch (required for forks)")
+	return command
 }
 
 func newPRCloseCommand(service *app.Service) *cobra.Command {

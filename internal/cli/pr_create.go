@@ -59,7 +59,7 @@ func newPRCreateCommand(service *app.Service) *cobra.Command {
 	command.Flags().StringVarP(&title, "title", "t", "", "Pull request title")
 	command.Flags().StringVarP(&bodyText, "body", "b", "", "Pull request body")
 	command.Flags().StringVarP(&bodyFile, "body-file", "F", "", "Read pull request body from file")
-	command.Flags().StringVarP(&base, "base", "B", "", "Target branch (default: origin's default branch)")
+	command.Flags().StringVarP(&base, "base", "B", "", "Target branch or local remote-tracking branch (required for forks; default: origin's default branch)")
 	command.Flags().StringVarP(&head, "head", "H", "", "Source branch (default: current branch)")
 	command.Flags().StringVarP(&repository, "repo", "R", "", "Target repository as handle/repo")
 	command.Flags().StringVar(&sourceRepository, "source-repo", "", "Source repository as handle/repo (for fork-based pull requests)")

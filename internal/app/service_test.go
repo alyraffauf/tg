@@ -399,6 +399,10 @@ type testGit struct {
 	commit         string
 	patch          []byte
 	patchErr       error
+	patchBase      string
+	patchHead      string
+	pullBases      map[string]gitutil.PullBase
+	pullBaseInputs []string
 	clones         []gitutil.CloneRepoParams
 	pushes         []gitutil.PushNewRepoParams
 	repoCandidates []gitutil.RepoContext
@@ -415,7 +419,9 @@ func (g *testGit) PushNewRepo(_ context.Context, input gitutil.PushNewRepoParams
 	return nil
 }
 func (g *testGit) CheckoutPatch(context.Context, gitutil.CheckoutPatchParams) error { return nil }
-func (g *testGit) GeneratePatch(context.Context, string, string, string) ([]byte, error) {
+func (g *testGit) GeneratePatch(_ context.Context, _, base, head string) ([]byte, error) {
+	g.patchBase = base
+	g.patchHead = head
 	if g.patchErr != nil {
 		return nil, g.patchErr
 	}
@@ -428,8 +434,20 @@ func (g *testGit) CurrentBranch(context.Context, string) (string, error) { retur
 func (g *testGit) ResolveCommit(context.Context, string, string) (string, error) {
 	return g.commit, nil
 }
-func (g *testGit) DefaultBranch(context.Context, string) (string, error) {
-	return "", errors.New("not implemented")
+func (g *testGit) ResolvePullBase(_ context.Context, _, base string) (gitutil.PullBase, error) {
+	g.pullBaseInputs = append(g.pullBaseInputs, base)
+	resolved, found := g.pullBases[base]
+	if !found {
+		return gitutil.PullBase{}, errors.New("not implemented")
+	}
+	return resolved, nil
+}
+func (g *testGit) DefaultPullBase(context.Context, string) (gitutil.PullBase, error) {
+	resolved, found := g.pullBases[""]
+	if !found {
+		return gitutil.PullBase{}, errors.New("not implemented")
+	}
+	return resolved, nil
 }
 func (g *testGit) DetectRepoCandidatesFromCWD(context.Context) ([]gitutil.RepoContext, error) {
 	return g.repoCandidates, g.detectErr
@@ -513,6 +531,7 @@ func (k *testKnot) Merge(_ context.Context, input knot.MergeInput) error {
 
 type testAppview struct {
 	repo             *tangled.Repo
+	repos            map[string]*tangled.Repo
 	repoErr          error
 	getRepoHook      func(string)
 	getRepoByDIDHook func(string)
@@ -527,6 +546,9 @@ type testAppview struct {
 func (a testAppview) GetRepo(_ context.Context, uri string) (*tangled.Repo, error) {
 	if a.getRepoHook != nil {
 		a.getRepoHook(uri)
+	}
+	if repo, found := a.repos[uri]; found {
+		return repo, nil
 	}
 	return a.repo, a.repoErr
 }

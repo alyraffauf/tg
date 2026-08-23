@@ -3,10 +3,12 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/alyraffauf/tg/atproto"
+	"github.com/alyraffauf/tg/internal/gitutil"
 	"github.com/alyraffauf/tg/internal/tangledlex"
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	lexutil "github.com/bluesky-social/indigo/lex/util"
@@ -17,11 +19,13 @@ type CreatePullInput struct {
 	RepoDir string // local git repository (for branch detection + patch)
 	Title   string
 	Body    string
-	Base    string // empty: detect origin's default branch
+	Base    string // empty: use origin's default branch for a same-repo pull
 	Head    string // empty: current branch
 	Target  Target
 	Source  *Target // nil: same as Target
 }
+
+var errForkPullBaseRequired = errors.New("fork pull requests require --base; pass the target's local remote branch, for example --base upstream/main")
 
 // pullRecordInput is the write-side input to newPullRecord.
 type pullRecordInput struct {
@@ -49,13 +53,6 @@ func (s *Service) CreatePull(ctx context.Context, in CreatePullInput) (*PRCreate
 			return nil, fmt.Errorf("determine source branch: %w", err)
 		}
 	}
-	base := in.Base
-	if base == "" {
-		base, err = s.git.DefaultBranch(ctx, in.RepoDir)
-		if err != nil {
-			return nil, fmt.Errorf("determine target branch; set --base explicitly: %w", err)
-		}
-	}
 
 	target, err := s.resolveRepo(ctx, in.Target)
 	if err != nil {
@@ -74,8 +71,26 @@ func (s *Service) CreatePull(ctx context.Context, in CreatePullInput) (*PRCreate
 	if stringValue(source.Value.RepoDid) == "" {
 		return nil, fmt.Errorf("source repository has no repo DID")
 	}
+	targetRepoDID := stringValue(target.Value.RepoDid)
+	sourceRepoDID := stringValue(source.Value.RepoDid)
 
-	patch, err := s.git.GeneratePatch(ctx, in.RepoDir, base, head)
+	var base gitutil.PullBase
+	if in.Base != "" {
+		base, err = s.git.ResolvePullBase(ctx, in.RepoDir, in.Base)
+		if err != nil {
+			return nil, fmt.Errorf("resolve target branch: %w", err)
+		}
+	} else {
+		if sourceRepoDID != targetRepoDID {
+			return nil, errForkPullBaseRequired
+		}
+		base, err = s.git.DefaultPullBase(ctx, in.RepoDir)
+		if err != nil {
+			return nil, fmt.Errorf("determine target branch; set --base explicitly: %w", err)
+		}
+	}
+
+	patch, err := s.git.GeneratePatch(ctx, in.RepoDir, base.Revision, head)
 	if err != nil {
 		return nil, fmt.Errorf("generate pull request patch: %w", err)
 	}
@@ -87,16 +102,16 @@ func (s *Service) CreatePull(ctx context.Context, in CreatePullInput) (*PRCreate
 	uri, err := createPullRecord(ctx, atClient, did, pullRecordInput{
 		Title:         in.Title,
 		Body:          in.Body,
-		TargetRepoDid: stringValue(target.Value.RepoDid),
-		SourceRepoDid: stringValue(source.Value.RepoDid),
-		Base:          base,
+		TargetRepoDid: targetRepoDID,
+		SourceRepoDid: sourceRepoDID,
+		Base:          base.Branch,
 		Head:          head,
 		Patch:         blob,
 	})
 	if err != nil {
 		return nil, err
 	}
-	return &PRCreateResult{URI: uri, Title: in.Title, Base: base, Head: head}, nil
+	return &PRCreateResult{URI: uri, Title: in.Title, Base: base.Branch, Head: head}, nil
 }
 
 func atURIPrefix(uri string) bool { return len(uri) >= 5 && uri[:5] == "at://" }
