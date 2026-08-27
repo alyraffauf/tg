@@ -7,17 +7,24 @@ import (
 
 type PushNewRepoParams struct {
 	Dir        string // local repository to push from
-	KnotHost   string // Knot hosting the repository
+	KnotHost   string // explicit Knot hosting the repository
 	SSHPort    int    // Knot SSH port
-	Handle     string // Tangled owner handle
-	Repo       string // repository name
+	RepoDID    string // stable repository DID, when available
 	RemoteName string // git remote to add and push to
 }
 
 // PushNewRepo adds a remote at Dir and pushes the current branch.
 // Fails if RemoteName already exists.
 func (c *Client) PushNewRepo(ctx context.Context, params PushNewRepoParams) error {
-	remoteURL := knotRemoteURL(params.KnotHost, params.SSHPort, params.Handle, params.Repo)
+	remoteURL, err := repositoryDIDRemoteURL(repositoryDIDRemote{
+		Protocol: "ssh",
+		KnotHost: params.KnotHost,
+		SSHPort:  params.SSHPort,
+		RepoDID:  params.RepoDID,
+	})
+	if err != nil {
+		return err
+	}
 	if err := c.runIn(params.Dir, ctx, "git", "remote", "add", params.RemoteName, remoteURL); err != nil {
 		return fmt.Errorf("add remote %q (already exists? use --remote to pick another name): %w", params.RemoteName, err)
 	}

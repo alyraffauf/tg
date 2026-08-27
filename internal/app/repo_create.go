@@ -50,7 +50,8 @@ func (s *Service) CreateRepo(ctx context.Context, in CreateRepoInput) (*RepoCrea
 		}
 		in.CloneProtocol = cloneProtocol
 	}
-	if ((in.Clone && in.CloneProtocol == "ssh") || in.PushPath != "") && (in.SSHPort < 1 || in.SSHPort > 65535) {
+	directKnot := in.KnotHost != ""
+	if directKnot && ((in.Clone && in.CloneProtocol == "ssh") || in.PushPath != "") && (in.SSHPort < 1 || in.SSHPort > 65535) {
 		return nil, fmt.Errorf("SSH port must be between 1 and 65535")
 	}
 	if in.KnotHost != "" {
@@ -70,10 +71,16 @@ func (s *Service) CreateRepo(ctx context.Context, in CreateRepoInput) (*RepoCrea
 		Handle: provisioned.Handle, Name: in.Name, URI: provisioned.URI,
 		Knot: provisioned.KnotHost, Warnings: provisioned.Warnings,
 	}
+	remoteKnotHost := ""
+	remoteSSHPort := 22
+	if directKnot {
+		remoteKnotHost = provisioned.KnotHost
+		remoteSSHPort = in.SSHPort
+	}
 	if in.Clone {
-		if _, err := s.cloneRepo(ctx, CloneRepoInput{
-			KnotHost: provisioned.KnotHost, SSHPort: in.SSHPort,
-			Protocol: in.CloneProtocol, Handle: provisioned.Handle, Repo: in.Name, Destination: in.Name,
+		if _, err := s.cloneResolvedRepo(ctx, resolvedCloneRepoInput{
+			KnotHost: remoteKnotHost, SSHPort: remoteSSHPort,
+			Protocol: in.CloneProtocol, Handle: provisioned.Handle, Repo: in.Name, RepoDID: provisioned.RepoDID, Destination: in.Name,
 		}); err != nil {
 			return nil, fmt.Errorf("clone new repository: %w", err)
 		}
@@ -83,8 +90,9 @@ func (s *Service) CreateRepo(ctx context.Context, in CreateRepoInput) (*RepoCrea
 		return result, nil
 	}
 	pushResult, err := s.pushNewRepo(ctx, PushNewRepoInput{
-		KnotHost: provisioned.KnotHost, SSHPort: in.SSHPort, RepoDID: provisioned.RepoDID, Dir: in.PushPath,
-		Handle: provisioned.Handle, Repo: in.Name, RemoteName: in.RemoteName,
+		KnotHost: provisioned.KnotHost, RemoteKnotHost: remoteKnotHost, SSHPort: remoteSSHPort,
+		RepoDID: provisioned.RepoDID, Dir: in.PushPath,
+		RemoteName: in.RemoteName,
 	})
 	if pushResult.defaultBranchWarning != nil {
 		result.Warnings = append(result.Warnings, fmt.Sprintf("could not set default branch: %v", pushResult.defaultBranchWarning))
@@ -231,21 +239,20 @@ type pushNewRepoResult struct {
 
 // PushNewRepoInput configures pushing a newly created repository.
 type PushNewRepoInput struct {
-	KnotHost   string
-	SSHPort    int
-	RepoDID    string
-	Dir        string
-	Handle     string
-	Repo       string
-	RemoteName string
+	KnotHost       string
+	RemoteKnotHost string
+	SSHPort        int
+	RepoDID        string
+	Dir            string
+	RemoteName     string
 }
 
 func (s *Service) pushNewRepo(ctx context.Context, in PushNewRepoInput) (pushNewRepoResult, error) {
 	branch, defaultBranchErr := s.setDefaultBranchFromDir(ctx, in.KnotHost, in.RepoDID, in.Dir)
 	result := pushNewRepoResult{defaultBranch: branch, defaultBranchWarning: defaultBranchErr}
 	if err := s.git.PushNewRepo(ctx, gitutil.PushNewRepoParams{
-		Dir: in.Dir, KnotHost: in.KnotHost, SSHPort: in.SSHPort,
-		Handle: in.Handle, Repo: in.Repo, RemoteName: in.RemoteName,
+		Dir: in.Dir, KnotHost: in.RemoteKnotHost, SSHPort: in.SSHPort,
+		RepoDID: in.RepoDID, RemoteName: in.RemoteName,
 	}); err != nil {
 		return result, fmt.Errorf("push to new repository: %w", err)
 	}

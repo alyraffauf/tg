@@ -33,6 +33,9 @@ tg auth login alice.example.com
 # Clone a repository
 tg repo clone microcosm.blue/microcosm-rs
 
+# Clone by repository DID
+tg repo clone did:plc:example
+
 # Work with issues and pull requests
 tg issue list
 tg issue create --body "Details" "Bug report"
@@ -40,7 +43,9 @@ tg pr create --title "Add feature" --base main
 tg pr merge <rkey>
 ```
 
-`tg` auto-detects the repository from Git remotes when run inside a cloned Tangled repo, checking `origin` first. Hosted Tangled remotes support SSH, Git, HTTP, and HTTPS URLs. Custom Knot remotes support SSH and HTTPS URLs and are accepted only when the host matches the repository's canonical record. You can also pass a fully qualified `handle/repo` argument.
+`tg` auto-detects the repository from Git remotes when run inside a cloned Tangled repo, checking `origin` first. It recognizes remotes that identify a repository by `handle/repo` or by repository DID. Hosted Tangled remotes support SSH, Git, HTTP, and HTTPS URLs. Custom Knot remotes support SSH and HTTPS URLs. `tg` verifies a custom Knot against the repository record before it accepts the remote.
+
+When a repository record contains a repository DID, `tg` uses the DID in new Git remotes. Automatically selected Knots use the `tangled.org` proxy. An explicitly configured Knot uses a direct remote and the configured SSH port. These remotes remain valid after handle changes, repository renames, and transfers. If `tg` cannot resolve the repository record for an SSH clone, it creates a `handle/repo` remote and prints the resolution error as a warning.
 
 ## Documentation
 

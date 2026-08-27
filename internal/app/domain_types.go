@@ -148,9 +148,11 @@ type RepoCreateResult struct {
 
 // RepoCloneResult is returned by repository cloning.
 type RepoCloneResult struct {
-	Handle      string `json:"handle"`
-	Repo        string `json:"repo"`
-	Destination string `json:"destination"`
+	Handle      string   `json:"handle"`
+	Repo        string   `json:"repo"`
+	RepoDID     string   `json:"repoDid,omitempty"`
+	Destination string   `json:"destination"`
+	Warnings    []string `json:"warnings,omitempty"`
 }
 
 // RepoEditResult is returned by repository edits.

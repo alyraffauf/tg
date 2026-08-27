@@ -12,32 +12,41 @@ type CloneRepoParams struct {
 	Protocol string // SSH or HTTPS
 	Handle   string // Tangled owner handle
 	Repo     string // repository name
+	RepoDID  string // stable repository DID, when available
 	RepoDir  string // local directory to clone into
 }
 
-// CloneRepo clones handle/repo from Tangled into params.RepoDir.
+// CloneRepo clones the repository identified by params into params.RepoDir.
 func (c *Client) CloneRepo(ctx context.Context, params CloneRepoParams) error {
-	url, err := cloneRemoteURL(params.Protocol, params.KnotHost, params.SSHPort, params.Handle, params.Repo)
+	url, err := cloneRemoteURL(params)
 	if err != nil {
 		return err
 	}
-	return c.run(ctx, "git", "clone", url, params.RepoDir)
+	return c.run(ctx, "git", "clone", "--", url, params.RepoDir)
 }
 
 func CloneRepo(ctx context.Context, params CloneRepoParams) error {
 	return defaultClient.CloneRepo(ctx, params)
 }
 
-func cloneRemoteURL(protocol, knotHost string, sshPort int, handle, repo string) (string, error) {
-	switch protocol {
+func cloneRemoteURL(params CloneRepoParams) (string, error) {
+	if params.RepoDID != "" {
+		return repositoryDIDRemoteURL(repositoryDIDRemote{
+			Protocol: params.Protocol,
+			KnotHost: params.KnotHost,
+			SSHPort:  params.SSHPort,
+			RepoDID:  params.RepoDID,
+		})
+	}
+	switch params.Protocol {
 	case "ssh":
-		return knotRemoteURL(knotHost, sshPort, handle, repo), nil
+		return knotRemoteURL(params.KnotHost, params.SSHPort, params.Handle+"/"+params.Repo), nil
 	case "https":
-		if knotHost == "" {
+		if params.KnotHost == "" {
 			return "", fmt.Errorf("HTTPS clone requires a Knot host")
 		}
-		return "https://" + knotHost + "/" + handle + "/" + repo + ".git", nil
+		return "https://" + params.KnotHost + "/" + params.Handle + "/" + params.Repo + ".git", nil
 	default:
-		return "", fmt.Errorf("unsupported clone protocol %q", protocol)
+		return "", fmt.Errorf("unsupported clone protocol %q", params.Protocol)
 	}
 }

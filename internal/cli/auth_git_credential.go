@@ -14,18 +14,19 @@ func newAuthGitCredentialCommand(service *app.Service) *cobra.Command {
 	return &cobra.Command{
 		Use:   "git-credential <operation>",
 		Short: "Git credential helper for HTTPS push to Tangled knots",
-		Long: `Provide HTTPS credentials for Git pushes to a Tangled knot.
+		Long: `Provide HTTPS credentials for Git pushes to a Tangled Knot.
 
-Configure the helper for a knot:
+Configure the helper for the hosted Git proxy:
 
-    git config --global credential."https://<knot>".helper "!tg auth git-credential"
+    git config --global credential."https://tangled.org".helper "!tg auth git-credential"
 
-Point the remote at that knot:
+Point the remote at the hosted Git proxy:
 
-    git remote set-url origin https://<knot>/<handle>/<repo>.git
+    git remote set-url origin https://tangled.org/<repo-did>
 
 The helper mints a short-lived token only for the current repository's recorded
-knot. It does not store credentials.`,
+Knot. It accepts credential requests from the hosted proxy or that Knot. The
+helper does not store credentials.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			switch args[0] {

@@ -19,6 +19,7 @@ import { Card, CardGrid, LinkCard } from "@astrojs/starlight/components";
 ## Install
 
 <CardGrid>
+  {/* prettier-ignore */}
   <Card title="Homebrew (stable)" icon="homebrew">
     ```bash
       brew tap alyraffauf/tap
@@ -26,6 +27,7 @@ import { Card, CardGrid, LinkCard } from "@astrojs/starlight/components";
       brew install alyraffauf/tap/tg
     ```
   </Card>
+  {/* prettier-ignore */}
   <Card title="Nix (development)" icon="nix">
     ```bash
       nix profile add github:alyraffauf/tg
@@ -38,6 +40,9 @@ import { Card, CardGrid, LinkCard } from "@astrojs/starlight/components";
 ```bash
 tg auth login alice.example.com
 tg repo clone aly.codes/tg
+
+# Clone by repository DID and use the DID in the origin URL
+tg repo clone did:plc:g5uweck3xar3m745g43giuhr
 ```
 
 ## Guides

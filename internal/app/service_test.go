@@ -66,7 +66,7 @@ func TestCreateRepoRecordsDefaultBranchOutcome(t *testing.T) {
 			if knotClient.setDefaultBranchInput.Repo != "did:plc:repo" {
 				t.Fatalf("SetDefaultBranch() repo = %q, want newly created repository DID", knotClient.setDefaultBranchInput.Repo)
 			}
-			if git.pushes[0].KnotHost != "knot.example" || git.pushes[0].SSHPort != 2222 {
+			if git.pushes[0].RepoDID != "did:plc:repo" || git.pushes[0].KnotHost != "knot.example" || git.pushes[0].SSHPort != 2222 {
 				t.Fatalf("git push destination = %+v", git.pushes[0])
 			}
 		})
@@ -470,6 +470,9 @@ type testKnot struct {
 	mergeCalls            int
 	mergeInput            knot.MergeInput
 	createCalls           int
+	description           *knot.RepoDescription
+	describeErr           error
+	describeDIDs          []string
 }
 
 func (k *testKnot) CreateRepo(context.Context, knot.CreateRepoInput) (string, error) {
@@ -490,6 +493,16 @@ func (k *testKnot) GetDefaultBranch(context.Context, string) (*knot.DefaultBranc
 	}
 	return k.defaultBranch, nil
 }
+func (k *testKnot) DescribeRepo(_ context.Context, repoDID string) (*knot.RepoDescription, error) {
+	k.describeDIDs = append(k.describeDIDs, repoDID)
+	if k.describeErr != nil {
+		return nil, k.describeErr
+	}
+	if k.description == nil {
+		return nil, errors.New("not implemented")
+	}
+	return k.description, nil
+}
 func (k *testKnot) Merge(_ context.Context, input knot.MergeInput) error {
 	k.mergeCalls++
 	k.mergeInput = input
@@ -497,13 +510,32 @@ func (k *testKnot) Merge(_ context.Context, input knot.MergeInput) error {
 }
 
 type testAppview struct {
-	repo   *tangled.Repo
-	pulls  *tangled.List
-	search *tangled.SearchResult
-	stars  int64
+	repo             *tangled.Repo
+	repoErr          error
+	getRepoHook      func(string)
+	getRepoByDIDHook func(string)
+	repoByDID        *tangled.Repo
+	repoByDIDErr     error
+	pulls            *tangled.List
+	search           *tangled.SearchResult
+	stars            int64
 }
 
-func (a testAppview) GetRepo(context.Context, string) (*tangled.Repo, error) { return a.repo, nil }
+func (a testAppview) GetRepo(_ context.Context, uri string) (*tangled.Repo, error) {
+	if a.getRepoHook != nil {
+		a.getRepoHook(uri)
+	}
+	return a.repo, a.repoErr
+}
+func (a testAppview) GetRepoByDID(_ context.Context, repoDID string) (*tangled.Repo, error) {
+	if a.getRepoByDIDHook != nil {
+		a.getRepoByDIDHook(repoDID)
+	}
+	if a.repoByDID != nil || a.repoByDIDErr != nil {
+		return a.repoByDID, a.repoByDIDErr
+	}
+	return a.repo, a.repoErr
+}
 func (testAppview) ListRepos(context.Context, string) (*tangled.RepoList, error) {
 	return nil, errors.New("not implemented")
 }

@@ -36,6 +36,23 @@ func TestGitPushToken(t *testing.T) {
 	}
 }
 
+func TestGitPushTokenAcceptsHostedGitProxy(t *testing.T) {
+	pds := &testPDS{}
+	service := testService(pds, &testGit{repoCandidates: []gitutil.RepoContext{{Handle: "owner.test", Repo: "repo"}}}, &testKnot{})
+	service.appview = testAppview{repo: &tangled.Repo{Value: tangledlex.Repo{Knot: "knot.example"}}}
+
+	credentials, err := service.GitPushToken(context.Background(), gitutil.HostedGitHost)
+	if err != nil {
+		t.Fatalf("GitPushToken() error = %v", err)
+	}
+	if !credentials.MatchesRequestedHost || credentials.Token != "token" {
+		t.Fatalf("GitPushToken() = %+v", credentials)
+	}
+	if len(pds.serviceAuthAudiences) != 1 || pds.serviceAuthAudiences[0] != "did:web:knot.example" {
+		t.Fatalf("audiences = %v, want [did:web:knot.example]", pds.serviceAuthAudiences)
+	}
+}
+
 func TestGitPushTokenIgnoresOtherHosts(t *testing.T) {
 	pds := &testPDS{}
 	service := testService(pds, &testGit{repoCandidates: []gitutil.RepoContext{{Handle: "owner.test", Repo: "repo"}}}, &testKnot{})

@@ -6,6 +6,8 @@ import (
 	"fmt"
 
 	"github.com/alyraffauf/tg/internal/tangledlex"
+	"github.com/bluesky-social/indigo/atproto/syntax"
+	lexutil "github.com/bluesky-social/indigo/lex/util"
 )
 
 type Repo struct {
@@ -19,17 +21,34 @@ func (t *Tangled) GetRepo(ctx context.Context, repoURI string) (*Repo, error) {
 	if err != nil {
 		return nil, fmt.Errorf("get tangled repo %q: %w", repoURI, err)
 	}
-	value, err := recordJSON(response.Value, &tangledlex.Repo{})
+	return decodeRepo(response.Uri, response.Cid, response.Value)
+}
+
+// GetRepoByDID returns the repository record with repoDID.
+func (t *Tangled) GetRepoByDID(ctx context.Context, repoDID string) (*Repo, error) {
+	var response struct {
+		CID   *string                     `json:"cid,omitempty"`
+		URI   string                      `json:"uri"`
+		Value *lexutil.LexiconTypeDecoder `json:"value"`
+	}
+	if err := t.Client.Get(ctx, syntax.NSID("sh.tangled.repo.getRepoByRepoDid"), map[string]any{"repoDid": repoDID}, &response); err != nil {
+		return nil, fmt.Errorf("get tangled repo by DID %q: %w", repoDID, err)
+	}
+	return decodeRepo(response.URI, response.CID, response.Value)
+}
+
+func decodeRepo(uri string, cid *string, valueDecoder *lexutil.LexiconTypeDecoder) (*Repo, error) {
+	value, err := recordJSON(valueDecoder, &tangledlex.Repo{})
 	if err != nil {
-		return nil, fmt.Errorf("decode tangled repo %q: %w", repoURI, err)
+		return nil, fmt.Errorf("decode tangled repo %q: %w", uri, err)
 	}
 
 	var record tangledlex.Repo
 	if err := json.Unmarshal(value, &record); err != nil {
-		return nil, fmt.Errorf("decode tangled repo %q: %w", repoURI, err)
+		return nil, fmt.Errorf("decode tangled repo %q: %w", uri, err)
 	}
 
-	return &Repo{URI: response.Uri, CID: dereference(response.Cid), Value: record}, nil
+	return &Repo{URI: uri, CID: dereference(cid), Value: record}, nil
 }
 
 func dereference(value *string) string {

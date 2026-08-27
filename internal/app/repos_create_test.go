@@ -9,11 +9,10 @@ import (
 	"github.com/alyraffauf/tg/atproto"
 )
 
-func TestCreateRepoValidatesConnectionSettingsBeforeProvisioning(t *testing.T) {
+func TestCreateRepoValidatesKnotBeforeProvisioning(t *testing.T) {
 	tests := []struct {
 		name        string
 		knotHost    string
-		sshPort     int
 		pushPath    string
 		clone       bool
 		wantHost    string
@@ -23,14 +22,10 @@ func TestCreateRepoValidatesConnectionSettingsBeforeProvisioning(t *testing.T) {
 		wantPuts    int
 	}{
 		{name: "malformed hostname", knotHost: "https://knot.example/path", wantErr: "invalid Knot hostname"},
-		{name: "zero push port", knotHost: "knot.example", pushPath: ".", wantErr: "SSH port"},
-		{name: "negative push port", knotHost: "knot.example", sshPort: -1, pushPath: ".", wantErr: "SSH port"},
-		{name: "push port above maximum", knotHost: "knot.example", sshPort: 65536, pushPath: ".", wantErr: "SSH port"},
-		{name: "zero clone port", knotHost: "knot.example", clone: true, wantErr: "SSH port"},
-		{name: "valid custom port", knotHost: "knot.example", sshPort: 2222, pushPath: ".", wantHost: "knot.example", wantCreates: 1, wantPuts: 1},
-		{name: "clone from custom knot and port", knotHost: "knot.example", sshPort: 2222, clone: true, wantHost: "knot.example", wantClones: 1, wantCreates: 1, wantPuts: 1},
+		{name: "push to explicit Knot", knotHost: "knot.example", pushPath: ".", wantHost: "knot.example", wantCreates: 1, wantPuts: 1},
+		{name: "clone from explicit Knot", knotHost: "knot.example", clone: true, wantHost: "knot.example", wantClones: 1, wantCreates: 1, wantPuts: 1},
 		{name: "hostname is canonicalized", knotHost: "KNOT.EXAMPLE", wantHost: "knot.example", wantCreates: 1, wantPuts: 1},
-		{name: "unused invalid port", knotHost: "knot.example", wantHost: "knot.example", wantCreates: 1, wantPuts: 1},
+		{name: "valid hostname", knotHost: "knot.example", wantHost: "knot.example", wantCreates: 1, wantPuts: 1},
 	}
 
 	for _, tt := range tests {
@@ -41,7 +36,7 @@ func TestCreateRepoValidatesConnectionSettingsBeforeProvisioning(t *testing.T) {
 			service := testService(pds, git, knotClient)
 
 			result, err := service.CreateRepo(context.Background(), CreateRepoInput{
-				KnotHost: tt.knotHost, SSHPort: tt.sshPort, Name: "example", Clone: tt.clone, PushPath: tt.pushPath,
+				KnotHost: tt.knotHost, SSHPort: 2222, Name: "example", Clone: tt.clone, PushPath: tt.pushPath,
 			})
 			if tt.wantErr != "" {
 				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
@@ -61,11 +56,17 @@ func TestCreateRepoValidatesConnectionSettingsBeforeProvisioning(t *testing.T) {
 			if len(git.clones) != tt.wantClones {
 				t.Fatalf("clone calls = %+v, want %d", git.clones, tt.wantClones)
 			}
-			if tt.wantClones == 1 && (git.clones[0].KnotHost != tt.wantHost || git.clones[0].SSHPort != tt.sshPort) {
-				t.Fatalf("clone destination = %+v, want %s:%d", git.clones[0], tt.wantHost, tt.sshPort)
+			if tt.wantClones == 1 && (git.clones[0].KnotHost != "knot.example" || git.clones[0].SSHPort != 2222) {
+				t.Fatalf("clone destination = %+v, want knot.example:2222", git.clones[0])
+			}
+			if tt.wantClones == 1 && git.clones[0].RepoDID != "did:plc:repo" {
+				t.Fatalf("clone repository DID = %q", git.clones[0].RepoDID)
 			}
 			if tt.wantErr != "" && (pds.serviceAuthCalls != 0 || len(git.pushes) != 0) {
 				t.Fatalf("service auth/push calls = %d/%d, want no side effects", pds.serviceAuthCalls, len(git.pushes))
+			}
+			if tt.pushPath != "" && (len(git.pushes) != 1 || git.pushes[0].KnotHost != "knot.example" || git.pushes[0].SSHPort != 2222) {
+				t.Fatalf("push destination = %+v, want knot.example:2222", git.pushes)
 			}
 			if tt.wantErr == "" {
 				wantAudience := "did:web:" + tt.wantHost
@@ -188,7 +189,7 @@ func TestCreateRepoSelectsKnot(t *testing.T) {
 			}
 
 			result, err := service.CreateRepo(context.Background(), CreateRepoInput{
-				KnotHost: tt.configuredKnot, SSHPort: 22, Name: "example", Clone: tt.clone, PushPath: pushPath,
+				KnotHost: tt.configuredKnot, Name: "example", Clone: tt.clone, PushPath: pushPath,
 			})
 			if tt.wantErr != "" {
 				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
@@ -217,11 +218,20 @@ func TestCreateRepoSelectsKnot(t *testing.T) {
 			if tt.wantErr != "" && (pds.serviceAuthCalls != 0 || len(pds.puts) != 0) {
 				t.Fatalf("service auth/put calls = %d/%d, want no mutation side effects", pds.serviceAuthCalls, len(pds.puts))
 			}
-			if tt.push && (len(git.pushes) != 1 || git.pushes[0].KnotHost != tt.wantKnot) {
-				t.Fatalf("pushes = %+v, want one push to %q", git.pushes, tt.wantKnot)
+			if tt.push && len(git.pushes) != 1 {
+				t.Fatalf("pushes = %+v, want one push", git.pushes)
 			}
-			if tt.clone && (len(git.clones) != 1 || git.clones[0].KnotHost != tt.wantKnot) {
-				t.Fatalf("clones = %+v, want one clone from %q", git.clones, tt.wantKnot)
+			if tt.push && git.pushes[0].RepoDID != "did:plc:repo" {
+				t.Fatalf("push repository DID = %q", git.pushes[0].RepoDID)
+			}
+			if tt.push && (git.pushes[0].KnotHost != "" || git.pushes[0].SSHPort != 22) {
+				t.Fatalf("automatic push destination = %+v, want tangled.org:22", git.pushes[0])
+			}
+			if tt.clone && (len(git.clones) != 1 || git.clones[0].KnotHost != "") {
+				t.Fatalf("clones = %+v, want one clone through tangled.org", git.clones)
+			}
+			if tt.clone && git.clones[0].SSHPort != 22 {
+				t.Fatalf("clone SSH port = %d, want 22", git.clones[0].SSHPort)
 			}
 			if tt.wantErr == "" {
 				if len(knotFactory.hosts) == 0 || knotFactory.hosts[0] != tt.wantKnot {

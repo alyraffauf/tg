@@ -10,33 +10,52 @@ import (
 	"strings"
 
 	"github.com/alyraffauf/tg/knot"
+	"github.com/bluesky-social/indigo/atproto/syntax"
 )
 
-// tangledHost is the hostname for Tangled repositories.
-const tangledHost = "tangled.org"
+// HostedGitHost is Tangled's hosted Git proxy.
+const HostedGitHost = "tangled.org"
 
 // defaultRemote is the conventional name of the primary git remote.
 const defaultRemote = "origin"
 
-// tangledRemoteURL builds the hosted Tangled SSH URL for a repository.
-func tangledRemoteURL(handle, repo string) string {
-	return "git@" + tangledHost + ":" + handle + "/" + repo
-}
-
 // knotRemoteURL builds an SSH URL for a repository on knotHost. Tangled's
 // default Knot and callers without a selected Knot use the hosted proxy.
-func knotRemoteURL(knotHost string, sshPort int, handle, repo string) string {
+// repoPath may be a handle/repo pair or a repository DID.
+func knotRemoteURL(knotHost string, sshPort int, repoPath string) string {
 	gitHost := knotHost
 	if gitHost == "" || gitHost == knot.DefaultKnot {
-		gitHost = tangledHost
+		gitHost = HostedGitHost
 	}
 	if sshPort != 22 {
-		return fmt.Sprintf("ssh://git@%s:%d/%s/%s", gitHost, sshPort, handle, repo)
+		return fmt.Sprintf("ssh://git@%s:%d/%s", gitHost, sshPort, repoPath)
 	}
-	if gitHost == tangledHost {
-		return tangledRemoteURL(handle, repo)
+	return "git@" + gitHost + ":" + repoPath
+}
+
+type repositoryDIDRemote struct {
+	Protocol string
+	KnotHost string
+	SSHPort  int
+	RepoDID  string
+}
+
+func repositoryDIDRemoteURL(remote repositoryDIDRemote) (string, error) {
+	if _, err := syntax.ParseDID(remote.RepoDID); err != nil {
+		return "", fmt.Errorf("invalid repository DID %q: %w", remote.RepoDID, err)
 	}
-	return "git@" + gitHost + ":" + handle + "/" + repo
+	switch remote.Protocol {
+	case "ssh":
+		return knotRemoteURL(remote.KnotHost, remote.SSHPort, remote.RepoDID), nil
+	case "https":
+		host := remote.KnotHost
+		if host == "" || host == knot.DefaultKnot {
+			host = HostedGitHost
+		}
+		return "https://" + host + "/" + remote.RepoDID, nil
+	default:
+		return "", fmt.Errorf("unsupported clone protocol %q", remote.Protocol)
+	}
 }
 
 // RepoContext holds an untrusted repository candidate parsed from a git remote
@@ -46,6 +65,7 @@ type RepoContext struct {
 	KnotHost string
 	Handle   string
 	Repo     string
+	RepoDID  string
 }
 
 // DetectRepoCandidatesFromCWD scans the git remotes in the current directory
@@ -104,11 +124,12 @@ func parseRepoCandidate(raw string) (*RepoContext, bool) {
 	if err != nil {
 		return nil, false
 	}
-	hosted := strings.EqualFold(u.Hostname(), tangledHost)
+	hosted := strings.EqualFold(u.Hostname(), HostedGitHost)
 	if !hosted && u.Scheme != "ssh" && u.Scheme != "https" {
 		return nil, false
 	}
-	candidate, ok := splitHandleRepo(strings.TrimPrefix(u.Path, "/"))
+	path := strings.Trim(strings.TrimPrefix(u.Path, "/"), "/")
+	candidate, ok := splitRepoPath(path)
 	if !ok {
 		return nil, false
 	}
@@ -116,6 +137,16 @@ func parseRepoCandidate(raw string) (*RepoContext, bool) {
 		candidate.KnotHost = strings.ToLower(u.Hostname())
 	}
 	return candidate, true
+}
+
+func splitRepoPath(path string) (*RepoContext, bool) {
+	if strings.Contains(path, "/") {
+		return splitHandleRepo(path)
+	}
+	if _, err := syntax.ParseDID(path); err != nil {
+		return nil, false
+	}
+	return &RepoContext{RepoDID: path}, true
 }
 
 // parseGitURL parses a git remote URL, including SCP-like syntax

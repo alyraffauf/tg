@@ -6,7 +6,7 @@ description: Config file, environment variables, and flags.
 `tg` resolves configuration values from the following sources, in increasing
 precedence (later sources override earlier ones):
 
-1. **Defaults** — `appview` is `https://bobbin.klbr.net`; `knot` is unset to permit automatic verified Knot discovery; `ssh-port` is `22`; `protocol` is `ssh`
+1. **Defaults.** `appview` is `https://bobbin.klbr.net`. `knot` is unset to permit automatic verified Knot discovery. `ssh-port` is `22`. `protocol` is `ssh`.
 2. **Config file** — `$XDG_CONFIG_HOME/tg/config.toml` (or `~/.config/tg/config.toml`)
 3. **Environment variables** — prefixed `TG_` (e.g. `TG_APPVIEW`)
 4. **Command-line flags** — e.g. `--appview`
@@ -23,27 +23,28 @@ ssh-port = 2222
 protocol = "ssh"
 ```
 
-`knot` and `ssh-port` are defaults for `tg repo create`. They select where a
-repository is provisioned and the SSH port used when constructing its initial
-clone or push remote. Existing repositories continue to use their configured
-Git remotes.
+`knot` selects where `tg repo create` provisions a repository. If you select a
+Knot explicitly, new repository DID remotes connect to that Knot. `ssh-port`
+sets the port for direct SSH clone and push remotes. Automatically selected
+Knots use the `tangled.org` proxy on SSH port 22.
 
 `protocol` selects the URL used by `tg repo clone` and `tg repo create --clone`.
-Set it to `ssh` (the default) or `https`. HTTPS clone URLs use the repository's
-recorded Knot. `ssh-port` applies to `tg repo create` and its `--clone` or
-`--push` setup; standalone SSH clones use port 22.
+Set it to `ssh` (the default) or `https`. If the repository record contains a
+repository DID, `tg` uses the DID in the remote. An explicitly selected Knot
+uses a direct remote. HTTPS clones that fall back to `handle/repo` use the
+repository's recorded Knot.
 
 Override the config file location with `--config /path/to/config.toml`.
 
 ## Environment variables
 
-| Variable      | Config key | Purpose                               |
-| ------------- | ---------- | ------------------------------------- |
-| `TG_APPVIEW`  | `appview`  | Appview host URL                      |
-| `TG_ACCOUNT`  | `account`  | Account handle or DID                 |
-| `TG_KNOT`     | `knot`     | Knot host for repo creation           |
-| `TG_SSH_PORT` | `ssh-port` | SSH port used during repo creation    |
-| `TG_PROTOCOL` | `protocol` | Clone URL protocol (`ssh` or `https`) |
+| Variable      | Config key | Purpose                                  |
+| ------------- | ---------- | ---------------------------------------- |
+| `TG_APPVIEW`  | `appview`  | Appview host URL                         |
+| `TG_ACCOUNT`  | `account`  | Account handle or DID                    |
+| `TG_KNOT`     | `knot`     | Knot host for repo creation              |
+| `TG_SSH_PORT` | `ssh-port` | SSH port for an explicitly selected Knot |
+| `TG_PROTOCOL` | `protocol` | Clone URL protocol (`ssh` or `https`)    |
 
 Keys containing `.` or `-` map to `TG_`-prefixed underscore-separated names
 (e.g. `foo.bar` → `TG_FOO_BAR`).

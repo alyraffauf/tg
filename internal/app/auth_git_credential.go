@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"strings"
+
+	"github.com/alyraffauf/tg/internal/gitutil"
 )
 
-// GitPushToken returns credentials only when requestedHost is the current
+// GitPushToken returns credentials for the hosted Git proxy or the current
 // repository's recorded Knot.
 func (s *Service) GitPushToken(ctx context.Context, requestedHost string) (*GitCredentialResult, error) {
 	_, repo, err := s.repoFromCWD(ctx)
@@ -17,7 +19,8 @@ func (s *Service) GitPushToken(ctx context.Context, requestedHost string) (*GitC
 	if err != nil {
 		return nil, err
 	}
-	if !strings.EqualFold(strings.TrimSpace(requestedHost), host) {
+	requestedHost = strings.TrimSpace(requestedHost)
+	if !strings.EqualFold(requestedHost, gitutil.HostedGitHost) && !strings.EqualFold(requestedHost, host) {
 		return &GitCredentialResult{}, nil
 	}
 	hasPushScope, isOAuth, err := s.sessions.OAuthSessionHasScope(ctx, "rpc:sh.tangled.repo.push?aud=*")

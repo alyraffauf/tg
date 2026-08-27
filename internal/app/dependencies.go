@@ -23,6 +23,7 @@ type identityResolver interface {
 
 type appviewClient interface {
 	GetRepo(context.Context, string) (*tangled.Repo, error)
+	GetRepoByDID(context.Context, string) (*tangled.Repo, error)
 	ListRepos(context.Context, string) (*tangled.RepoList, error)
 	ListIssues(context.Context, string, tangled.ListOpts) (*tangled.List, error)
 	ListPulls(context.Context, string, tangled.ListOpts) (*tangled.List, error)
@@ -61,6 +62,7 @@ type gitClient interface {
 type knotClient interface {
 	CreateRepo(context.Context, knot.CreateRepoInput) (string, error)
 	DeleteRepo(context.Context, knot.DeleteRepoInput) error
+	DescribeRepo(context.Context, string) (*knot.RepoDescription, error)
 	SetDefaultBranch(context.Context, knot.SetDefaultBranchInput) error
 	GetDefaultBranch(context.Context, string) (*knot.DefaultBranch, error)
 	Merge(context.Context, knot.MergeInput) error

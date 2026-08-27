@@ -38,11 +38,10 @@ Requires authentication (run "tg auth login" first).`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
-			parsedSSHPort, err := parseRepoCreateSSHPort(sshPort, defaultProtocol, clone, pushPath)
+			parsedSSHPort, err := parseRepoCreateSSHPort(sshPort, knotHost, defaultProtocol, clone, pushPath)
 			if err != nil {
 				return err
 			}
-
 			result, err := service.CreateRepo(ctx, app.CreateRepoInput{
 				KnotHost: knotHost, SSHPort: parsedSSHPort, Name: args[0], Description: description,
 				Clone: clone, CloneProtocol: defaultProtocol, PushPath: pushPath, RemoteName: remote,
@@ -55,15 +54,16 @@ Requires authentication (run "tg auth login" first).`,
 	}
 	command.Flags().StringVar(&description, "description", "", "Repository description")
 	command.Flags().StringVar(&knotHost, "knot", defaultKnot, "Knot host to provision and optionally push to (overrides TG_KNOT, config, and automatic discovery)")
-	command.Flags().StringVar(&sshPort, "ssh-port", defaultSSHPort, "SSH port for cloning from or pushing to the selected Knot (overrides config file and TG_SSH_PORT)")
+	command.Flags().StringVar(&sshPort, "ssh-port", defaultSSHPort, "SSH port for cloning from or pushing to an explicitly selected Knot (overrides config file and TG_SSH_PORT)")
 	command.Flags().BoolVar(&clone, "clone", false, "Clone the new repository into the current directory")
 	command.Flags().StringVar(&pushPath, "push", "", "Push an existing local repository at this path to the new remote (e.g. .)")
 	command.Flags().StringVar(&remote, "remote", "origin", "Remote name to use with --push")
 	return command
 }
 
-func parseRepoCreateSSHPort(sshPort, cloneProtocol string, clone bool, pushPath string) (int, error) {
-	if pushPath == "" && (!clone || cloneProtocol != "ssh") {
+func parseRepoCreateSSHPort(sshPort, knotHost, cloneProtocol string, clone bool, pushPath string) (int, error) {
+	usesDirectSSH := knotHost != "" && (pushPath != "" || clone && cloneProtocol == "ssh")
+	if !usesDirectSSH {
 		return 0, nil
 	}
 	parsedSSHPort, err := strconv.Atoi(sshPort)

@@ -21,7 +21,9 @@ type knotRegistration struct {
 // ownerHandle resolves a DID to its handle, falling back to the raw DID.
 func (s *Service) ownerHandle(ctx context.Context, did string) string {
 	if ident, err := s.resolver.ResolveDID(ctx, did); err == nil {
-		return ident.Handle.String()
+		if handle := ident.Handle; handle.String() != "" && !handle.IsInvalidHandle() {
+			return handle.String()
+		}
 	}
 	return did
 }

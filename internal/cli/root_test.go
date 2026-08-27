@@ -99,7 +99,7 @@ func TestRepoCreateSSHPortHelp(t *testing.T) {
 		t.Fatalf("find repo create command: %v", err)
 	}
 	flag := create.Flags().Lookup("ssh-port")
-	if flag == nil || flag.Usage != "SSH port for cloning from or pushing to the selected Knot (overrides config file and TG_SSH_PORT)" {
+	if flag == nil || flag.Usage != "SSH port for cloning from or pushing to an explicitly selected Knot (overrides config file and TG_SSH_PORT)" {
 		t.Fatalf("ssh-port flag = %+v", flag)
 	}
 	if flag.DefValue != "2200" {
@@ -113,7 +113,7 @@ func TestRepoCreateSSHPortHelp(t *testing.T) {
 	}
 }
 
-func TestRepoCreateRejectsMalformedSSHPort(t *testing.T) {
+func TestRepoCreateRejectsMalformedSSHPortForExplicitKnot(t *testing.T) {
 	command := newRepoCreateCommand(&app.Service{}, "configured.example", "not-a-port", "ssh")
 	if err := command.Flags().Set("clone", "true"); err != nil {
 		t.Fatalf("set clone flag: %v", err)
@@ -124,8 +124,8 @@ func TestRepoCreateRejectsMalformedSSHPort(t *testing.T) {
 	}
 }
 
-func TestParseRepoCreateSSHPort(t *testing.T) {
-	port, err := parseRepoCreateSSHPort("not-a-port", "https", true, "")
+func TestParseRepoCreateSSHPortIgnoresProxyRemote(t *testing.T) {
+	port, err := parseRepoCreateSSHPort("not-a-port", "", "ssh", true, "")
 	if err != nil {
 		t.Fatalf("parseRepoCreateSSHPort() error = %v", err)
 	}
