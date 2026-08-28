@@ -124,7 +124,7 @@ func assertFeedCommentWrite(t *testing.T, pds *testPDS, subject tangled.ListItem
 	if record.Subject == nil || record.Subject.Uri != subject.URI || record.Subject.Cid != subject.CID {
 		t.Errorf("record subject = %+v, want URI %q and CID %q", record.Subject, subject.URI, subject.CID)
 	}
-	if record.Body == nil || record.Body.MarkupMarkdown == nil || record.Body.MarkupMarkdown.Text != body {
+	if record.Body == nil || record.Body.MarkupMarkdown == nil || record.Body.MarkupMarkdown.Text != body || record.Body.MarkupMarkdown.Original == nil || *record.Body.MarkupMarkdown.Original != body {
 		t.Errorf("record body = %+v, want markdown %q", record.Body, body)
 	}
 	if !sameRoundIndex(record.PullRoundIdx, pullRoundIdx) {

@@ -30,7 +30,7 @@ func (s *Service) createFeedComment(ctx context.Context, subjectItem tangled.Lis
 		Record: tangledlex.FeedComment{
 			LexiconTypeID: tangled.FeedCommentCollection,
 			Subject:       subject,
-			Body:          &tangledlex.FeedComment_Body{MarkupMarkdown: &tangledlex.MarkupMarkdown{Text: body}},
+			Body:          &tangledlex.FeedComment_Body{MarkupMarkdown: &tangledlex.MarkupMarkdown{Text: body, Original: &body}},
 			CreatedAt:     time.Now().UTC().Format(time.RFC3339),
 			PullRoundIdx:  pullRoundIdx,
 		},
