@@ -20,16 +20,12 @@ func ValidateRecord(collection string, record any) error {
 		return validateRepo(collection, value)
 	case RepoIssue:
 		return validateIssue(collection, value)
-	case RepoIssueComment:
-		return validateIssueComment(collection, value)
 	case FeedComment:
 		return validateFeedComment(collection, value)
 	case RepoIssueState:
 		return validateIssueState(collection, value)
 	case RepoPull:
 		return validatePull(collection, value)
-	case RepoPullComment:
-		return validatePullComment(collection, value)
 	case RepoPullStatus:
 		return validatePullStatus(collection, value)
 	case PublicKey:
@@ -104,30 +100,6 @@ func validateIssue(collection string, record RepoIssue) error {
 	}
 	if err := required("title", record.Title); err != nil {
 		return err
-	}
-	if err := validateMentions(record.Mentions); err != nil {
-		return err
-	}
-	if err := validateReferences(record.References); err != nil {
-		return err
-	}
-	return datetimeField(record.CreatedAt)
-}
-
-func validateIssueComment(collection string, record RepoIssueComment) error {
-	if err := validateType(collection, record.LexiconTypeID, "sh.tangled.repo.issue.comment"); err != nil {
-		return err
-	}
-	if err := atURI(record.Issue); err != nil {
-		return fieldError("issue", err)
-	}
-	if err := required("body", record.Body); err != nil {
-		return err
-	}
-	if record.ReplyTo != nil {
-		if err := atURI(*record.ReplyTo); err != nil {
-			return fieldError("replyTo", err)
-		}
 	}
 	if err := validateMentions(record.Mentions); err != nil {
 		return err
@@ -246,25 +218,6 @@ func validatePull(collection string, record RepoPull) error {
 		if err := atURI(*record.DependentOn); err != nil {
 			return fieldError("dependentOn", err)
 		}
-	}
-	if err := validateMentions(record.Mentions); err != nil {
-		return err
-	}
-	if err := validateReferences(record.References); err != nil {
-		return err
-	}
-	return datetimeField(record.CreatedAt)
-}
-
-func validatePullComment(collection string, record RepoPullComment) error {
-	if err := validateType(collection, record.LexiconTypeID, "sh.tangled.repo.pull.comment"); err != nil {
-		return err
-	}
-	if err := atURI(record.Pull); err != nil {
-		return fieldError("pull", err)
-	}
-	if err := required("body", record.Body); err != nil {
-		return err
 	}
 	if err := validateMentions(record.Mentions); err != nil {
 		return err

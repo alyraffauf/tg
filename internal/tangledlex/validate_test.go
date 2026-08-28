@@ -48,11 +48,9 @@ func TestValidateRecordRejectsEveryWritableRecord(t *testing.T) {
 	}{
 		{"repo", "sh.tangled.repo", Repo{LexiconTypeID: "sh.tangled.repo", CreatedAt: testTime}, "knot"},
 		{"issue", "sh.tangled.repo.issue", RepoIssue{LexiconTypeID: "sh.tangled.repo.issue", Title: "title", CreatedAt: testTime}, "repo"},
-		{"issue comment", "sh.tangled.repo.issue.comment", RepoIssueComment{LexiconTypeID: "sh.tangled.repo.issue.comment", Body: "body", CreatedAt: testTime}, "issue"},
 		{"feed comment", "sh.tangled.feed.comment", FeedComment{LexiconTypeID: "sh.tangled.feed.comment", Body: &FeedComment_Body{MarkupMarkdown: &MarkupMarkdown{Text: "body"}}, CreatedAt: testTime}, "subject"},
 		{"issue state", "sh.tangled.repo.issue.state", RepoIssueState{LexiconTypeID: "sh.tangled.repo.issue.state", Issue: testATURI, State: "invalid", CreatedAt: testTime}, "state"},
 		{"pull", "sh.tangled.repo.pull", RepoPull{LexiconTypeID: "sh.tangled.repo.pull", Title: "title", CreatedAt: testTime}, "target"},
-		{"pull comment", "sh.tangled.repo.pull.comment", RepoPullComment{LexiconTypeID: "sh.tangled.repo.pull.comment", Body: "body", CreatedAt: testTime}, "pull"},
 		{"pull status", "sh.tangled.repo.pull.status", RepoPullStatus{LexiconTypeID: "sh.tangled.repo.pull.status", Pull: testATURI, Status: "invalid", CreatedAt: testTime}, "status"},
 		{"public key", "sh.tangled.publicKey", PublicKey{LexiconTypeID: "sh.tangled.publicKey", Name: "key", CreatedAt: testTime}, "key"},
 		{"string", "sh.tangled.string", String{LexiconTypeID: "sh.tangled.string", Contents: "text", CreatedAt: testTime}, "filename"},
@@ -106,16 +104,6 @@ func TestValidateRecordRejectsNestedConstraints(t *testing.T) {
 				return record
 			},
 			contains: "mentions",
-		},
-		{
-			name:       "issue comment reply",
-			collection: "sh.tangled.repo.issue.comment",
-			record: func() any {
-				record := validRecords()["sh.tangled.repo.issue.comment"].(RepoIssueComment)
-				record.ReplyTo = stringPointer("not-an-at-uri")
-				return record
-			},
-			contains: "replyTo",
 		},
 		{
 			name:       "feed comment subject URI",
@@ -199,16 +187,6 @@ func TestValidateRecordRejectsNestedConstraints(t *testing.T) {
 			},
 			contains: "dependentOn",
 		},
-		{
-			name:       "pull comment reference",
-			collection: "sh.tangled.repo.pull.comment",
-			record: func() any {
-				record := validRecords()["sh.tangled.repo.pull.comment"].(RepoPullComment)
-				record.References = []string{"not-an-at-uri"}
-				return record
-			},
-			contains: "references",
-		},
 	}
 
 	for _, test := range tests {
@@ -223,9 +201,8 @@ func TestValidateRecordRejectsNestedConstraints(t *testing.T) {
 
 func validRecords() map[string]any {
 	return map[string]any{
-		"sh.tangled.repo":               Repo{LexiconTypeID: "sh.tangled.repo", Knot: "knot.example", CreatedAt: testTime},
-		"sh.tangled.repo.issue":         RepoIssue{LexiconTypeID: "sh.tangled.repo.issue", Repo: testDID, Title: "title", CreatedAt: testTime},
-		"sh.tangled.repo.issue.comment": RepoIssueComment{LexiconTypeID: "sh.tangled.repo.issue.comment", Issue: testATURI, Body: "body", CreatedAt: testTime},
+		"sh.tangled.repo":       Repo{LexiconTypeID: "sh.tangled.repo", Knot: "knot.example", CreatedAt: testTime},
+		"sh.tangled.repo.issue": RepoIssue{LexiconTypeID: "sh.tangled.repo.issue", Repo: testDID, Title: "title", CreatedAt: testTime},
 		"sh.tangled.feed.comment": FeedComment{
 			LexiconTypeID: "sh.tangled.feed.comment",
 			Subject:       &comatproto.RepoStrongRef{Uri: testATURI, Cid: testCID},
@@ -243,10 +220,9 @@ func validRecords() map[string]any {
 				PatchBlob: &lexutil.LexBlob{Ref: lexutil.LexLink(cid.MustParse("bafybeigdyrzt5m6b5nkn55vsgzzfw5cfs2tidw6zqugycdkyybf2z7kz4q")), MimeType: "application/gzip"},
 			}},
 		},
-		"sh.tangled.repo.pull.comment": RepoPullComment{LexiconTypeID: "sh.tangled.repo.pull.comment", Pull: testATURI, Body: "body", CreatedAt: testTime},
-		"sh.tangled.repo.pull.status":  RepoPullStatus{LexiconTypeID: "sh.tangled.repo.pull.status", Pull: testATURI, Status: "sh.tangled.repo.pull.status.open", CreatedAt: testTime},
-		"sh.tangled.publicKey":         PublicKey{LexiconTypeID: "sh.tangled.publicKey", Key: "ssh-ed25519 AAAA", Name: "key", CreatedAt: testTime},
-		"sh.tangled.string":            String{LexiconTypeID: "sh.tangled.string", Filename: "note.md", Description: "note", Contents: "text", CreatedAt: testTime},
+		"sh.tangled.repo.pull.status": RepoPullStatus{LexiconTypeID: "sh.tangled.repo.pull.status", Pull: testATURI, Status: "sh.tangled.repo.pull.status.open", CreatedAt: testTime},
+		"sh.tangled.publicKey":        PublicKey{LexiconTypeID: "sh.tangled.publicKey", Key: "ssh-ed25519 AAAA", Name: "key", CreatedAt: testTime},
+		"sh.tangled.string":           String{LexiconTypeID: "sh.tangled.string", Filename: "note.md", Description: "note", Contents: "text", CreatedAt: testTime},
 	}
 }
 

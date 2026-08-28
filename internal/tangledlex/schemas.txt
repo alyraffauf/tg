@@ -1,10 +1,8 @@
-issue/comment.json
 issue/issue.json
 issue/state.json
 feed/comment.json
 markup/markdown.json
 publicKey.json
-pulls/comment.json
 pulls/pull.json
 pulls/state.json
 repo/getRepo.json
