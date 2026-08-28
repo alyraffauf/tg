@@ -5,6 +5,15 @@ import (
 	"testing"
 )
 
+func TestDefaultScopesIncludeFeedComment(t *testing.T) {
+	for _, scope := range DefaultScopes {
+		if scope == "repo:sh.tangled.feed.comment" {
+			return
+		}
+	}
+	t.Fatal("DefaultScopes does not include repo:sh.tangled.feed.comment")
+}
+
 func TestAuthManagerOAuthSessionHasScope(t *testing.T) {
 	store := testKeyringStore(newFakeKeyring())
 	manager := newAuthManagerForTest("http://127.0.0.1:8095/callback", store)

@@ -7,6 +7,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	comatproto "github.com/bluesky-social/indigo/api/atproto"
 	"github.com/bluesky-social/indigo/atproto/syntax"
 )
 
@@ -21,6 +22,8 @@ func ValidateRecord(collection string, record any) error {
 		return validateIssue(collection, value)
 	case RepoIssueComment:
 		return validateIssueComment(collection, value)
+	case FeedComment:
+		return validateFeedComment(collection, value)
 	case RepoIssueState:
 		return validateIssueState(collection, value)
 	case RepoPull:
@@ -133,6 +136,54 @@ func validateIssueComment(collection string, record RepoIssueComment) error {
 		return err
 	}
 	return datetimeField(record.CreatedAt)
+}
+
+func validateFeedComment(collection string, record FeedComment) error {
+	if err := validateType(collection, record.LexiconTypeID, "sh.tangled.feed.comment"); err != nil {
+		return err
+	}
+	if err := validateStrongRef("subject", record.Subject); err != nil {
+		return err
+	}
+	if record.Body == nil || record.Body.MarkupMarkdown == nil {
+		return fmt.Errorf("body is required")
+	}
+	if err := required("body.text", record.Body.MarkupMarkdown.Text); err != nil {
+		return err
+	}
+	if record.ReplyTo != nil {
+		if err := validateStrongRef("replyTo", record.ReplyTo); err != nil {
+			return err
+		}
+	}
+	if record.Subject != nil {
+		subject, err := syntax.ParseATURI(record.Subject.Uri)
+		if err != nil {
+			return fieldError("subject", fmt.Errorf("must be an at:// URI: %w", err))
+		}
+		if subject.Collection().String() == "sh.tangled.repo.pull" {
+			if record.PullRoundIdx == nil {
+				return fmt.Errorf("pullRoundIdx is required for pull subjects")
+			}
+		}
+	}
+	if record.PullRoundIdx != nil && *record.PullRoundIdx < 0 {
+		return fmt.Errorf("pullRoundIdx must be non-negative")
+	}
+	return datetimeField(record.CreatedAt)
+}
+
+func validateStrongRef(name string, ref *comatproto.RepoStrongRef) error {
+	if ref == nil {
+		return fmt.Errorf("%s is required", name)
+	}
+	if err := atURI(ref.Uri); err != nil {
+		return fieldError(name+".uri", err)
+	}
+	if _, err := syntax.ParseCID(ref.Cid); err != nil {
+		return fieldError(name+".cid", fmt.Errorf("must be a CID: %w", err))
+	}
+	return nil
 }
 
 func validateIssueState(collection string, record RepoIssueState) error {

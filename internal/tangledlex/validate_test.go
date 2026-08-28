@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	comatproto "github.com/bluesky-social/indigo/api/atproto"
 	lexutil "github.com/bluesky-social/indigo/lex/util"
 	"github.com/ipfs/go-cid"
 )
@@ -11,6 +12,8 @@ import (
 const (
 	testDID   = "did:plc:abc123"
 	testATURI = "at://did:plc:abc123/sh.tangled.repo.issue/3k2abc"
+	testPull  = "at://did:plc:abc123/sh.tangled.repo.pull/3k2abc"
+	testCID   = "bafybeigdyrzt5m6b5nkn55vsgzzfw5cfs2tidw6zqugycdkyybf2z7kz4q"
 	testTime  = "2026-07-25T12:00:00Z"
 )
 
@@ -46,6 +49,7 @@ func TestValidateRecordRejectsEveryWritableRecord(t *testing.T) {
 		{"repo", "sh.tangled.repo", Repo{LexiconTypeID: "sh.tangled.repo", CreatedAt: testTime}, "knot"},
 		{"issue", "sh.tangled.repo.issue", RepoIssue{LexiconTypeID: "sh.tangled.repo.issue", Title: "title", CreatedAt: testTime}, "repo"},
 		{"issue comment", "sh.tangled.repo.issue.comment", RepoIssueComment{LexiconTypeID: "sh.tangled.repo.issue.comment", Body: "body", CreatedAt: testTime}, "issue"},
+		{"feed comment", "sh.tangled.feed.comment", FeedComment{LexiconTypeID: "sh.tangled.feed.comment", Body: &FeedComment_Body{MarkupMarkdown: &MarkupMarkdown{Text: "body"}}, CreatedAt: testTime}, "subject"},
 		{"issue state", "sh.tangled.repo.issue.state", RepoIssueState{LexiconTypeID: "sh.tangled.repo.issue.state", Issue: testATURI, State: "invalid", CreatedAt: testTime}, "state"},
 		{"pull", "sh.tangled.repo.pull", RepoPull{LexiconTypeID: "sh.tangled.repo.pull", Title: "title", CreatedAt: testTime}, "target"},
 		{"pull comment", "sh.tangled.repo.pull.comment", RepoPullComment{LexiconTypeID: "sh.tangled.repo.pull.comment", Body: "body", CreatedAt: testTime}, "pull"},
@@ -114,6 +118,58 @@ func TestValidateRecordRejectsNestedConstraints(t *testing.T) {
 			contains: "replyTo",
 		},
 		{
+			name:       "feed comment subject URI",
+			collection: "sh.tangled.feed.comment",
+			record: func() any {
+				record := validRecords()["sh.tangled.feed.comment"].(FeedComment)
+				record.Subject.Uri = "not-an-at-uri"
+				return record
+			},
+			contains: "subject.uri",
+		},
+		{
+			name:       "feed comment subject CID",
+			collection: "sh.tangled.feed.comment",
+			record: func() any {
+				record := validRecords()["sh.tangled.feed.comment"].(FeedComment)
+				record.Subject.Cid = "not-a-cid"
+				return record
+			},
+			contains: "subject.cid",
+		},
+		{
+			name:       "feed comment pull round",
+			collection: "sh.tangled.feed.comment",
+			record: func() any {
+				record := validRecords()["sh.tangled.feed.comment"].(FeedComment)
+				record.Subject.Uri = testPull
+				record.PullRoundIdx = nil
+				return record
+			},
+			contains: "pullRoundIdx",
+		},
+		{
+			name:       "feed comment pull round index",
+			collection: "sh.tangled.feed.comment",
+			record: func() any {
+				record := validRecords()["sh.tangled.feed.comment"].(FeedComment)
+				index := int64(-1)
+				record.PullRoundIdx = &index
+				return record
+			},
+			contains: "non-negative",
+		},
+		{
+			name:       "feed comment body text",
+			collection: "sh.tangled.feed.comment",
+			record: func() any {
+				record := validRecords()["sh.tangled.feed.comment"].(FeedComment)
+				record.Body.MarkupMarkdown.Text = ""
+				return record
+			},
+			contains: "body.text",
+		},
+		{
 			name:       "pull blob reference",
 			collection: "sh.tangled.repo.pull",
 			record: func() any {
@@ -170,7 +226,13 @@ func validRecords() map[string]any {
 		"sh.tangled.repo":               Repo{LexiconTypeID: "sh.tangled.repo", Knot: "knot.example", CreatedAt: testTime},
 		"sh.tangled.repo.issue":         RepoIssue{LexiconTypeID: "sh.tangled.repo.issue", Repo: testDID, Title: "title", CreatedAt: testTime},
 		"sh.tangled.repo.issue.comment": RepoIssueComment{LexiconTypeID: "sh.tangled.repo.issue.comment", Issue: testATURI, Body: "body", CreatedAt: testTime},
-		"sh.tangled.repo.issue.state":   RepoIssueState{LexiconTypeID: "sh.tangled.repo.issue.state", Issue: testATURI, State: "sh.tangled.repo.issue.state.open", CreatedAt: testTime},
+		"sh.tangled.feed.comment": FeedComment{
+			LexiconTypeID: "sh.tangled.feed.comment",
+			Subject:       &comatproto.RepoStrongRef{Uri: testATURI, Cid: testCID},
+			Body:          &FeedComment_Body{MarkupMarkdown: &MarkupMarkdown{Text: "body"}},
+			CreatedAt:     testTime,
+		},
+		"sh.tangled.repo.issue.state": RepoIssueState{LexiconTypeID: "sh.tangled.repo.issue.state", Issue: testATURI, State: "sh.tangled.repo.issue.state.open", CreatedAt: testTime},
 		"sh.tangled.repo.pull": RepoPull{
 			LexiconTypeID: "sh.tangled.repo.pull",
 			Title:         "title",

@@ -10,6 +10,8 @@ func main() {
 	if err := generator.WriteMapEncodersToFile(
 		"cbor_gen.go",
 		"tangledlex",
+		lex.FeedComment{},
+		lex.MarkupMarkdown{},
 		lex.PublicKey{},
 		lex.Repo{},
 		lex.RepoIssue{},
