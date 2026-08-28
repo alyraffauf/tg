@@ -325,6 +325,7 @@ type testPDS struct {
 	listErr                   error
 	listCalls                 int
 	listOptions               []atproto.ListRecordsOpts
+	getCalls                  int
 	serviceAuthCalls          int
 	serviceAuthAudiences      []string
 	serviceAuthLexiconMethods []string
@@ -359,6 +360,7 @@ func (p *testPDS) UploadBlob(context.Context, []byte, string) (*atproto.Blob, er
 }
 
 func (p *testPDS) GetRecord(context.Context, string, string, string) (*atproto.GetRecordOutput, error) {
+	p.getCalls++
 	return p.record, nil
 }
 
@@ -516,6 +518,7 @@ type testAppview struct {
 	getRepoByDIDHook func(string)
 	repoByDID        *tangled.Repo
 	repoByDIDErr     error
+	issues           *tangled.List
 	pulls            *tangled.List
 	search           *tangled.SearchResult
 	stars            int64
@@ -539,8 +542,11 @@ func (a testAppview) GetRepoByDID(_ context.Context, repoDID string) (*tangled.R
 func (testAppview) ListRepos(context.Context, string) (*tangled.RepoList, error) {
 	return nil, errors.New("not implemented")
 }
-func (testAppview) ListIssues(context.Context, string, tangled.ListOpts) (*tangled.List, error) {
-	return nil, errors.New("not implemented")
+func (a testAppview) ListIssues(context.Context, string, tangled.ListOpts) (*tangled.List, error) {
+	if a.issues == nil {
+		return nil, errors.New("not implemented")
+	}
+	return a.issues, nil
 }
 func (a testAppview) ListPulls(context.Context, string, tangled.ListOpts) (*tangled.List, error) {
 	if a.pulls == nil {

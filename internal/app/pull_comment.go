@@ -2,13 +2,11 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
-	"time"
 
-	"github.com/alyraffauf/tg/atproto"
 	"github.com/alyraffauf/tg/internal/tangledlex"
 	"github.com/alyraffauf/tg/tangled"
-	"github.com/bluesky-social/indigo/atproto/syntax"
 )
 
 // CommentPull adds a comment to the pull request identified by rkey.
@@ -27,28 +25,13 @@ func (s *Service) CommentPull(ctx context.Context, t Target, rkey, body string) 
 	if err != nil {
 		return nil, err
 	}
-	return s.createPullComment(ctx, pull.URI, body)
-}
-
-func (s *Service) createPullComment(ctx context.Context, pullURI, body string) (*CreatedRecordResult, error) {
-	atClient, did, err := s.authenticatedPDS(ctx)
-	if err != nil {
-		return nil, err
+	var record tangledlex.RepoPull
+	if err := json.Unmarshal(pull.Value, &record); err != nil {
+		return nil, fmt.Errorf("decode pull request %q: %w", rkey, err)
 	}
-	rkey := string(syntax.NewTIDNow(0))
-	uri, _, err := atClient.PutRecord(ctx, atproto.PutRecordInput{
-		Repo:       did,
-		Collection: pullCollection + ".comment",
-		Rkey:       rkey,
-		Record: tangledlex.RepoPullComment{
-			LexiconTypeID: pullCollection + ".comment",
-			Pull:          pullURI,
-			Body:          body,
-			CreatedAt:     time.Now().UTC().Format(time.RFC3339),
-		},
-	})
-	if err != nil {
-		return nil, fmt.Errorf("create pull request comment: %w", err)
+	if len(record.Rounds) == 0 {
+		return nil, fmt.Errorf("pull request %q has no rounds", rkey)
 	}
-	return &CreatedRecordResult{Rkey: rkey, URI: uri}, nil
+	latestRoundIdx := int64(len(record.Rounds) - 1)
+	return s.createFeedComment(ctx, *pull, body, &latestRoundIdx)
 }
