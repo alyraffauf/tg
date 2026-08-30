@@ -35,7 +35,7 @@ must be blank, and the remaining text is the required body.`,
 					return err
 				}
 				draft, err := editIssueDraft(ctx, cmd.InOrStdin(), cmd.OutOrStdout(), cmd.ErrOrStderr())
-				if errors.Is(err, errIssueCreationCanceled) {
+				if errors.Is(err, errTitledDraftCanceled) {
 					fmt.Fprintln(cmd.ErrOrStderr(), "Issue creation canceled.")
 					return nil
 				}
@@ -46,7 +46,7 @@ must be blank, and the remaining text is the required body.`,
 				if err != nil {
 					return fmt.Errorf("%w; draft saved to %s", err, draft.Path)
 				}
-				removeIssueDraft(draft.Path, cmd.ErrOrStderr())
+				removeTitledDraft(draft.Path, "issue", cmd.ErrOrStderr())
 				return output(cmd, result, func(result *app.CreatedRecordResult) {
 					fmt.Fprintf(cmd.OutOrStdout(), "Created issue %s\n", result.URI)
 				})

@@ -9,47 +9,60 @@ import (
 )
 
 const (
-	issueDraftSentinel = "<!-- tg: everything below this line is ignored -->"
-	issueDraftTemplate = "\n\n" + issueDraftSentinel + "\n" +
+	titledDraftSentinel = "<!-- tg: everything below this line is ignored -->"
+	titledDraftTemplate = "\n\n" + titledDraftSentinel + "\n" +
+		"<!-- Enter a title above, followed by a blank line and an optional body. -->\n"
+	issueDraftTemplate = "\n\n" + titledDraftSentinel + "\n" +
 		"<!-- Enter a title above, followed by a blank line and a body. -->\n"
 )
 
-var errIssueCreationCanceled = errors.New("issue creation canceled")
+var errTitledDraftCanceled = errors.New("title and body creation canceled")
 
-type issueDraft struct {
+type titledDraft struct {
 	Title string
 	Body  string
 	Path  string
 }
 
-func editIssueDraft(ctx context.Context, input io.Reader, output, errorOutput io.Writer) (issueDraft, error) {
-	edited, err := editDraft(ctx, "issue", "tg-issue-*.md", issueDraftTemplate, input, output, errorOutput)
+func editTitledDraft(ctx context.Context, kind, pattern, template string, input io.Reader, output, errorOutput io.Writer) (titledDraft, error) {
+	edited, err := editDraft(ctx, kind, pattern, template, input, output, errorOutput)
 	if err != nil {
-		return issueDraft{}, err
+		return titledDraft{}, err
 	}
-	title, body, err := parseIssueDraft(edited.Contents)
-	if errors.Is(err, errIssueCreationCanceled) {
-		removeIssueDraft(edited.Path, errorOutput)
-		return issueDraft{}, err
+	title, body, err := parseTitledDraft(edited.Contents)
+	if errors.Is(err, errTitledDraftCanceled) {
+		removeDraft(edited.Path, kind, errorOutput)
+		return titledDraft{}, err
 	}
 	if err != nil {
-		return issueDraft{}, fmt.Errorf("parse issue draft: %w; draft saved to %s", err, edited.Path)
+		return titledDraft{}, fmt.Errorf("parse %s draft: %w; draft saved to %s", kind, err, edited.Path)
 	}
-	return issueDraft{Title: title, Body: body, Path: edited.Path}, nil
+	return titledDraft{Title: title, Body: body, Path: edited.Path}, nil
 }
 
-func parseIssueDraft(document string) (string, string, error) {
+func editIssueDraft(ctx context.Context, input io.Reader, output, errorOutput io.Writer) (titledDraft, error) {
+	draft, err := editTitledDraft(ctx, "issue", "tg-issue-*.md", issueDraftTemplate, input, output, errorOutput)
+	if err != nil {
+		return titledDraft{}, err
+	}
+	if strings.TrimSpace(draft.Body) == "" {
+		return titledDraft{}, fmt.Errorf("parse issue draft: body must not be empty; draft saved to %s", draft.Path)
+	}
+	return draft, nil
+}
+
+func parseTitledDraft(document string) (string, string, error) {
 	document = strings.ReplaceAll(document, "\r\n", "\n")
 	lines := strings.Split(document, "\n")
 	for index, line := range lines {
-		if line == issueDraftSentinel {
+		if line == titledDraftSentinel {
 			lines = lines[:index]
 			break
 		}
 	}
 	document = strings.Join(lines, "\n")
 	if strings.TrimSpace(document) == "" {
-		return "", "", errIssueCreationCanceled
+		return "", "", errTitledDraftCanceled
 	}
 
 	titleLine, remainder, found := strings.Cut(document, "\n")
@@ -68,13 +81,9 @@ func parseIssueDraft(document string) (string, string, error) {
 	if title == "" {
 		return "", "", fmt.Errorf("title must not be empty")
 	}
-	body = strings.Trim(body, "\n")
-	if strings.TrimSpace(body) == "" {
-		return "", "", fmt.Errorf("body must not be empty")
-	}
-	return title, body, nil
+	return title, strings.Trim(body, "\n"), nil
 }
 
-func removeIssueDraft(path string, errorOutput io.Writer) {
-	removeDraft(path, "issue", errorOutput)
+func removeTitledDraft(path, kind string, errorOutput io.Writer) {
+	removeDraft(path, kind, errorOutput)
 }

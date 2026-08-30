@@ -1,27 +1,42 @@
 package cli
 
 import (
+	"context"
+	"errors"
 	"fmt"
 
 	"github.com/alyraffauf/tg/internal/app"
 	"github.com/spf13/cobra"
 )
 
-func newPRCreateCommand(service *app.Service) *cobra.Command {
+type pullCreateService interface {
+	CreatePull(context.Context, app.CreatePullInput) (*app.PRCreateResult, error)
+	TargetFromCWD(context.Context) (app.Target, error)
+}
+
+func newPRCreateCommand(service pullCreateService) *cobra.Command {
 	var title, bodyText, bodyFile, base, head, repository, sourceRepository string
 
 	command := &cobra.Command{
 		Use:   "create",
 		Short: "Create a pull request from the current branch",
-		Long: "Create a pull request by uploading a gzipped git patch and writing a sh.tangled.repo.pull record. " +
-			"By default, the current repository and branch are both the source and target repository, and origin's " +
-			"default branch is the target branch. Use --repo and --source-repo for a fork-based pull request.",
+		Long: `Create a pull request by uploading a gzipped git patch and writing a
+sh.tangled.repo.pull record. By default, the current repository and branch are
+both the source and target repository, and origin's default branch is the
+target branch. Use --repo and --source-repo for a fork-based pull request.
+
+When title and body are omitted, tg opens $EDITOR. The first line is the title,
+the second line must be blank, and the remaining text is the body.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
 			body, err := commandBody(bodyText, bodyFile)
 			if err != nil {
 				return err
+			}
+			openEditor := !cmd.Flags().Changed("title") && !cmd.Flags().Changed("body") && !cmd.Flags().Changed("body-file")
+			if !cmd.Flags().Changed("title") && !openEditor {
+				return fmt.Errorf("provide --title when --body or --body-file is used")
 			}
 			repoDir, err := getwd()
 			if err != nil {
@@ -39,6 +54,19 @@ func newPRCreateCommand(service *app.Service) *cobra.Command {
 				}
 				source = &st
 			}
+			draft := titledDraft{}
+			if openEditor {
+				draft, err = editTitledDraft(ctx, "pull request", "tg-pull-request-*.md", titledDraftTemplate, cmd.InOrStdin(), cmd.OutOrStdout(), cmd.ErrOrStderr())
+				if errors.Is(err, errTitledDraftCanceled) {
+					fmt.Fprintln(cmd.ErrOrStderr(), "Pull request creation canceled.")
+					return nil
+				}
+				if err != nil {
+					return err
+				}
+				title = draft.Title
+				body = draft.Body
+			}
 			result, err := service.CreatePull(ctx, app.CreatePullInput{
 				RepoDir: repoDir,
 				Title:   title,
@@ -49,7 +77,13 @@ func newPRCreateCommand(service *app.Service) *cobra.Command {
 				Source:  source,
 			})
 			if err != nil {
+				if draft.Path != "" {
+					return fmt.Errorf("%w; draft saved to %s", err, draft.Path)
+				}
 				return err
+			}
+			if draft.Path != "" {
+				removeTitledDraft(draft.Path, "pull request", cmd.ErrOrStderr())
 			}
 			return output(cmd, result, func(created *app.PRCreateResult) {
 				fmt.Fprintf(cmd.OutOrStdout(), "Created pull request %s (%s -> %s)\n", created.URI, created.Head, created.Base)
@@ -63,6 +97,5 @@ func newPRCreateCommand(service *app.Service) *cobra.Command {
 	command.Flags().StringVarP(&head, "head", "H", "", "Source branch (default: current branch)")
 	command.Flags().StringVarP(&repository, "repo", "R", "", "Target repository as handle/repo")
 	command.Flags().StringVar(&sourceRepository, "source-repo", "", "Source repository as handle/repo (for fork-based pull requests)")
-	_ = command.MarkFlagRequired("title")
 	return command
 }

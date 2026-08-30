@@ -13,7 +13,7 @@ import (
 	"github.com/alyraffauf/tg/internal/app"
 )
 
-func TestParseIssueDraft(t *testing.T) {
+func TestParseTitledDraft(t *testing.T) {
 	tests := []struct {
 		name      string
 		document  string
@@ -21,16 +21,16 @@ func TestParseIssueDraft(t *testing.T) {
 		wantBody  string
 		wantError string
 	}{
-		{name: "title only", document: "Bug report\n", wantError: "body must not be empty"},
-		{name: "empty body", document: "Bug report\n\n", wantError: "body must not be empty"},
+		{name: "title only", document: "Bug report\n", wantTitle: "Bug report"},
+		{name: "empty body", document: "Bug report\n\n", wantTitle: "Bug report"},
 		{name: "body", document: "Bug report\n\nSteps to reproduce\n\nMore detail\n", wantTitle: "Bug report", wantBody: "Steps to reproduce\n\nMore detail"},
 		{name: "indented code body", document: "Bug report\n\n    code\n", wantTitle: "Bug report", wantBody: "    code"},
 		{name: "trailing spaces preserved", document: "Bug report\n\nDetails  \n", wantTitle: "Bug report", wantBody: "Details  "},
 		{name: "CRLF", document: "Bug report\r\n\r\nDetails\r\n", wantTitle: "Bug report", wantBody: "Details"},
-		{name: "instructions removed", document: "Bug report\n\nDetails\n" + issueDraftSentinel + "\nignored", wantTitle: "Bug report", wantBody: "Details"},
+		{name: "instructions removed", document: "Bug report\n\nDetails\n" + titledDraftSentinel + "\nignored", wantTitle: "Bug report", wantBody: "Details"},
 		{name: "other HTML comment retained", document: "Bug report\n\n<!-- keep this -->", wantTitle: "Bug report", wantBody: "<!-- keep this -->"},
-		{name: "untouched template cancels", document: issueDraftTemplate, wantError: errIssueCreationCanceled.Error()},
-		{name: "whitespace cancels", document: " \n\n\t", wantError: errIssueCreationCanceled.Error()},
+		{name: "untouched template cancels", document: titledDraftTemplate, wantError: errTitledDraftCanceled.Error()},
+		{name: "whitespace cancels", document: " \n\n\t", wantError: errTitledDraftCanceled.Error()},
 		{name: "missing second line", document: "Bug report", wantError: "title must be followed by an empty line"},
 		{name: "nonempty second line", document: "Bug report\nDetails", wantError: "second line must be empty"},
 		{name: "empty title with body", document: "\n\nDetails", wantError: "title must not be empty"},
@@ -38,18 +38,18 @@ func TestParseIssueDraft(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			title, body, err := parseIssueDraft(test.document)
+			title, body, err := parseTitledDraft(test.document)
 			if test.wantError != "" {
 				if err == nil || !strings.Contains(err.Error(), test.wantError) {
-					t.Fatalf("parseIssueDraft() error = %v, want containing %q", err, test.wantError)
+					t.Fatalf("parseTitledDraft() error = %v, want containing %q", err, test.wantError)
 				}
 				return
 			}
 			if err != nil {
-				t.Fatalf("parseIssueDraft() error = %v", err)
+				t.Fatalf("parseTitledDraft() error = %v", err)
 			}
 			if title != test.wantTitle || body != test.wantBody {
-				t.Fatalf("parseIssueDraft() = (%q, %q), want (%q, %q)", title, body, test.wantTitle, test.wantBody)
+				t.Fatalf("parseTitledDraft() = (%q, %q), want (%q, %q)", title, body, test.wantTitle, test.wantBody)
 			}
 		})
 	}
@@ -76,7 +76,7 @@ func TestEditIssueDraftLifecycle(t *testing.T) {
 		wantSaved  bool
 	}{
 		{name: "valid draft", document: "Bug report\n\nDetails\n", wantTitle: "Bug report", wantBody: "Details", wantSaved: true},
-		{name: "canceled draft", document: issueDraftTemplate, wantError: errIssueCreationCanceled.Error()},
+		{name: "canceled draft", document: issueDraftTemplate, wantError: errTitledDraftCanceled.Error()},
 		{name: "empty body", document: "Bug report\n\n", wantError: "body must not be empty", wantSaved: true},
 		{name: "malformed draft", document: "Bug report\nDetails\n", wantError: "second line must be empty", wantSaved: true},
 		{name: "failed editor", document: "Unfinished\n\nDraft\n", exitStatus: 23, wantError: "run issue editor", wantSaved: true},
@@ -91,13 +91,13 @@ func TestEditIssueDraftLifecycle(t *testing.T) {
 			draft, err := editIssueDraft(context.Background(), nil, io.Discard, io.Discard)
 			if test.wantError != "" {
 				if err == nil || !strings.Contains(err.Error(), test.wantError) {
-					t.Fatalf("editIssueDraft() error = %v, want containing %q", err, test.wantError)
+					t.Fatalf("editTitledDraft() error = %v, want containing %q", err, test.wantError)
 				}
 			} else if err != nil {
-				t.Fatalf("editIssueDraft() error = %v", err)
+				t.Fatalf("editTitledDraft() error = %v", err)
 			}
 			if draft.Title != test.wantTitle || draft.Body != test.wantBody {
-				t.Fatalf("editIssueDraft() = %+v, want title %q and body %q", draft, test.wantTitle, test.wantBody)
+				t.Fatalf("editTitledDraft() = %+v, want title %q and body %q", draft, test.wantTitle, test.wantBody)
 			}
 
 			pathBytes, err := os.ReadFile(pathLog)
@@ -208,13 +208,13 @@ func TestIssueCreateExplicitTitleOnlyRemainsValid(t *testing.T) {
 	}
 }
 
-func TestRemoveIssueDraftWarnsWhenRemovalFails(t *testing.T) {
+func TestRemoveTitledDraftWarnsWhenRemovalFails(t *testing.T) {
 	var errorOutput strings.Builder
 	path := t.TempDir()
 	if err := os.WriteFile(filepath.Join(path, "draft"), []byte("content"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	removeIssueDraft(path, &errorOutput)
+	removeTitledDraft(path, "issue", &errorOutput)
 	if !strings.Contains(errorOutput.String(), "warning: remove issue draft") {
 		t.Fatalf("warning = %q", errorOutput.String())
 	}
