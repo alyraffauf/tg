@@ -1,10 +1,15 @@
 package cli
 
 import (
+	"context"
+	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/alyraffauf/tg/internal/app"
 )
 
 func TestStringContents(t *testing.T) {
@@ -71,4 +76,178 @@ func TestStringContents(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestStringCreateOpensEditorForTerminalInput(t *testing.T) {
+	originalIsTerminalInput := isTerminalInput
+	t.Cleanup(func() { isTerminalInput = originalIsTerminalInput })
+	isTerminalInput = func(io.Reader) bool { return true }
+	pathLog := filepath.Join(t.TempDir(), "path")
+	t.Setenv("EDITOR", writeDraftEditor(t, pathLog, "package main\n", 0))
+	service := &testStringCreateService{}
+	command := newStringCreateCommand(service)
+	command.SetArgs([]string{"--filename", "main.go"})
+	command.SetIn(strings.NewReader("ignored terminal input"))
+	command.SetOut(io.Discard)
+	command.SetErr(io.Discard)
+
+	if err := command.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if service.input.Filename != "main.go" || service.input.Contents != "package main\n" {
+		t.Fatalf("CreateString() input = %+v", service.input)
+	}
+	pathBytes, err := os.ReadFile(pathLog)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(string(pathBytes)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("submitted draft still exists: %v", err)
+	}
+}
+
+func TestStringCreateReadsNonterminalInputWithoutEditor(t *testing.T) {
+	originalIsTerminalInput := isTerminalInput
+	t.Cleanup(func() { isTerminalInput = originalIsTerminalInput })
+	isTerminalInput = func(io.Reader) bool { return false }
+	t.Setenv("EDITOR", filepath.Join(t.TempDir(), "missing-editor"))
+	service := &testStringCreateService{}
+	command := newStringCreateCommand(service)
+	command.SetArgs([]string{"--filename", "stdin.md"})
+	command.SetIn(strings.NewReader("piped contents"))
+	command.SetOut(io.Discard)
+	command.SetErr(io.Discard)
+
+	if err := command.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if service.input.Contents != "piped contents" {
+		t.Fatalf("contents = %q", service.input.Contents)
+	}
+}
+
+func TestStringCreateExplicitInputsDoNotOpenEditorForTerminalInput(t *testing.T) {
+	originalIsTerminalInput := isTerminalInput
+	t.Cleanup(func() { isTerminalInput = originalIsTerminalInput })
+	isTerminalInput = func(io.Reader) bool { return true }
+	t.Setenv("EDITOR", filepath.Join(t.TempDir(), "missing-editor"))
+
+	t.Run("standard input", func(t *testing.T) {
+		service := &testStringCreateService{}
+		command := newStringCreateCommand(service)
+		command.SetArgs([]string{"-", "--filename", "stdin.md"})
+		command.SetIn(strings.NewReader("standard input contents"))
+		command.SetOut(io.Discard)
+		command.SetErr(io.Discard)
+
+		if err := command.Execute(); err != nil {
+			t.Fatalf("Execute() error = %v", err)
+		}
+		if service.input.Filename != "stdin.md" || service.input.Contents != "standard input contents" {
+			t.Fatalf("CreateString() input = %+v", service.input)
+		}
+	})
+
+	t.Run("file", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "file.md")
+		if err := os.WriteFile(path, []byte("file contents"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		service := &testStringCreateService{}
+		command := newStringCreateCommand(service)
+		command.SetArgs([]string{path})
+		command.SetIn(strings.NewReader("ignored terminal input"))
+		command.SetOut(io.Discard)
+		command.SetErr(io.Discard)
+
+		if err := command.Execute(); err != nil {
+			t.Fatalf("Execute() error = %v", err)
+		}
+		if service.input.Filename != "file.md" || service.input.Contents != "file contents" {
+			t.Fatalf("CreateString() input = %+v", service.input)
+		}
+	})
+}
+
+func TestStringCreateRetainsDraftWhenSubmissionFails(t *testing.T) {
+	originalIsTerminalInput := isTerminalInput
+	t.Cleanup(func() { isTerminalInput = originalIsTerminalInput })
+	isTerminalInput = func(io.Reader) bool { return true }
+	pathLog := filepath.Join(t.TempDir(), "path")
+	t.Setenv("EDITOR", writeDraftEditor(t, pathLog, "unsubmitted contents\n", 0))
+	service := &testStringCreateService{createError: errors.New("network unavailable")}
+	command := newStringCreateCommand(service)
+	command.SetArgs([]string{"--filename", "draft.txt"})
+	command.SetOut(io.Discard)
+	command.SetErr(io.Discard)
+
+	err := command.Execute()
+	if err == nil || !strings.Contains(err.Error(), "network unavailable; draft saved to") {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	pathBytes, readError := os.ReadFile(pathLog)
+	if readError != nil {
+		t.Fatal(readError)
+	}
+	path := string(pathBytes)
+	t.Cleanup(func() { _ = os.Remove(path) })
+	if _, statError := os.Stat(path); statError != nil {
+		t.Fatalf("saved draft %q: %v", path, statError)
+	}
+}
+
+func TestStringCreateRequiresFilenameBeforeOpeningEditor(t *testing.T) {
+	originalIsTerminalInput := isTerminalInput
+	t.Cleanup(func() { isTerminalInput = originalIsTerminalInput })
+	isTerminalInput = func(io.Reader) bool { return true }
+	t.Setenv("EDITOR", filepath.Join(t.TempDir(), "missing-editor"))
+	command := newStringCreateCommand(nil)
+	command.SetErr(io.Discard)
+
+	err := command.Execute()
+	if err == nil || err.Error() != "provide --filename when composing in an editor" {
+		t.Fatalf("Execute() error = %v", err)
+	}
+}
+
+func TestStringCreateCancelsEmptyEditorDraft(t *testing.T) {
+	originalIsTerminalInput := isTerminalInput
+	t.Cleanup(func() { isTerminalInput = originalIsTerminalInput })
+	isTerminalInput = func(io.Reader) bool { return true }
+	pathLog := filepath.Join(t.TempDir(), "path")
+	t.Setenv("EDITOR", writeDraftEditor(t, pathLog, "", 0))
+	service := &testStringCreateService{}
+	command := newStringCreateCommand(service)
+	command.SetArgs([]string{"--filename", "empty.txt"})
+	command.SetOut(io.Discard)
+	command.SetErr(io.Discard)
+
+	if err := command.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if service.calls != 0 {
+		t.Fatalf("CreateString() calls = %d, want 0", service.calls)
+	}
+	pathBytes, err := os.ReadFile(pathLog)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(string(pathBytes)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("canceled draft still exists: %v", err)
+	}
+}
+
+type testStringCreateService struct {
+	createError error
+	input       app.CreateStringInput
+	calls       int
+}
+
+func (service *testStringCreateService) CreateString(_ context.Context, input app.CreateStringInput) (*app.CreatedRecordResult, error) {
+	service.calls++
+	service.input = input
+	if service.createError != nil {
+		return nil, service.createError
+	}
+	return &app.CreatedRecordResult{URI: "at://did:plc:owner/sh.tangled.string/123"}, nil
 }
