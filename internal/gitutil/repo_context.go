@@ -128,6 +128,12 @@ func parseRepoCandidate(raw string) (*RepoContext, bool) {
 	if !hosted && u.Scheme != "ssh" && u.Scheme != "https" {
 		return nil, false
 	}
+	if u.Hostname() == "" || u.Fragment != "" || u.RawQuery != "" {
+		return nil, false
+	}
+	if u.Scheme == "https" && (u.User != nil || u.Port() != "") {
+		return nil, false
+	}
 	path := strings.Trim(strings.TrimPrefix(u.Path, "/"), "/")
 	candidate, ok := splitRepoPath(path)
 	if !ok {
