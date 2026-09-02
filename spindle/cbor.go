@@ -4,8 +4,14 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"math"
 
 	cborgen "github.com/whyrusleeping/cbor-gen"
+)
+
+const (
+	maxCBORStringBytes = 1 << 20
+	maxCBORMapEntries  = 256
 )
 
 // decodeCBORMaps decodes consecutive CBOR maps from a WebSocket binary frame.
@@ -30,6 +36,9 @@ func decodeCBORMap(r io.Reader) (map[string]any, error) {
 	}
 	if majorType != 5 {
 		return nil, fmt.Errorf("expected CBOR map, got major type %d", majorType)
+	}
+	if length > maxCBORMapEntries {
+		return nil, fmt.Errorf("CBOR map has %d entries; maximum is %d", length, maxCBORMapEntries)
 	}
 	result := make(map[string]any, length)
 	for i := uint64(0); i < length; i++ {
@@ -57,10 +66,19 @@ func decodeCBORValue(r io.Reader) (any, error) {
 	}
 	switch majorType {
 	case 0:
-		return value, nil
+		if value > math.MaxInt64 {
+			return nil, fmt.Errorf("positive integer %d overflows int64", value)
+		}
+		return int64(value), nil
 	case 1:
+		if value > math.MaxInt64 {
+			return nil, fmt.Errorf("negative integer magnitude %d overflows int64", value)
+		}
 		return -int64(value) - 1, nil
 	case 3:
+		if value > maxCBORStringBytes {
+			return nil, fmt.Errorf("CBOR string has %d bytes; maximum is %d", value, maxCBORStringBytes)
+		}
 		buf := make([]byte, value)
 		if _, err := io.ReadFull(r, buf); err != nil {
 			return nil, fmt.Errorf("read string: %w", err)
@@ -93,8 +111,6 @@ func mapInt(m map[string]any, key string) int64 {
 	switch n := m[key].(type) {
 	case int64:
 		return n
-	case int:
-		return int64(n)
 	}
 	return 0
 }

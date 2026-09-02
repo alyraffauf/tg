@@ -10,6 +10,8 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+const maxPipelineLogMessageBytes = 8 << 20
+
 // SubscribePipelineLogs streams log events from a pipeline over WebSocket.
 // The spindle closes the connection when logs are fully delivered.
 func (c *Client) SubscribePipelineLogs(ctx context.Context, pipelineID string, workflows []string, onEvent func(PipelineLogEvent) error) error {
@@ -38,6 +40,7 @@ func (c *Client) SubscribePipelineLogs(ctx context.Context, pipelineID string, w
 		return fmt.Errorf("connect pipeline log subscription: %w", err)
 	}
 	defer conn.Close()
+	conn.SetReadLimit(maxPipelineLogMessageBytes)
 
 	// Interrupt a read blocked on the connection when ctx is cancelled.
 	done := make(chan struct{})
@@ -56,10 +59,10 @@ func (c *Client) SubscribePipelineLogs(ctx context.Context, pipelineID string, w
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}
-			if websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseAbnormalClosure) {
+			if websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
 				return nil
 			}
-			return fmt.Errorf("read pipeline log: %w", err)
+			return fmt.Errorf("pipeline log stream ended before a normal close: %w", err)
 		}
 		event, err := decodeLogEvent(data)
 		if err != nil {

@@ -102,6 +102,37 @@ func TestDecodeLogEventData(t *testing.T) {
 	}
 }
 
+func TestDecodeLogEventPreservesPositiveStep(t *testing.T) {
+	header := cborMap([2][]byte{cborString("t"), cborString("#data")})
+	body := cborMap([2][]byte{cborString("step"), cborInt(42)})
+	event, err := decodeLogEvent(append(header, body...))
+	if err != nil {
+		t.Fatalf("decodeLogEvent() error = %v", err)
+	}
+	if event.Data == nil || event.Data.Step != 42 {
+		t.Fatalf("decodeLogEvent() = %+v", event)
+	}
+}
+
+func TestDecodeLogEventRejectsIntegerOverflow(t *testing.T) {
+	header := cborMap([2][]byte{cborString("t"), cborString("#data")})
+	overflow := []byte{0x1b, 0x80, 0, 0, 0, 0, 0, 0, 0}
+	body := cborMap([2][]byte{cborString("step"), overflow})
+	if _, err := decodeLogEvent(append(header, body...)); err == nil {
+		t.Fatal("decodeLogEvent() accepted an overflowing integer")
+	}
+}
+
+func TestDecodeCBORLimits(t *testing.T) {
+	if _, err := decodeCBORMap(bytes.NewReader([]byte{0xb9, 0x01, 0x01})); err == nil {
+		t.Fatal("decodeCBORMap() accepted 257 entries")
+	}
+	tooLongString := []byte{0x7a, 0x00, 0x10, 0x00, 0x01}
+	if _, err := decodeCBORValue(bytes.NewReader(tooLongString)); err == nil {
+		t.Fatal("decodeCBORValue() accepted a string over 1 MiB")
+	}
+}
+
 func TestDecodeLogEventUnknownType(t *testing.T) {
 	header := cborMap(
 		[2][]byte{cborString("t"), cborString("#unknown")},
