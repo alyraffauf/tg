@@ -22,7 +22,7 @@ func newIssueCreateCommand(service issueCreateService) *cobra.Command {
 		Short: "Create an issue on a Tangled repository",
 		Long: `Create an issue on a Tangled repository. When title and body are omitted,
 tg opens $EDITOR. The edited document's first line is the title, its second line
-must be blank, and the remaining text is the required body.`,
+must be blank, and the remaining text is an optional body.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()

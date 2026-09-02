@@ -77,7 +77,7 @@ func TestEditIssueDraftLifecycle(t *testing.T) {
 	}{
 		{name: "valid draft", document: "Bug report\n\nDetails\n", wantTitle: "Bug report", wantBody: "Details", wantSaved: true},
 		{name: "canceled draft", document: issueDraftTemplate, wantError: errTitledDraftCanceled.Error()},
-		{name: "empty body", document: "Bug report\n\n", wantError: "body must not be empty", wantSaved: true},
+		{name: "empty body", document: "Bug report\n\n", wantTitle: "Bug report", wantSaved: true},
 		{name: "malformed draft", document: "Bug report\nDetails\n", wantError: "second line must be empty", wantSaved: true},
 		{name: "failed editor", document: "Unfinished\n\nDraft\n", exitStatus: 23, wantError: "run issue editor", wantSaved: true},
 	}

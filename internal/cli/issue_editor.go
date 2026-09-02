@@ -13,7 +13,7 @@ const (
 	titledDraftTemplate = "\n\n" + titledDraftSentinel + "\n" +
 		"<!-- Enter a title above, followed by a blank line and an optional body. -->\n"
 	issueDraftTemplate = "\n\n" + titledDraftSentinel + "\n" +
-		"<!-- Enter a title above, followed by a blank line and a body. -->\n"
+		"<!-- Enter a title above, followed by a blank line and an optional body. -->\n"
 )
 
 var errTitledDraftCanceled = errors.New("title and body creation canceled")
@@ -41,14 +41,7 @@ func editTitledDraft(ctx context.Context, kind, pattern, template string, input 
 }
 
 func editIssueDraft(ctx context.Context, input io.Reader, output, errorOutput io.Writer) (titledDraft, error) {
-	draft, err := editTitledDraft(ctx, "issue", "tg-issue-*.md", issueDraftTemplate, input, output, errorOutput)
-	if err != nil {
-		return titledDraft{}, err
-	}
-	if strings.TrimSpace(draft.Body) == "" {
-		return titledDraft{}, fmt.Errorf("parse issue draft: body must not be empty; draft saved to %s", draft.Path)
-	}
-	return draft, nil
+	return editTitledDraft(ctx, "issue", "tg-issue-*.md", issueDraftTemplate, input, output, errorOutput)
 }
 
 func parseTitledDraft(document string) (string, string, error) {
