@@ -3,12 +3,15 @@ package tangledlex
 import (
 	"encoding/json"
 	"fmt"
+	"mime"
 	"net/url"
+	"strings"
 	"time"
-	"unicode/utf8"
 
 	comatproto "github.com/bluesky-social/indigo/api/atproto"
 	"github.com/bluesky-social/indigo/atproto/syntax"
+	lexutil "github.com/bluesky-social/indigo/lex/util"
+	"github.com/rivo/uniseg"
 )
 
 // ValidateRecord validates a Tangled record immediately before it is written
@@ -60,7 +63,7 @@ func validateRepo(collection string, record Repo) error {
 	if err := datetime(record.CreatedAt); err != nil {
 		return fieldError("createdAt", err)
 	}
-	if record.Description != nil && !lengthBetween(*record.Description, 1, 140) {
+	if record.Description != nil && !graphemesBetween(*record.Description, 1, 140) {
 		return fmt.Errorf("description must contain 1 to 140 characters")
 	}
 	if record.RepoDid != nil {
@@ -84,8 +87,8 @@ func validateRepo(collection string, record Repo) error {
 		return fmt.Errorf("topics must not contain more than 50 items")
 	}
 	for _, topic := range record.Topics {
-		if !lengthBetween(topic, 1, 50) {
-			return fmt.Errorf("topics must contain 1 to 50 characters per item")
+		if len([]byte(topic)) < 1 || len([]byte(topic)) > 50 {
+			return fmt.Errorf("topics must contain 1 to 50 UTF-8 bytes per item")
 		}
 	}
 	return nil
@@ -121,6 +124,9 @@ func validateFeedComment(collection string, record FeedComment) error {
 		return fmt.Errorf("body is required")
 	}
 	if err := required("body.text", record.Body.MarkupMarkdown.Text); err != nil {
+		return err
+	}
+	if err := validateMarkdownBlobs(record.Body.MarkupMarkdown.Blobs); err != nil {
 		return err
 	}
 	if record.ReplyTo != nil {
@@ -165,8 +171,8 @@ func validateIssueState(collection string, record RepoIssueState) error {
 	if err := atURI(record.Issue); err != nil {
 		return fieldError("issue", err)
 	}
-	if record.State != "sh.tangled.repo.issue.state.open" && record.State != "sh.tangled.repo.issue.state.closed" {
-		return fmt.Errorf("state must be an issue state value")
+	if err := required("state", record.State); err != nil {
+		return err
 	}
 	return datetimeField(record.CreatedAt)
 }
@@ -235,8 +241,8 @@ func validatePullStatus(collection string, record RepoPullStatus) error {
 	if err := atURI(record.Pull); err != nil {
 		return fieldError("pull", err)
 	}
-	if record.Status != "sh.tangled.repo.pull.status.open" && record.Status != "sh.tangled.repo.pull.status.closed" && record.Status != "sh.tangled.repo.pull.status.merged" {
-		return fmt.Errorf("status must be a pull status value")
+	if err := required("status", record.Status); err != nil {
+		return err
 	}
 	return datetimeField(record.CreatedAt)
 }
@@ -248,8 +254,8 @@ func validatePublicKey(collection string, record PublicKey) error {
 	if err := required("key", record.Key); err != nil {
 		return err
 	}
-	if utf8.RuneCountInString(record.Key) > 4096 {
-		return fmt.Errorf("key must not exceed 4096 characters")
+	if len([]byte(record.Key)) > 4096 {
+		return fmt.Errorf("key must not exceed 4096 UTF-8 bytes")
 	}
 	if err := required("name", record.Name); err != nil {
 		return err
@@ -261,10 +267,10 @@ func validateString(collection string, record String) error {
 	if err := validateType(collection, record.LexiconTypeID, "sh.tangled.string"); err != nil {
 		return err
 	}
-	if !lengthBetween(record.Filename, 1, 140) {
+	if !graphemesBetween(record.Filename, 1, 140) {
 		return fmt.Errorf("filename must contain 1 to 140 characters")
 	}
-	if utf8.RuneCountInString(record.Description) > 280 {
+	if uniseg.GraphemeClusterCount(record.Description) > 280 {
 		return fmt.Errorf("description must not exceed 280 characters")
 	}
 	if err := required("contents", record.Contents); err != nil {
@@ -297,9 +303,28 @@ func required(name, value string) error {
 	return nil
 }
 
-func lengthBetween(value string, minimum, maximum int) bool {
-	length := utf8.RuneCountInString(value)
+func graphemesBetween(value string, minimum, maximum int) bool {
+	length := uniseg.GraphemeClusterCount(value)
 	return length >= minimum && length <= maximum
+}
+
+func validateMarkdownBlobs(blobs []*lexutil.LexBlob) error {
+	for index, blob := range blobs {
+		if blob == nil || !blob.Ref.Defined() {
+			return fmt.Errorf("body.blobs[%d] must reference a blob", index)
+		}
+		mediaType, _, err := mime.ParseMediaType(blob.MimeType)
+		if err != nil || !strings.HasPrefix(mediaType, "image/") || len(mediaType) == len("image/") {
+			return fmt.Errorf("body.blobs[%d] must have an image MIME type", index)
+		}
+		if blob.Size < 0 {
+			return fmt.Errorf("body.blobs[%d] size must be non-negative", index)
+		}
+		if blob.Size > 1_000_000 {
+			return fmt.Errorf("body.blobs[%d] must not exceed 1000000 bytes", index)
+		}
+	}
+	return nil
 }
 
 func validateMentions(mentions []string) error {
