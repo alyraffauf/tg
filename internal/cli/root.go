@@ -79,7 +79,11 @@ func ExecuteWith(arguments []string, input io.Reader, output, errorOutput io.Wri
 		renderError(errorOutput, err)
 		return err
 	}
-	settings := loadConfig(flags, errorOutput)
+	settings, err := loadConfig(flags)
+	if err != nil {
+		renderError(errorOutput, err)
+		return err
+	}
 	service := app.NewWithStreams(settings.Appview, output, errorOutput)
 	service.SetAccount(settings.Account)
 	root := newRoot(service, settings.Knot, settings.SSHPort, settings.Protocol)

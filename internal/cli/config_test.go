@@ -1,10 +1,10 @@
 package cli
 
 import (
-	"io"
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -41,6 +41,35 @@ func TestConfigSearchDirs(t *testing.T) {
 	}
 }
 
+func TestLoadConfigRequiresExplicitFiles(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "missing.toml")
+	for name, flags := range map[string]flagSettings{
+		"flag":        {ConfigPath: missing, ConfigSet: true},
+		"environment": {},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if name == "environment" {
+				t.Setenv("TG_CONFIG", missing)
+			} else {
+				t.Setenv("TG_CONFIG", "")
+			}
+			if _, err := loadConfig(flags); err == nil || !strings.Contains(err.Error(), "read config") {
+				t.Fatalf("loadConfig() error = %v", err)
+			}
+		})
+	}
+}
+
+func TestLoadConfigRejectsMalformedFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(path, []byte("appview = ["), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := loadConfig(flagSettings{ConfigPath: path, ConfigSet: true}); err == nil {
+		t.Fatal("loadConfig() accepted malformed explicit config")
+	}
+}
+
 func TestLoadConfigKnotPrecedence(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -68,7 +97,10 @@ func TestLoadConfigKnotPrecedence(t *testing.T) {
 				}
 			}
 
-			got := loadConfig(flagSettings{}, io.Discard)
+			got, err := loadConfig(flagSettings{})
+			if err != nil {
+				t.Fatalf("loadConfig() error = %v", err)
+			}
 			if got.Knot != tt.wantKnot {
 				t.Fatalf("Knot = %q, want %q", got.Knot, tt.wantKnot)
 			}
@@ -105,7 +137,10 @@ func TestLoadConfigSSHPortPrecedence(t *testing.T) {
 				}
 			}
 
-			got := loadConfig(flagSettings{}, io.Discard)
+			got, err := loadConfig(flagSettings{})
+			if err != nil {
+				t.Fatalf("loadConfig() error = %v", err)
+			}
 			if got.SSHPort != tt.wantPort {
 				t.Fatalf("SSH port = %q, want %q", got.SSHPort, tt.wantPort)
 			}
@@ -140,7 +175,10 @@ func TestLoadConfigProtocolPrecedence(t *testing.T) {
 				}
 			}
 
-			resolved := loadConfig(flagSettings{}, io.Discard)
+			resolved, err := loadConfig(flagSettings{})
+			if err != nil {
+				t.Fatalf("loadConfig() error = %v", err)
+			}
 			if resolved.Protocol != testCase.expectedProtocol {
 				t.Fatalf("protocol = %q, want %q", resolved.Protocol, testCase.expectedProtocol)
 			}

@@ -3,7 +3,6 @@ package cli
 import (
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -36,11 +35,13 @@ type flagSettings struct {
 	AccountSet bool
 }
 
-func loadConfig(flags flagSettings, errorWriter io.Writer) settings {
+func loadConfig(flags flagSettings) (settings, error) {
 	config := viper.NewWithOptions(viper.KeyDelimiter("."))
 	configPath := flags.ConfigPath
-	if !flags.ConfigSet && configPath == "" {
+	explicitConfig := flags.ConfigSet
+	if !explicitConfig && configPath == "" {
 		configPath = os.Getenv("TG_CONFIG")
+		explicitConfig = configPath != ""
 	}
 	config.SetConfigName(configName)
 	config.SetConfigType(configType)
@@ -64,17 +65,18 @@ func loadConfig(flags flagSettings, errorWriter io.Writer) settings {
 
 	if err := config.ReadInConfig(); err != nil {
 		if _, ok := errors.AsType[viper.ConfigFileNotFoundError](err); ok {
-			// A missing config file is fine; configuration is optional.
+			if explicitConfig {
+				return settings{}, fmt.Errorf("read config %q: %w", configPath, err)
+			}
 			return applyFlagSettings(settings{
 				Appview:  config.GetString("appview"),
 				Account:  config.GetString("account"),
 				Knot:     config.GetString("knot"),
 				SSHPort:  config.GetString("ssh-port"),
 				Protocol: config.GetString("protocol"),
-			}, flags)
+			}, flags), nil
 		}
-		// Surface parse/permission errors but keep running with defaults.
-		fmt.Fprintln(errorWriter, "warning: failed to read config:", err)
+		return settings{}, fmt.Errorf("read config: %w", err)
 	}
 	resolved := settings{
 		Appview:  config.GetString("appview"),
@@ -83,7 +85,7 @@ func loadConfig(flags flagSettings, errorWriter io.Writer) settings {
 		SSHPort:  config.GetString("ssh-port"),
 		Protocol: config.GetString("protocol"),
 	}
-	return applyFlagSettings(resolved, flags)
+	return applyFlagSettings(resolved, flags), nil
 }
 
 func applyFlagSettings(resolved settings, flags flagSettings) settings {
