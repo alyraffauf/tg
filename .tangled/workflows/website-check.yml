@@ -1,0 +1,24 @@
+when:
+  - event: ["pull_request"]
+    branch: ["master"]
+
+engine: "nixery"
+
+environment:
+  CGO_ENABLED: "0"
+
+dependencies:
+  nixpkgs:
+    - nodejs
+  nixpkgs/nixpkgs-unstable:
+    - go
+    - bun
+
+steps:
+  - name: "Build tg binary"
+    command: "go build -o tg ./cmd/tg"
+  - name: "Build site"
+    command: |
+      cd website
+      bun install --frozen-lockfile
+      bun run build
