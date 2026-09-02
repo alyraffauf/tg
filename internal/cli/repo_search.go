@@ -12,12 +12,13 @@ func newRepoSearchCommand(service *app.Service) *cobra.Command {
 		Short: "Search repositories on Tangled",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			items, err := service.SearchRepos(cmd.Context(), args[0], limit)
+			result, err := service.SearchRepos(cmd.Context(), args[0], limit)
 			if err != nil {
 				return err
 			}
-			return output(cmd, items, func(items []app.RepoItem) {
-				renderTable(cmd.OutOrStdout(), []string{"NAME", "KNOT", "DESCRIPTION", "STARS"}, repoSearchRows(items), "No repositories found.")
+			return output(cmd, result, func(result *app.RepoListResult) {
+				renderTable(cmd.OutOrStdout(), []string{"NAME", "KNOT", "DESCRIPTION", "STARS"}, repoSearchRows(result.Items), "No repositories found.")
+				renderRecordWarnings(cmd.ErrOrStderr(), result.Warnings)
 			})
 		},
 	}

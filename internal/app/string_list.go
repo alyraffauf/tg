@@ -10,7 +10,7 @@ import (
 )
 
 // ListStrings lists every string owned by handle.
-func (s *Service) ListStrings(ctx context.Context, handle string) ([]StringItem, error) {
+func (s *Service) ListStrings(ctx context.Context, handle string) (*StringListResult, error) {
 	atClient, did, err := s.publicPDS(ctx, handle)
 	if err != nil {
 		return nil, err
@@ -19,23 +19,28 @@ func (s *Service) ListStrings(ctx context.Context, handle string) ([]StringItem,
 	if err != nil {
 		return nil, fmt.Errorf("list strings for %q: %w", handle, err)
 	}
-	return buildStringItems(records), nil
+	items, warnings := buildStringItems(records)
+	return &StringListResult{Items: items, Warnings: warnings}, nil
 }
 
-func buildStringItems(records []atproto.RecordItem) []StringItem {
+func buildStringItems(records []atproto.RecordItem) ([]StringItem, []RecordWarning) {
 	items := make([]StringItem, 0, len(records))
+	var warnings []RecordWarning
 	for _, rec := range records {
 		var str tangledlex.String
 		data, err := json.Marshal(rec.Value)
 		if err != nil {
+			warnings = append(warnings, RecordWarning{URI: rec.URI, Error: fmt.Sprintf("encode string record: %v", err)})
 			continue
 		}
 		if err := json.Unmarshal(data, &str); err != nil {
+			warnings = append(warnings, RecordWarning{URI: rec.URI, Error: fmt.Sprintf("decode string record: %v", err)})
 			continue
 		}
 		// Records without a filename are not strings; skip them rather
 		// than rendering a blank row.
 		if str.Filename == "" {
+			warnings = append(warnings, RecordWarning{URI: rec.URI, Error: "string record has no filename"})
 			continue
 		}
 		items = append(items, StringItem{
@@ -46,5 +51,5 @@ func buildStringItems(records []atproto.RecordItem) []StringItem {
 			CreatedAt:   str.CreatedAt,
 		})
 	}
-	return items
+	return items, warnings
 }

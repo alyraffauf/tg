@@ -23,12 +23,13 @@ If no argument is given, lists the authenticated user's repositories
 			if err != nil {
 				return err
 			}
-			items, err := service.ListRepos(ctx, handle)
+			result, err := service.ListRepos(ctx, handle)
 			if err != nil {
 				return err
 			}
-			return output(cmd, items, func(items []app.RepoItem) {
-				renderRepoList(cmd.OutOrStdout(), items)
+			return output(cmd, result, func(result *app.RepoListResult) {
+				renderRepoList(cmd.OutOrStdout(), result.Items)
+				renderRecordWarnings(cmd.ErrOrStderr(), result.Warnings)
 			})
 		},
 	}

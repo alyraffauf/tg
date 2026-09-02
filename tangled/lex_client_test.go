@@ -4,7 +4,6 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"github.com/bluesky-social/indigo/atproto/atclient"
@@ -21,8 +20,11 @@ func TestListIssuesRejectsUnexpectedRecordType(t *testing.T) {
 	defer server.Close()
 
 	client := Tangled{Client: &atclient.APIClient{Client: server.Client(), Host: server.URL}}
-	_, err := client.ListIssues(context.Background(), "did:plc:repo", ListOpts{})
-	if err == nil || !strings.Contains(err.Error(), "expected *tangledlex.RepoIssue") {
-		t.Fatalf("ListIssues error = %v, want unexpected record type", err)
+	result, err := client.ListIssues(context.Background(), "did:plc:repo", ListOpts{})
+	if err != nil {
+		t.Fatalf("ListIssues error = %v", err)
+	}
+	if len(result.Items) != 0 || len(result.Warnings) != 1 {
+		t.Fatalf("ListIssues() = %+v, want one warning and no items", result)
 	}
 }

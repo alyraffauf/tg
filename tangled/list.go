@@ -22,8 +22,14 @@ type ListItem struct {
 
 // List is a page of issues or pull requests.
 type List struct {
-	Items  []ListItem `json:"items"`
-	Cursor *string    `json:"cursor"`
+	Items    []ListItem      `json:"items"`
+	Cursor   *string         `json:"cursor"`
+	Warnings []RecordWarning `json:"warnings,omitempty"`
+}
+
+type RecordWarning struct {
+	URI   string `json:"uri,omitempty"`
+	Error string `json:"error"`
 }
 
 // ListOpts are the query parameters shared by ListIssues and ListPulls.

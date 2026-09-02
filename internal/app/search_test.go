@@ -20,7 +20,7 @@ func TestSearch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Search() error = %v", err)
 	}
-	if len(got) != 1 || got[0].URI != "at://did:plc:owner/sh.tangled.repo/example" || got[0].Stars != 73 {
+	if len(got.Items) != 1 || got.Items[0].URI != "at://did:plc:owner/sh.tangled.repo/example" || got.Items[0].Stars != 73 {
 		t.Fatalf("Search() = %+v", got)
 	}
 }

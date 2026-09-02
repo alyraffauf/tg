@@ -22,12 +22,13 @@ If no argument is given, lists the authenticated user's keys
 			if err != nil {
 				return err
 			}
-			items, err := service.ListSSHKeys(ctx, handle)
+			result, err := service.ListSSHKeys(ctx, handle)
 			if err != nil {
 				return err
 			}
-			return output(cmd, items, func(items []app.SSHKeyItem) {
-				renderSSHKeyList(cmd.OutOrStdout(), items)
+			return output(cmd, result, func(result *app.SSHKeyListResult) {
+				renderSSHKeyList(cmd.OutOrStdout(), result.Items)
+				renderRecordWarnings(cmd.ErrOrStderr(), result.Warnings)
 			})
 		},
 	}

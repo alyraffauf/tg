@@ -82,12 +82,14 @@ func (s *Service) resolveAuthor(ctx context.Context, did string) Author {
 // buildItems decodes a listing's items into display/JSON-ready items,
 // silently skipping any whose Value fails to decode. decode is decodeIssue
 // or decodePull depending on the resource being listed.
-func (s *Service) buildItems(ctx context.Context, items []tangled.ListItem, decode func(json.RawMessage) (recordView, error)) []Item {
+func (s *Service) buildItems(ctx context.Context, items []tangled.ListItem, decode func(json.RawMessage) (recordView, error)) ([]Item, []RecordWarning) {
 	result := make([]Item, 0, len(items))
+	var warnings []RecordWarning
 
 	for _, listItem := range items {
 		decoded, err := decode(listItem.Value)
 		if err != nil {
+			warnings = append(warnings, RecordWarning{URI: listItem.URI, Error: fmt.Sprintf("decode record: %v", err)})
 			continue
 		}
 
@@ -115,6 +117,14 @@ func (s *Service) buildItems(ctx context.Context, items []tangled.ListItem, deco
 		})
 	}
 
+	return result, warnings
+}
+
+func recordWarnings(warnings []tangled.RecordWarning) []RecordWarning {
+	result := make([]RecordWarning, 0, len(warnings))
+	for _, warning := range warnings {
+		result = append(result, RecordWarning{URI: warning.URI, Error: warning.Error})
+	}
 	return result
 }
 
@@ -149,18 +159,22 @@ func (s *Service) targetRecord(ctx context.Context, t Target, collection, rkey s
 	if err != nil {
 		return "", "", err
 	}
+	repoDID := stringValue(repoRecord.Value.RepoDid)
+	if repoDID == "" {
+		return "", "", fmt.Errorf("repository %q has no repository DID", t.String())
+	}
 
 	var items []tangled.ListItem
 	var recordType string
 	if collection == issueCollection {
-		issues, err := s.appview.ListIssues(ctx, stringValue(repoRecord.Value.RepoDid), tangled.ListOpts{Limit: defaultListLimit})
+		issues, err := s.appview.ListIssues(ctx, repoDID, tangled.ListOpts{Limit: defaultListLimit})
 		if err != nil {
 			return "", "", fmt.Errorf("list issues for %s: %w", t, err)
 		}
 		items = issues.Items
 		recordType = "issue"
 	} else {
-		pulls, err := s.appview.ListPulls(ctx, stringValue(repoRecord.Value.RepoDid), tangled.ListOpts{Limit: defaultListLimit})
+		pulls, err := s.appview.ListPulls(ctx, repoDID, tangled.ListOpts{Limit: defaultListLimit})
 		if err != nil {
 			return "", "", fmt.Errorf("list pull requests for %s: %w", t, err)
 		}

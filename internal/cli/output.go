@@ -2,9 +2,22 @@ package cli
 
 import (
 	"encoding/json"
+	"fmt"
+	"io"
 
+	"github.com/alyraffauf/tg/internal/app"
 	"github.com/spf13/cobra"
 )
+
+func renderRecordWarnings(writer io.Writer, warnings []app.RecordWarning) {
+	for _, warning := range warnings {
+		if warning.URI == "" {
+			fmt.Fprintf(writer, "warning: %s\n", warning.Error)
+			continue
+		}
+		fmt.Fprintf(writer, "warning: %s: %s\n", warning.URI, warning.Error)
+	}
+}
 
 // output dispatches structured data to JSON (when --json is set) or to a
 // human-readable renderer.

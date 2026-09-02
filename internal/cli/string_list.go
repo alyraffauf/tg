@@ -22,12 +22,13 @@ If no argument is given, lists the authenticated user's strings
 			if err != nil {
 				return err
 			}
-			items, err := service.ListStrings(ctx, handle)
+			result, err := service.ListStrings(ctx, handle)
 			if err != nil {
 				return err
 			}
-			return output(cmd, items, func(items []app.StringItem) {
-				renderStringList(cmd.OutOrStdout(), items)
+			return output(cmd, result, func(result *app.StringListResult) {
+				renderStringList(cmd.OutOrStdout(), result.Items)
+				renderRecordWarnings(cmd.ErrOrStderr(), result.Warnings)
 			})
 		},
 	}

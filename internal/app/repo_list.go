@@ -9,7 +9,7 @@ import (
 )
 
 // ListRepos lists every repository owned by handle.
-func (s *Service) ListRepos(ctx context.Context, handle string) ([]RepoItem, error) {
+func (s *Service) ListRepos(ctx context.Context, handle string) (*RepoListResult, error) {
 	ident, err := s.resolver.ResolveHandle(ctx, handle)
 	if err != nil {
 		return nil, fmt.Errorf("resolve handle %q: %w", handle, err)
@@ -18,7 +18,7 @@ func (s *Service) ListRepos(ctx context.Context, handle string) ([]RepoItem, err
 	if err != nil {
 		return nil, fmt.Errorf("list repos for %q: %w", handle, err)
 	}
-	return buildRepoItems(repos.Items, handle), nil
+	return &RepoListResult{Items: buildRepoItems(repos.Items, handle), Warnings: recordWarnings(repos.Warnings)}, nil
 }
 
 func buildRepoItems(items []tangled.Repo, author string) []RepoItem {

@@ -25,12 +25,13 @@ If no argument is given, the command detects the repository from the
 			if err != nil {
 				return err
 			}
-			items, err := service.ListPulls(ctx, target, options)
+			result, err := service.ListPulls(ctx, target, options)
 			if err != nil {
 				return err
 			}
-			return output(cmd, items, func(items []app.Item) {
-				renderList(cmd.OutOrStdout(), items, "No pull requests found.")
+			return output(cmd, result, func(result *app.ItemListResult) {
+				renderList(cmd.OutOrStdout(), result.Items, "No pull requests found.")
+				renderRecordWarnings(cmd.ErrOrStderr(), result.Warnings)
 			})
 		},
 	}

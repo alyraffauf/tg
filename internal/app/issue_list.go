@@ -17,7 +17,7 @@ type ListOptions struct {
 }
 
 // ListIssues lists issues in the target repository.
-func (s *Service) ListIssues(ctx context.Context, t Target, options ListOptions) ([]Item, error) {
+func (s *Service) ListIssues(ctx context.Context, t Target, options ListOptions) (*ItemListResult, error) {
 	repoDid, err := s.repoDID(ctx, t)
 	if err != nil {
 		return nil, err
@@ -30,7 +30,9 @@ func (s *Service) ListIssues(ctx context.Context, t Target, options ListOptions)
 	if err != nil {
 		return nil, fmt.Errorf("list issues for %q: %w", t.Repo, err)
 	}
-	return s.buildItems(ctx, issues.Items, decodeIssue), nil
+	items, warnings := s.buildItems(ctx, issues.Items, decodeIssue)
+	warnings = append(recordWarnings(issues.Warnings), warnings...)
+	return &ItemListResult{Items: items, Warnings: warnings}, nil
 }
 
 func (s *Service) issueListOptions(ctx context.Context, options ListOptions) (tangled.ListOpts, error) {

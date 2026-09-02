@@ -111,11 +111,14 @@ func TestBuildStringItems(t *testing.T) {
 		},
 	}
 
-	items := buildStringItems(records)
+	items, warnings := buildStringItems(records)
 
 	// Records without a filename are not strings and are skipped.
 	if len(items) != 1 {
 		t.Fatalf("buildStringItems() returned %d items, want 1", len(items))
+	}
+	if len(warnings) != 1 {
+		t.Fatalf("buildStringItems() warnings = %v, want one", warnings)
 	}
 
 	first := items[0]
