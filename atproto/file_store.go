@@ -46,6 +46,9 @@ func newInsecureFileStore() (*insecureFileStore, error) {
 	if err := os.MkdirAll(dir, credentialsDirectoryMode); err != nil {
 		return nil, fmt.Errorf("create credentials directory: %w", err)
 	}
+	if err := os.Chmod(dir, credentialsDirectoryMode); err != nil {
+		return nil, fmt.Errorf("secure credentials directory: %w", err)
+	}
 	return &insecureFileStore{path: filepath.Join(dir, credentialsFileName)}, nil
 }
 
@@ -80,7 +83,7 @@ func (s *insecureFileStore) load() (*credentialRecord, error) {
 	return &record, nil
 }
 
-// save writes the record to disk with restrictive permissions, replacing any existing entry.
+// save writes the record atomically with restrictive permissions.
 func (s *insecureFileStore) save(record credentialRecord) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -88,8 +91,42 @@ func (s *insecureFileStore) save(record credentialRecord) error {
 	if err != nil {
 		return fmt.Errorf("marshal credentials: %w", err)
 	}
-	if err := os.WriteFile(s.path, data, credentialsFileMode); err != nil {
-		return fmt.Errorf("write credentials file: %w", err)
+	directory := filepath.Dir(s.path)
+	temporary, err := os.CreateTemp(directory, ".credentials-*")
+	if err != nil {
+		return fmt.Errorf("create temporary credentials file: %w", err)
+	}
+	temporaryPath := temporary.Name()
+	committed := false
+	defer func() {
+		_ = temporary.Close()
+		if !committed {
+			_ = os.Remove(temporaryPath)
+		}
+	}()
+	if err := temporary.Chmod(credentialsFileMode); err != nil {
+		return fmt.Errorf("secure temporary credentials file: %w", err)
+	}
+	if _, err := temporary.Write(data); err != nil {
+		return fmt.Errorf("write temporary credentials file: %w", err)
+	}
+	if err := temporary.Sync(); err != nil {
+		return fmt.Errorf("sync temporary credentials file: %w", err)
+	}
+	if err := temporary.Close(); err != nil {
+		return fmt.Errorf("close temporary credentials file: %w", err)
+	}
+	if err := os.Rename(temporaryPath, s.path); err != nil {
+		return fmt.Errorf("replace credentials file: %w", err)
+	}
+	committed = true
+	directoryFile, err := os.Open(directory)
+	if err != nil {
+		return fmt.Errorf("open credentials directory for sync: %w", err)
+	}
+	defer directoryFile.Close()
+	if err := directoryFile.Sync(); err != nil {
+		return fmt.Errorf("sync credentials directory: %w", err)
 	}
 	return nil
 }

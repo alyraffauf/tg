@@ -166,7 +166,7 @@ func openBrowser(url string) error {
 	default:
 		if isWSL() {
 			cmd = "powershell.exe"
-			args = []string{"-NoProfile", "-Command", fmt.Sprintf("Start-Process '%s'", url)}
+			args = []string{"-NoProfile", "-Command", "Start-Process -FilePath $args[0]", url}
 		} else {
 			cmd = "xdg-open"
 			args = []string{url}

@@ -92,6 +92,26 @@ func TestFileStore_FilePermissions(t *testing.T) {
 	}
 }
 
+func TestFileStore_TightensExistingDirectoryPermissions(t *testing.T) {
+	dataHome := t.TempDir()
+	directory := filepath.Join(dataHome, "tg")
+	if err := os.Mkdir(directory, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("XDG_DATA_HOME", dataHome)
+	store, err := newInsecureFileStore()
+	if err != nil {
+		t.Fatalf("newInsecureFileStore() error = %v", err)
+	}
+	info, err := os.Stat(filepath.Dir(store.path))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o700 {
+		t.Fatalf("credentials directory mode = %o", info.Mode().Perm())
+	}
+}
+
 func TestFileStore_OverwritesPreviousEntry(t *testing.T) {
 	store := newTestInsecureFileStore(t)
 	first := mustDID(t, "did:plc:111111111111111111111111")
