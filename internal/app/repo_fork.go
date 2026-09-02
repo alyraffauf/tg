@@ -9,6 +9,7 @@ import (
 	"github.com/alyraffauf/tg/atproto"
 	"github.com/alyraffauf/tg/internal/tangledlex"
 	"github.com/alyraffauf/tg/knot"
+	"github.com/bluesky-social/indigo/atproto/syntax"
 )
 
 func (s *Service) ForkRepo(ctx context.Context, source Target, name string) (*RepoForkResult, error) {
@@ -18,6 +19,9 @@ func (s *Service) ForkRepo(ctx context.Context, source Target, name string) (*Re
 // ForkRepoOnKnot creates a fork on knotHost. When knotHost is empty, it uses
 // the source repository's Knot for backwards-compatible same-Knot forks.
 func (s *Service) ForkRepoOnKnot(ctx context.Context, source Target, name, knotHost string) (*RepoForkResult, error) {
+	if _, err := syntax.ParseRecordKey(name); err != nil {
+		return nil, fmt.Errorf("invalid repository name %q: %w", name, err)
+	}
 	atClient, ownerDID, err := s.authenticatedPDS(ctx)
 	if err != nil {
 		return nil, err

@@ -43,6 +43,9 @@ type CreateRepoInput struct {
 
 // CreateRepo provisions a repository and performs requested local Git setup.
 func (s *Service) CreateRepo(ctx context.Context, in CreateRepoInput) (*RepoCreateResult, error) {
+	if _, err := syntax.ParseRecordKey(in.Name); err != nil {
+		return nil, fmt.Errorf("invalid repository name %q: %w", in.Name, err)
+	}
 	if in.Clone {
 		cloneProtocol, err := validateCloneProtocol(in.CloneProtocol)
 		if err != nil {
@@ -141,12 +144,24 @@ func (s *Service) provisionRepo(ctx context.Context, in provisionRepoInput) (*pr
 		Record:     record,
 	})
 	if err != nil {
-		return nil, err
+		cleanupErr := s.deleteProvisionedRepo(ctx, atClient, knotHost, did, in.Name)
+		if cleanupErr != nil {
+			return nil, fmt.Errorf("write repository record: %w; delete orphaned Knot repository: %v", err, cleanupErr)
+		}
+		return nil, fmt.Errorf("write repository record: %w", err)
 	}
 	return &provisionedRepo{
 		URI: uri, RepoDID: repoDID, Handle: s.ownerHandle(ctx, did),
 		KnotHost: knotHost, Warnings: warnings,
 	}, nil
+}
+
+func (s *Service) deleteProvisionedRepo(ctx context.Context, atClient pdsClient, knotHost, did, name string) error {
+	token, err := atClient.GetServiceAuth(ctx, "did:web:"+knotHost, "sh.tangled.repo.delete")
+	if err != nil {
+		return fmt.Errorf("get Knot delete authorization: %w", err)
+	}
+	return s.knot.New(knotHost, token).DeleteRepo(ctx, knot.DeleteRepoInput{DID: did, Name: name, Rkey: name})
 }
 
 func (s *Service) selectCreationKnot(ctx context.Context, atClient pdsClient, did, configured string) (string, []string, error) {

@@ -169,9 +169,12 @@ func TestMergePullReportsStatusWriteFailureAfterMerge(t *testing.T) {
 		}}},
 	}
 
-	_, err := service.MergePull(context.Background(), Target{Handle: "owner.test", Repo: "example"}, "pr-1")
-	if err == nil || !strings.Contains(err.Error(), "record merged pull request status") {
+	result, err := service.MergePull(context.Background(), Target{Handle: "owner.test", Repo: "example"}, "pr-1")
+	if err != nil {
 		t.Fatalf("MergePull() error = %v", err)
+	}
+	if !result.Merged || result.StatusRecorded || len(result.Warnings) != 1 {
+		t.Fatalf("MergePull() result = %+v", result)
 	}
 	if knotClient.mergeCalls != 1 {
 		t.Fatalf("MergePull() calls = %d, want 1", knotClient.mergeCalls)
@@ -318,6 +321,7 @@ type testPDS struct {
 	puts                      []atproto.PutRecordInput
 	deletes                   []atproto.DeleteRecordInput
 	record                    *atproto.GetRecordOutput
+	getErr                    error
 	records                   []atproto.RecordItem
 	putErr                    error
 	uploadBlob                *atproto.Blob
@@ -329,6 +333,7 @@ type testPDS struct {
 	serviceAuthCalls          int
 	serviceAuthAudiences      []string
 	serviceAuthLexiconMethods []string
+	serviceAuthErr            error
 }
 
 func (p *testPDS) PutRecord(_ context.Context, input atproto.PutRecordInput) (string, string, error) {
@@ -361,7 +366,7 @@ func (p *testPDS) UploadBlob(context.Context, []byte, string) (*atproto.Blob, er
 
 func (p *testPDS) GetRecord(context.Context, string, string, string) (*atproto.GetRecordOutput, error) {
 	p.getCalls++
-	return p.record, nil
+	return p.record, p.getErr
 }
 
 func (p *testPDS) ListRecords(_ context.Context, _, _ string, opts atproto.ListRecordsOpts) (*atproto.ListRecordsOutput, error) {
@@ -391,7 +396,7 @@ func (p *testPDS) GetServiceAuth(_ context.Context, audience, lexiconMethod stri
 	p.serviceAuthCalls++
 	p.serviceAuthAudiences = append(p.serviceAuthAudiences, audience)
 	p.serviceAuthLexiconMethods = append(p.serviceAuthLexiconMethods, lexiconMethod)
-	return "token", nil
+	return "token", p.serviceAuthErr
 }
 
 type testGit struct {
@@ -490,6 +495,7 @@ type testKnot struct {
 	mergeCalls            int
 	mergeInput            knot.MergeInput
 	createCalls           int
+	createErr             error
 	description           *knot.RepoDescription
 	describeErr           error
 	describeDIDs          []string
@@ -497,7 +503,7 @@ type testKnot struct {
 
 func (k *testKnot) CreateRepo(context.Context, knot.CreateRepoInput) (string, error) {
 	k.createCalls++
-	return "did:plc:repo", nil
+	return "did:plc:repo", k.createErr
 }
 func (k *testKnot) DeleteRepo(context.Context, knot.DeleteRepoInput) error {
 	k.deleteCalls++

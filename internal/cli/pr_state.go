@@ -81,8 +81,11 @@ func newPRMergeCommand(service *app.Service) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return output(cmd, result, func(result *app.StateResult) {
+			return output(cmd, result, func(result *app.MergePullResult) {
 				fmt.Fprintf(cmd.OutOrStdout(), "Pull request %s merged\n", result.Rkey)
+				for _, warning := range result.Warnings {
+					fmt.Fprintf(cmd.ErrOrStderr(), "warning: %s\n", warning)
+				}
 			})
 		},
 	}

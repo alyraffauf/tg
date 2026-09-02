@@ -1,10 +1,16 @@
 package app
 
-import "context"
+import (
+	"context"
+	"fmt"
+)
 
 // SetIssueState closes or reopens an issue. state is the bare verb
 // ("open" or "closed").
 func (s *Service) SetIssueState(ctx context.Context, t Target, rkey, state string) (*StateResult, error) {
+	if state != "open" && state != "closed" {
+		return nil, fmt.Errorf("unsupported issue state %q", state)
+	}
 	atClient, did, err := s.authenticatedPDS(ctx)
 	if err != nil {
 		return nil, err

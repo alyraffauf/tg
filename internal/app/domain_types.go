@@ -6,6 +6,33 @@ type Author struct {
 	Handle string `json:"handle"`
 }
 
+// RecordWarning describes a malformed or partially unavailable record that a
+// list operation skipped while preserving its valid results.
+type RecordWarning struct {
+	URI   string `json:"uri,omitempty"`
+	Error string `json:"error"`
+}
+
+type ItemListResult struct {
+	Items    []Item          `json:"items"`
+	Warnings []RecordWarning `json:"warnings,omitempty"`
+}
+
+type RepoListResult struct {
+	Items    []RepoItem      `json:"items"`
+	Warnings []RecordWarning `json:"warnings,omitempty"`
+}
+
+type StringListResult struct {
+	Items    []StringItem    `json:"items"`
+	Warnings []RecordWarning `json:"warnings,omitempty"`
+}
+
+type SSHKeyListResult struct {
+	Items    []SSHKeyItem    `json:"items"`
+	Warnings []RecordWarning `json:"warnings,omitempty"`
+}
+
 // Item is a listing entry for an issue or a pull request. SourceBranch and
 // TargetBranch are only populated (and only emitted as JSON) for pulls.
 type Item struct {
@@ -128,10 +155,20 @@ type DeletedRecordResult struct {
 	Rkey string `json:"rkey"`
 }
 
-// StateResult is returned by issue/PR state changes (close, reopen, merge).
+// StateResult is returned by issue/PR state changes (close and reopen).
 type StateResult struct {
 	Rkey  string `json:"rkey"`
 	State string `json:"state"`
+}
+
+// MergePullResult reports the two durable effects of merging a pull request.
+// A merge cannot be undone when recording its ATProto status fails, so that
+// failure is returned as a warning.
+type MergePullResult struct {
+	Rkey           string   `json:"rkey"`
+	Merged         bool     `json:"merged"`
+	StatusRecorded bool     `json:"statusRecorded"`
+	Warnings       []string `json:"warnings,omitempty"`
 }
 
 // RepoCreateResult is returned by repository creation.

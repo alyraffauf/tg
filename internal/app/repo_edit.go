@@ -34,13 +34,13 @@ func (s *Service) EditRepo(ctx context.Context, t Target, in EditRepoInput) (*Re
 			return nil, err
 		}
 		if in.Description != nil {
-			record["description"] = *in.Description
+			setOrDelete(record, "description", *in.Description)
 		}
 		if in.Website != nil {
-			record["website"] = *in.Website
+			setOrDelete(record, "website", *in.Website)
 		}
 		if in.Spindle != nil {
-			record["spindle"] = *in.Spindle
+			setOrDelete(record, "spindle", *in.Spindle)
 		}
 		if len(in.AddLabels) > 0 || len(in.RemoveLabels) > 0 {
 			labels := labelsFromRecord(record["labels"])
@@ -61,6 +61,14 @@ func (s *Service) EditRepo(ctx context.Context, t Target, in EditRepoInput) (*Re
 		result.Description = *in.Description
 	}
 	return result, nil
+}
+
+func setOrDelete(record map[string]any, field, value string) {
+	if value == "" {
+		delete(record, field)
+		return
+	}
+	record[field] = value
 }
 
 func repoRecordMap(value any) (map[string]any, error) {

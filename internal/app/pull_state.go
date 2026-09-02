@@ -1,10 +1,16 @@
 package app
 
-import "context"
+import (
+	"context"
+	"fmt"
+)
 
 // SetPullState closes or reopens a pull request. status is the bare verb
 // ("open" or "closed").
 func (s *Service) SetPullState(ctx context.Context, t Target, rkey, status string) (*StateResult, error) {
+	if status != "open" && status != "closed" {
+		return nil, fmt.Errorf("unsupported pull request status %q", status)
+	}
 	atClient, did, err := s.authenticatedPDS(ctx)
 	if err != nil {
 		return nil, err

@@ -3,11 +3,14 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net/http"
 
 	"github.com/alyraffauf/tg/atproto"
 	"github.com/alyraffauf/tg/internal/tangledlex"
 	"github.com/alyraffauf/tg/knot"
+	"github.com/bluesky-social/indigo/atproto/atclient"
 )
 
 func (s *Service) DeleteRepo(ctx context.Context, t Target) (*RepoDeleteResult, error) {
@@ -24,6 +27,9 @@ func (s *Service) DeleteRepo(ctx context.Context, t Target) (*RepoDeleteResult, 
 	}
 	rkey := extractRKey(repo.URI)
 	existingRecord, getErr := atClient.GetRecord(ctx, did, repoCollection, rkey)
+	if getErr != nil && !isRecordNotFound(getErr) {
+		return nil, fmt.Errorf("fetch repository record before deletion: %w", getErr)
+	}
 	var recordToRestore tangledlex.Repo
 	if getErr == nil {
 		data, err := json.Marshal(existingRecord.Value)
@@ -37,9 +43,6 @@ func (s *Service) DeleteRepo(ctx context.Context, t Target) (*RepoDeleteResult, 
 			return nil, fmt.Errorf("validate repository record for restore: %w", err)
 		}
 	}
-	// getErr is non-fatal: the record may already be deleted. Only call
-	// DeleteRecord if it still exists.
-
 	token, err := atClient.GetServiceAuth(ctx, "did:web:"+repo.Value.Knot, "sh.tangled.repo.delete")
 	if err != nil {
 		return nil, fmt.Errorf("get knot authorization: %w", err)
@@ -68,4 +71,9 @@ func (s *Service) DeleteRepo(ctx context.Context, t Target) (*RepoDeleteResult, 
 		return nil, err
 	}
 	return &RepoDeleteResult{URI: repo.URI}, nil
+}
+
+func isRecordNotFound(err error) bool {
+	var apiError *atclient.APIError
+	return errors.As(err, &apiError) && apiError.StatusCode == http.StatusNotFound && apiError.Name == "RecordNotFound"
 }

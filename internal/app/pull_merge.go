@@ -8,7 +8,7 @@ import (
 )
 
 // MergePull applies a pull request on its knot and records the merged status.
-func (s *Service) MergePull(ctx context.Context, t Target, rkey string) (*StateResult, error) {
+func (s *Service) MergePull(ctx context.Context, t Target, rkey string) (*MergePullResult, error) {
 	atClient, did, err := s.authenticatedPDS(ctx)
 	if err != nil {
 		return nil, err
@@ -46,7 +46,10 @@ func (s *Service) MergePull(ctx context.Context, t Target, rkey string) (*StateR
 		return nil, err
 	}
 	if err := putState(ctx, atClient, did, rkey, pullCollection, pull.URI, "merged"); err != nil {
-		return nil, fmt.Errorf("record merged pull request status: %w", err)
+		return &MergePullResult{
+			Rkey: rkey, Merged: true,
+			Warnings: []string{fmt.Sprintf("could not record merged pull request status: %v", err)},
+		}, nil
 	}
-	return &StateResult{Rkey: rkey, State: "merged"}, nil
+	return &MergePullResult{Rkey: rkey, Merged: true, StatusRecorded: true}, nil
 }
