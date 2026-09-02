@@ -20,11 +20,7 @@ func (s *Service) PipelineStatus(ctx context.Context, target Target) (*PipelineS
 	if repoDID == "" {
 		return nil, fmt.Errorf("repository %q has no repository DID", target.String())
 	}
-	branchName := stringValue(repo.Value.Name)
-	if branchName == "" {
-		branchName = target.Repo
-	}
-	defaultBranch, err := s.knot.NewPublic(repo.Value.Knot).GetDefaultBranch(ctx, extractDID(repo.URI)+"/"+branchName)
+	defaultBranch, err := s.knot.NewPublic(repo.Value.Knot).GetDefaultBranch(ctx, repoDID)
 	if err != nil {
 		return nil, err
 	}
