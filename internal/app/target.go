@@ -349,7 +349,11 @@ func (s *Service) repoDID(ctx context.Context, t Target) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return stringValue(record.Value.RepoDid), nil
+	repoDID := stringValue(record.Value.RepoDid)
+	if repoDID == "" {
+		return "", fmt.Errorf("repository %q has no repository DID", t.String())
+	}
+	return repoDID, nil
 }
 
 // requireOwnedRepo resolves a target and verifies it is owned by did.

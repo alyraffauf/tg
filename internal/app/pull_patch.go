@@ -38,7 +38,7 @@ func (s *Service) PullPatch(ctx context.Context, t Target, rkey string) (*PullPa
 func (s *Service) pullPatch(ctx context.Context, repo *tangled.Repo, rkey string) (*PullPatch, error) {
 	repoDID := stringValue(repo.Value.RepoDid)
 	if repoDID == "" {
-		return nil, fmt.Errorf("repository has no repository DID")
+		return nil, fmt.Errorf("repository record %q has no repository DID", repo.URI)
 	}
 	pulls, err := s.appview.ListPulls(ctx, repoDID, tangled.ListOpts{Limit: defaultListLimit})
 	if err != nil {

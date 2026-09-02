@@ -36,7 +36,15 @@ func (s *Service) CheckoutPull(ctx context.Context, in CheckoutPullInput) (*PRCh
 			return nil, err
 		}
 	}
-	if stringValue(targetRecord.Value.RepoDid) != stringValue(localRecord.Value.RepoDid) {
+	localRepoDID := stringValue(localRecord.Value.RepoDid)
+	if localRepoDID == "" {
+		return nil, fmt.Errorf("repository %q has no repository DID", localTarget.String())
+	}
+	targetRepoDID := stringValue(targetRecord.Value.RepoDid)
+	if targetRepoDID == "" {
+		return nil, fmt.Errorf("repository %q has no repository DID", target.String())
+	}
+	if targetRepoDID != localRepoDID {
 		return nil, fmt.Errorf("pull request target %s does not match the current repository", target)
 	}
 

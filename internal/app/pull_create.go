@@ -61,6 +61,10 @@ func (s *Service) CreatePull(ctx context.Context, in CreatePullInput) (*PRCreate
 	if !atURIPrefix(target.URI) {
 		return nil, fmt.Errorf("target repository %q has no strong at:// URI", in.Target.Repo)
 	}
+	targetRepoDID := stringValue(target.Value.RepoDid)
+	if targetRepoDID == "" {
+		return nil, fmt.Errorf("target repository %q has no repository DID", in.Target.String())
+	}
 	source := target
 	if in.Source != nil {
 		source, err = s.resolveRepo(ctx, *in.Source)
@@ -69,9 +73,12 @@ func (s *Service) CreatePull(ctx context.Context, in CreatePullInput) (*PRCreate
 		}
 	}
 	if stringValue(source.Value.RepoDid) == "" {
-		return nil, fmt.Errorf("source repository has no repo DID")
+		sourceTarget := in.Target
+		if in.Source != nil {
+			sourceTarget = *in.Source
+		}
+		return nil, fmt.Errorf("source repository %q has no repository DID", sourceTarget.String())
 	}
-	targetRepoDID := stringValue(target.Value.RepoDid)
 	sourceRepoDID := stringValue(source.Value.RepoDid)
 
 	var base gitutil.PullBase
