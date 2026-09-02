@@ -7,7 +7,7 @@ import (
 	"github.com/alyraffauf/tg/spindle"
 )
 
-const maxPipelinePages = 1000
+const maxPipelinePages = 100
 
 func (s *Service) pipelineClient(ctx context.Context, target Target) (pipelineClient, string, error) {
 	spindleHost, repoDID, err := s.pipelineTarget(ctx, target)
@@ -19,6 +19,20 @@ func (s *Service) pipelineClient(ctx context.Context, target Target) (pipelineCl
 		return nil, "", fmt.Errorf("connect to pipeline spindle: %w", err)
 	}
 	return client, repoDID, nil
+}
+
+func fetchOwnedPipeline(ctx context.Context, client pipelineClient, target Target, repoDID, pipelineID string) (*spindle.Pipeline, error) {
+	pipeline, err := client.GetPipeline(ctx, pipelineID)
+	if err != nil {
+		return nil, err
+	}
+	if pipeline == nil {
+		return nil, fmt.Errorf("pipeline %q returned an empty response", pipelineID)
+	}
+	if pipeline.Repo == "" || pipeline.Repo != repoDID {
+		return nil, fmt.Errorf("pipeline %q does not belong to repository %q", pipelineID, target.String())
+	}
+	return pipeline, nil
 }
 
 func (s *Service) pipelineTarget(ctx context.Context, target Target) (string, string, error) {

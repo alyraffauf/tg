@@ -17,8 +17,11 @@ func (s *Service) CancelPipeline(ctx context.Context, target Target, pipelineID 
 	if err != nil {
 		return nil, fmt.Errorf("connect to pipeline spindle: %w", err)
 	}
-	pipeline, err := client.GetPipeline(ctx, pipelineID)
+	pipeline, err := fetchOwnedPipeline(ctx, client, target, repoDID, pipelineID)
 	if err != nil {
+		return nil, err
+	}
+	if err := validateSelectedWorkflows(pipeline.Workflows, workflows); err != nil {
 		return nil, err
 	}
 	cancellableWorkflows := selectCancellableWorkflows(pipeline.Workflows, workflows)
@@ -52,6 +55,26 @@ func (s *Service) CancelPipeline(ctx context.Context, target Target, pipelineID 
 		return nil, err
 	}
 	return &PipelineCancelResult{Pipeline: pipelineID, Workflows: cancellableWorkflows, CancellationRequested: true}, nil
+}
+
+func validateSelectedWorkflows(workflows []spindle.Workflow, selected []string) error {
+	if len(selected) == 0 {
+		return nil
+	}
+	byName := make(map[string]string, len(workflows))
+	for _, workflow := range workflows {
+		byName[workflow.Name] = workflow.Status
+	}
+	for _, name := range selected {
+		status, found := byName[name]
+		if !found {
+			return fmt.Errorf("workflow %q was not found in the pipeline", name)
+		}
+		if status != "pending" && status != "running" {
+			return fmt.Errorf("workflow %q is already finished with status %q", name, status)
+		}
+	}
+	return nil
 }
 
 func selectCancellableWorkflows(workflows []spindle.Workflow, selected []string) []string {

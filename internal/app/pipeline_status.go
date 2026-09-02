@@ -32,16 +32,37 @@ func (s *Service) PipelineStatus(ctx context.Context, target Target) (*PipelineS
 	if err != nil {
 		return nil, fmt.Errorf("connect to pipeline spindle: %w", err)
 	}
-	response, err := client.QueryPipelines(ctx, repoDID, "")
+	pipeline, err := findDefaultBranchPipeline(ctx, client, repoDID, defaultBranch.Name, defaultBranch.Hash)
 	if err != nil {
 		return nil, err
 	}
-	pipelines := pipelineItems(response.Pipelines)
-	pipeline := latestDefaultBranchPipeline(pipelines, defaultBranch.Name, defaultBranch.Hash)
 	if pipeline == nil {
 		return nil, fmt.Errorf("no pipeline found for the latest %s commit on the default branch", target.String())
 	}
 	return &PipelineStatusResult{Commit: pipeline.Commit, Pipeline: pipeline, HasFailures: pipelineHasFailures(*pipeline)}, nil
+}
+
+func findDefaultBranchPipeline(ctx context.Context, client pipelineClient, repoDID, branchName, branchHash string) (*Pipeline, error) {
+	cursor := ""
+	seenCursors := make(map[string]bool)
+	for page := 0; page < maxPipelinePages; page++ {
+		response, err := client.QueryPipelines(ctx, repoDID, cursor)
+		if err != nil {
+			return nil, err
+		}
+		if pipeline := latestDefaultBranchPipeline(pipelineItems(response.Pipelines), branchName, branchHash); pipeline != nil {
+			return pipeline, nil
+		}
+		if response.Cursor == "" {
+			return nil, nil
+		}
+		if seenCursors[response.Cursor] {
+			return nil, fmt.Errorf("pipeline pagination repeated cursor %q", response.Cursor)
+		}
+		seenCursors[response.Cursor] = true
+		cursor = response.Cursor
+	}
+	return nil, fmt.Errorf("exceeded %d pipeline pages while searching for the latest default-branch commit", maxPipelinePages)
 }
 
 func latestDefaultBranchPipeline(pipelines []Pipeline, branchName, branchHash string) *Pipeline {

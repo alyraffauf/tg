@@ -127,8 +127,61 @@ func TestPipelineStatusReturnsLatestPipeline(t *testing.T) {
 	}
 }
 
+func TestPipelineStatusFindsCommitOnLaterPage(t *testing.T) {
+	client := &testPipelineClient{responses: []*spindle.QueryPipelinesOutput{
+		{Pipelines: []spindle.Pipeline{{ID: "older", Commit: "old"}}, Cursor: "next"},
+		{Pipelines: []spindle.Pipeline{{ID: "latest", Commit: "abc"}}},
+	}}
+	service := testService(&testPDS{}, &testGit{}, &testKnot{defaultBranch: &knot.DefaultBranch{Name: "main", Hash: "abc"}})
+	service.appview = testAppview{repo: &tangled.Repo{Value: tangledlex.Repo{
+		Knot: "knot.example", Spindle: optionalString("spindle.example"), RepoDid: optionalString("did:plc:repo"),
+	}}}
+	service.spindle = testSpindleFactory{client: client}
+
+	status, err := service.PipelineStatus(context.Background(), Target{Handle: "owner.test", Repo: "example"})
+	if err != nil {
+		t.Fatalf("PipelineStatus() error = %v", err)
+	}
+	if status.Pipeline.ID != "latest" || !slices.Equal(client.cursors, []string{"", "next"}) {
+		t.Fatalf("status=%+v cursors=%q", status, client.cursors)
+	}
+}
+
+func TestListPipelinePagesRejectsRepeatedCursor(t *testing.T) {
+	client := &testPipelineClient{responses: []*spindle.QueryPipelinesOutput{{Cursor: "same"}, {Cursor: "same"}}}
+	_, err := listPipelinePages(context.Background(), client, "did:plc:repo")
+	if err == nil || err.Error() != "pipeline pagination repeated cursor \"same\"" {
+		t.Fatalf("listPipelinePages() error = %v", err)
+	}
+}
+
+func TestCancelPipelineRejectsExplicitFinishedWorkflowBeforeAuth(t *testing.T) {
+	client := &testPipelineClient{pipeline: &spindle.Pipeline{Repo: "did:plc:repo", Workflows: []spindle.Workflow{{Name: "done.yml", Status: "success"}}}}
+	pds := &testPDS{}
+	service := testService(pds, &testGit{}, &testKnot{})
+	service.appview = testAppview{repo: &tangled.Repo{Value: tangledlex.Repo{Spindle: optionalString("spindle.example"), RepoDid: optionalString("did:plc:repo")}}}
+	service.spindle = testSpindleFactory{client: client}
+
+	_, err := service.CancelPipeline(context.Background(), Target{Handle: "owner.test", Repo: "example"}, "pipeline", []string{"done.yml"})
+	if err == nil || pds.serviceAuthCalls != 0 || client.cancelCalls != 0 {
+		t.Fatalf("CancelPipeline() error=%v auth=%d cancel=%d", err, pds.serviceAuthCalls, client.cancelCalls)
+	}
+}
+
+func TestPipelineLogsRejectsForeignPipelineBeforeSubscription(t *testing.T) {
+	client := &testPipelineClient{pipeline: &spindle.Pipeline{Repo: "did:plc:foreign"}}
+	service := testService(&testPDS{}, &testGit{}, &testKnot{})
+	service.appview = testAppview{repo: &tangled.Repo{Value: tangledlex.Repo{Spindle: optionalString("spindle.example"), RepoDid: optionalString("did:plc:repo")}}}
+	service.spindle = testSpindleFactory{client: client}
+
+	err := service.PipelineLogs(context.Background(), Target{Handle: "owner.test", Repo: "example"}, "pipeline", nil, func(PipelineLogEvent) error { return nil })
+	if err == nil || client.subscribeCalls != 0 {
+		t.Fatalf("PipelineLogs() error=%v subscribe=%d", err, client.subscribeCalls)
+	}
+}
+
 func TestCancelPipelineMintsSpindleToken(t *testing.T) {
-	client := &testPipelineClient{pipeline: &spindle.Pipeline{Workflows: []spindle.Workflow{
+	client := &testPipelineClient{pipeline: &spindle.Pipeline{Repo: "did:plc:repo", Workflows: []spindle.Workflow{
 		{Name: "test.yml", Status: "pending"},
 		{Name: "done.yml", Status: "success"},
 	}}}
@@ -139,7 +192,7 @@ func TestCancelPipelineMintsSpindleToken(t *testing.T) {
 	}}}
 	service.spindle = testSpindleFactory{client: client}
 
-	result, err := service.CancelPipeline(context.Background(), Target{Handle: "owner.test", Repo: "example"}, "3mrvk5dbnep22", []string{"test.yml", "done.yml", "unknown.yml"})
+	result, err := service.CancelPipeline(context.Background(), Target{Handle: "owner.test", Repo: "example"}, "3mrvk5dbnep22", []string{"test.yml"})
 	if err != nil {
 		t.Fatalf("CancelPipeline() error = %v", err)
 	}
@@ -180,15 +233,17 @@ func TestTriggerPipelineUsesFullSHAWithoutGitResolution(t *testing.T) {
 }
 
 type testPipelineClient struct {
-	responses     []*spindle.QueryPipelinesOutput
-	cursors       []string
-	err           error
-	cancelInput   spindle.CancelPipelineInput
-	pipeline      *spindle.Pipeline
-	pipelineID    string
-	triggerInput  spindle.TriggerPipelineInput
-	triggerOutput *spindle.TriggerPipelineOutput
-	logEvents     []spindle.PipelineLogEvent
+	responses      []*spindle.QueryPipelinesOutput
+	cursors        []string
+	err            error
+	cancelInput    spindle.CancelPipelineInput
+	pipeline       *spindle.Pipeline
+	pipelineID     string
+	triggerInput   spindle.TriggerPipelineInput
+	triggerOutput  *spindle.TriggerPipelineOutput
+	logEvents      []spindle.PipelineLogEvent
+	cancelCalls    int
+	subscribeCalls int
 }
 
 func (c *testPipelineClient) QueryLatestPipeline(_ context.Context, _ string) (*spindle.QueryPipelinesOutput, error) {
@@ -201,6 +256,7 @@ func (c *testPipelineClient) GetPipeline(_ context.Context, pipelineID string) (
 }
 
 func (c *testPipelineClient) CancelPipeline(_ context.Context, input spindle.CancelPipelineInput) error {
+	c.cancelCalls++
 	c.cancelInput = input
 	return c.err
 }
@@ -233,6 +289,7 @@ func (c *testPipelineClient) QueryPipelines(_ context.Context, _ string, cursor 
 }
 
 func (c *testPipelineClient) SubscribePipelineLogs(_ context.Context, _ string, _ []string, onEvent func(spindle.PipelineLogEvent) error) error {
+	c.subscribeCalls++
 	for _, event := range c.logEvents {
 		if err := onEvent(event); err != nil {
 			return err

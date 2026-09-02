@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"image/color"
@@ -12,12 +13,18 @@ import (
 	"github.com/spf13/cobra"
 )
 
+type pipelineLogsService interface {
+	TargetFromCWD(context.Context) (app.Target, error)
+	PipelineStatus(context.Context, app.Target) (*app.PipelineStatusResult, error)
+	PipelineLogs(context.Context, app.Target, string, []string, func(app.PipelineLogEvent) error) error
+}
+
 var workflowColors = []color.Color{
 	lipgloss.Cyan, lipgloss.Magenta, lipgloss.Green,
 	lipgloss.Yellow, lipgloss.Blue, lipgloss.Red,
 }
 
-func newPipelineLogsCommand(service *app.Service) *cobra.Command {
+func newPipelineLogsCommand(service pipelineLogsService) *cobra.Command {
 	var repository string
 	var workflows []string
 

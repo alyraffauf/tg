@@ -10,13 +10,16 @@ import (
 // PipelineLogs streams log events from a pipeline. A non-empty workflows list
 // filters to the named workflows.
 func (s *Service) PipelineLogs(ctx context.Context, target Target, pipelineID string, workflows []string, onEvent func(PipelineLogEvent) error) error {
-	spindleHost, _, err := s.pipelineTarget(ctx, target)
+	spindleHost, repoDID, err := s.pipelineTarget(ctx, target)
 	if err != nil {
 		return err
 	}
 	client, err := s.spindle.New(spindleHost)
 	if err != nil {
 		return fmt.Errorf("connect to pipeline spindle: %w", err)
+	}
+	if _, err := fetchOwnedPipeline(ctx, client, target, repoDID, pipelineID); err != nil {
+		return err
 	}
 	return client.SubscribePipelineLogs(ctx, pipelineID, workflows, func(event spindle.PipelineLogEvent) error {
 		return onEvent(PipelineLogEvent{

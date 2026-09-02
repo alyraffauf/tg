@@ -17,6 +17,7 @@ func (s *Service) ListPipelines(ctx context.Context, target Target) ([]Pipeline,
 func listPipelinePages(ctx context.Context, client pipelineClient, repoDID string) ([]Pipeline, error) {
 	var pipelines []Pipeline
 	cursor := ""
+	seenCursors := make(map[string]bool)
 	for page := 0; page < maxPipelinePages; page++ {
 		response, err := client.QueryPipelines(ctx, repoDID, cursor)
 		if err != nil {
@@ -26,6 +27,10 @@ func listPipelinePages(ctx context.Context, client pipelineClient, repoDID strin
 		if response.Cursor == "" {
 			return pipelines, nil
 		}
+		if seenCursors[response.Cursor] {
+			return nil, fmt.Errorf("pipeline pagination repeated cursor %q", response.Cursor)
+		}
+		seenCursors[response.Cursor] = true
 		cursor = response.Cursor
 	}
 	return nil, fmt.Errorf("exceeded %d pipeline pages without reaching the end of the list", maxPipelinePages)
