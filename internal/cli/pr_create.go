@@ -20,13 +20,13 @@ func newPRCreateCommand(service pullCreateService) *cobra.Command {
 	command := &cobra.Command{
 		Use:   "create",
 		Short: "Create a pull request from the current branch",
-		Long: `Create a pull request by uploading a gzipped git patch and writing a
-sh.tangled.repo.pull record. By default, the current repository and branch are
-both the source and target repository, and origin's default branch is the
-target branch. Use --repo and --source-repo for a fork-based pull request.
+		Long: `Create a pull request from the current Git repository.
 
-When title and body are omitted, tg opens $EDITOR. The first line is the title,
-the second line must be blank, and the remaining text is the body.`,
+The current branch is the source branch. The origin remote and its default
+branch are the target. For a fork, set --repo, --source-repo, and --base.
+
+Without title or body flags, tg opens $EDITOR. Write the title on the first line,
+leave the second line blank, and write the body below it.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
@@ -93,9 +93,9 @@ the second line must be blank, and the remaining text is the body.`,
 	command.Flags().StringVarP(&title, "title", "t", "", "Pull request title")
 	command.Flags().StringVarP(&bodyText, "body", "b", "", "Pull request body")
 	command.Flags().StringVarP(&bodyFile, "body-file", "F", "", "Read pull request body from file")
-	command.Flags().StringVarP(&base, "base", "B", "", "Target branch or local remote-tracking branch (required for forks; default: origin's default branch)")
+	command.Flags().StringVarP(&base, "base", "B", "", "Target branch. Defaults to origin's default branch. Required for forks.")
 	command.Flags().StringVarP(&head, "head", "H", "", "Source branch (default: current branch)")
 	command.Flags().StringVarP(&repository, "repo", "R", "", "Target repository as handle/repo")
-	command.Flags().StringVar(&sourceRepository, "source-repo", "", "Source repository as handle/repo (for fork-based pull requests)")
+	command.Flags().StringVar(&sourceRepository, "source-repo", "", "Source repository as handle/repo")
 	return command
 }

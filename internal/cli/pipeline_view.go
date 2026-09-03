@@ -13,11 +13,10 @@ func newPipelineViewCommand(service *app.Service) *cobra.Command {
 
 	command := &cobra.Command{
 		Use:   "view <id>",
-		Short: "View a pipeline for a Tangled repository",
-		Long: `View a pipeline by its spindle-local ID.
+		Short: "View a pipeline",
+		Long: `View a pipeline by its ID.
 
-If --repo is not set, the repository is detected from the current directory's
-git origin remote.`,
+Without --repo, tg uses the origin remote in the current directory.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			target, err := resolveTargetFlag(cmd.Context(), repository, service)

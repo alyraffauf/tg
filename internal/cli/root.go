@@ -31,7 +31,7 @@ func NewRoot(service *app.Service) *cobra.Command {
 func newRoot(service *app.Service, defaultKnot, defaultSSHPort, defaultProtocol string) *cobra.Command {
 	rootCmd := &cobra.Command{
 		Use:           "tg",
-		Short:         "A CLI for Tangled",
+		Short:         "Use Tangled from the command line",
 		Version:       version,
 		SilenceErrors: true,
 		SilenceUsage:  true,
@@ -143,8 +143,8 @@ func flagValue(arguments []string, index int, value string, hasValue bool) strin
 }
 
 func configureRoot(rootCmd *cobra.Command) {
-	rootCmd.PersistentFlags().String("config", "", "Path to config file (default: $XDG_CONFIG_HOME/tg/config.toml)")
-	rootCmd.PersistentFlags().Bool("json", false, "Output in JSON format")
-	rootCmd.PersistentFlags().String("appview", defaultAppview, "Appview host URL (overrides config file and TG_APPVIEW)")
-	rootCmd.PersistentFlags().String("account", "", "Account handle or DID to use (overrides the active account and TG_ACCOUNT)")
+	rootCmd.PersistentFlags().String("config", "", "Config file (default: $XDG_CONFIG_HOME/tg/config.toml)")
+	rootCmd.PersistentFlags().Bool("json", false, "Print JSON output")
+	rootCmd.PersistentFlags().String("appview", defaultAppview, "Appview URL")
+	rootCmd.PersistentFlags().String("account", "", "Account handle or DID")
 }

@@ -8,6 +8,6 @@ import (
 func newPRCommand(_ *app.Service) *cobra.Command {
 	return &cobra.Command{
 		Use:   "pr",
-		Short: "Manage pull requests on a Tangled repository",
+		Short: "Work with pull requests",
 	}
 }

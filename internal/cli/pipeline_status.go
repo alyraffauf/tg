@@ -12,11 +12,10 @@ var errPipelineFailed = errors.New("pipeline failed")
 func newPipelineStatusCommand(service *app.Service) *cobra.Command {
 	return &cobra.Command{
 		Use:   "status [handle/repo]",
-		Short: "Show the latest pipeline status for a repository",
-		Long: `Show the latest pipeline status for a Tangled repository.
+		Short: "Show the default branch's latest pipeline",
+		Long: `Show the pipeline for the latest commit on a repository's default branch.
 
-If no repository argument is given, the command detects the repository from the
-"origin" remote URL of the git repository in the current directory.`,
+Without a repository, tg uses the origin remote in the current directory.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			target, err := resolveTarget(cmd.Context(), args, service)

@@ -10,7 +10,7 @@ import (
 func newRepoSetDefaultBranchCommand(service *app.Service) *cobra.Command {
 	return &cobra.Command{
 		Use:   "set-default-branch <branch> [handle/repo]",
-		Short: "Set a Tangled repository's default branch",
+		Short: "Set a repository's default branch",
 		Args:  cobra.RangeArgs(1, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()

@@ -9,12 +9,11 @@ import (
 
 func newStringViewCommand(service *app.Service) *cobra.Command {
 	return &cobra.Command{
-		Use:   "view <rkey> [handle]",
-		Short: "View a string on a Tangled account",
-		Long: `View a string by its rkey (the last segment of its at:// URI).
+		Use:   "view <record-key> [handle]",
+		Short: "View a string",
+		Long: `View a string by its record key, the last part of its at:// URI.
 
-If no handle is given, views the authenticated user's string
-(run "tg auth login" first).`,
+Without a handle, tg uses your account.`,
 		Args: cobra.RangeArgs(1, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()

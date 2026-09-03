@@ -10,11 +10,10 @@ import (
 func newStringListCommand(service *app.Service) *cobra.Command {
 	return &cobra.Command{
 		Use:   "list [handle]",
-		Short: "List strings on a Tangled account",
+		Short: "List an account's strings",
 		Long: `List strings on a Tangled account.
 
-If no argument is given, lists the authenticated user's strings
-(run "tg auth login" first).`,
+Without a handle, tg lists strings on your account.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()

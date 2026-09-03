@@ -11,7 +11,7 @@ func newRepoForkCommand(service *app.Service) *cobra.Command {
 	var knotHost string
 	command := &cobra.Command{
 		Use:   "fork <handle/repo> [name]",
-		Short: "Fork a Tangled repository",
+		Short: "Fork a repository",
 		Args:  cobra.RangeArgs(1, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
@@ -32,6 +32,6 @@ func newRepoForkCommand(service *app.Service) *cobra.Command {
 			})
 		},
 	}
-	command.Flags().StringVar(&knotHost, "knot", "", "Knot host to create the fork on (defaults to the source repository’s Knot)")
+	command.Flags().StringVar(&knotHost, "knot", "", "Knot host (default: source repository's Knot)")
 	return command
 }

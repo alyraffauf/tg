@@ -99,7 +99,7 @@ func TestRepoCreateSSHPortHelp(t *testing.T) {
 		t.Fatalf("find repo create command: %v", err)
 	}
 	flag := create.Flags().Lookup("ssh-port")
-	if flag == nil || flag.Usage != "SSH port for cloning from or pushing to an explicitly selected Knot (overrides config file and TG_SSH_PORT)" {
+	if flag == nil || flag.Usage != "SSH port for an explicitly selected Knot" {
 		t.Fatalf("ssh-port flag = %+v", flag)
 	}
 	if flag.DefValue != "2200" {
@@ -143,7 +143,7 @@ func TestRepoCreateKnotFlag(t *testing.T) {
 	if flag == nil {
 		t.Fatal("repo create has no knot flag")
 	}
-	if flag.DefValue != "configured.example" || flag.Usage != "Knot host to provision and optionally push to (overrides TG_KNOT, config, and automatic discovery)" {
+	if flag.DefValue != "configured.example" || flag.Usage != "Knot host" {
 		t.Fatalf("knot flag = %+v", flag)
 	}
 	if err := create.Flags().Set("knot", "flag.example"); err != nil {

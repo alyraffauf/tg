@@ -11,11 +11,10 @@ import (
 func newRepoListCommand(service *app.Service) *cobra.Command {
 	return &cobra.Command{
 		Use:   "list [handle]",
-		Short: "List repositories owned by a Tangled user",
-		Long: `List repositories owned by a Tangled user.
+		Short: "List an account's repositories",
+		Long: `List repositories owned by a Tangled account.
 
-If no argument is given, lists the authenticated user's repositories
-(run "tg auth login" first).`,
+Without a handle, tg lists repositories owned by your account.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()

@@ -12,9 +12,9 @@ func newPRCheckoutCommand(service *app.Service) *cobra.Command {
 	var force bool
 
 	command := &cobra.Command{
-		Use:   "checkout <rkey>",
+		Use:   "checkout <record-key>",
 		Short: "Check out a pull request in Git",
-		Long:  "Check out the latest pull request round on the current remote target branch.",
+		Long:  "Apply the latest pull request round to a local branch.",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
@@ -47,7 +47,7 @@ func newPRCheckoutCommand(service *app.Service) *cobra.Command {
 		},
 	}
 	command.Flags().StringVarP(&repository, "repo", "R", "", "Target repository as handle/repo")
-	command.Flags().StringVarP(&branch, "branch", "b", "", "Local branch name (default: pr-<rkey>)")
+	command.Flags().StringVarP(&branch, "branch", "b", "", "Local branch name (default: pr-<record-key>)")
 	command.Flags().BoolVarP(&force, "force", "f", false, "Reset an existing checkout branch")
 	return command
 }

@@ -8,6 +8,6 @@ import (
 func newPipelineCommand(_ *app.Service) *cobra.Command {
 	return &cobra.Command{
 		Use:   "pipeline",
-		Short: "Inspect Tangled CI pipelines",
+		Short: "Inspect and manage CI pipelines",
 	}
 }

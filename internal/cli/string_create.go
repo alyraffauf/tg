@@ -33,14 +33,14 @@ func newStringCreateCommand(service stringCreateService) *cobra.Command {
 
 	command := &cobra.Command{
 		Use:   "create [<file>]",
-		Short: "Create a string on your Tangled account",
-		Long: `Create a string on your Tangled account.
+		Short: "Create a string",
+		Long: `Create a string from a file, standard input, or $EDITOR.
 
-Contents are read from the given file. With no file, tg opens $EDITOR when
-standard input is a terminal and otherwise reads standard input. The file
-"-" always reads standard input. --filename is required when no file is
-given. Contents must be valid UTF-8, at most 100 MiB.
-Requires authentication (run "tg auth login" first).`,
+Pass a file to read it. Pass "-" to read standard input. Without a file, tg
+opens $EDITOR when run in a terminal and otherwise reads standard input.
+
+When reading from standard input or $EDITOR, set --filename. Contents must be
+valid UTF-8 and no larger than 100 MiB. Run "tg auth login" first.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
@@ -91,8 +91,8 @@ Requires authentication (run "tg auth login" first).`,
 			})
 		},
 	}
-	command.Flags().StringVarP(&description, "description", "d", "", "Description of the string")
-	command.Flags().StringVarP(&filenameFlag, "filename", "f", "", "Filename for the string (defaults to the file's basename)")
+	command.Flags().StringVarP(&description, "description", "d", "", "String description")
+	command.Flags().StringVarP(&filenameFlag, "filename", "f", "", "Filename (default: source file's name)")
 	return command
 }
 

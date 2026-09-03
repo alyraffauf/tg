@@ -10,7 +10,7 @@ import (
 func newAuthListCommand(service *app.Service) *cobra.Command {
 	return &cobra.Command{
 		Use:   "list",
-		Short: "List authenticated accounts",
+		Short: "List logged-in accounts",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			results, err := service.AuthAccounts(cmd.Context())

@@ -8,6 +8,6 @@ import (
 func newAuthCommand(_ *app.Service) *cobra.Command {
 	return &cobra.Command{
 		Use:   "auth",
-		Short: "Manage authentication",
+		Short: "Log in and manage accounts",
 	}
 }

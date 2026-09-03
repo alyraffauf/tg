@@ -9,12 +9,11 @@ func newIssueViewCommand(service *app.Service) *cobra.Command {
 	var repository string
 
 	command := &cobra.Command{
-		Use:   "view <rkey>",
-		Short: "View an issue for a Tangled repository",
-		Long: `View an issue by its rkey (the last segment of its at:// URI).
+		Use:   "view <record-key>",
+		Short: "View an issue",
+		Long: `View an issue by its record key, the last part of its at:// URI.
 
-If --repo is not set, the repository is detected from the current
-directory's git origin remote.`,
+Without --repo, tg uses the origin remote in the current directory.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()

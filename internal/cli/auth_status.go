@@ -12,7 +12,7 @@ import (
 func newAuthStatusCommand(service *app.Service) *cobra.Command {
 	return &cobra.Command{
 		Use:   "status",
-		Short: "Show authentication status",
+		Short: "Show the active account",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			result, err := service.AuthStatus(cmd.Context())
 			if err != nil {

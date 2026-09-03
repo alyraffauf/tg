@@ -13,11 +13,10 @@ import (
 func newPipelineListCommand(service *app.Service) *cobra.Command {
 	return &cobra.Command{
 		Use:   "list [handle/repo]",
-		Short: "List pipelines for a Tangled repository",
-		Long: `List pipelines for a Tangled repository.
+		Short: "List pipelines",
+		Long: `List pipelines for a repository.
 
-If no argument is given, the command detects the repository from the
-"origin" remote URL of the git repository in the current directory.`,
+Without a repository, tg uses the origin remote in the current directory.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			target, err := resolveTarget(cmd.Context(), args, service)

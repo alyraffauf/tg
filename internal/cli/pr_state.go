@@ -11,7 +11,7 @@ func newPRUpdateCommand(service *app.Service) *cobra.Command {
 	var base string
 
 	command := &cobra.Command{
-		Use:   "update <rkey>",
+		Use:   "update <record-key>",
 		Short: "Submit a new round for a pull request",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -26,7 +26,7 @@ func newPRUpdateCommand(service *app.Service) *cobra.Command {
 			})
 		},
 	}
-	command.Flags().StringVarP(&base, "base", "B", "", "Target branch or local remote-tracking branch (required for forks)")
+	command.Flags().StringVarP(&base, "base", "B", "", "Target branch or local remote-tracking branch. Required for forks.")
 	return command
 }
 
@@ -42,7 +42,7 @@ func newPREditCommand(service *app.Service) *cobra.Command {
 	var titleText, bodyText string
 
 	command := &cobra.Command{
-		Use:   "edit <rkey>",
+		Use:   "edit <record-key>",
 		Short: "Edit a pull request",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -68,7 +68,7 @@ func newPRMergeCommand(service *app.Service) *cobra.Command {
 	var repository string
 
 	command := &cobra.Command{
-		Use:   "merge <rkey>",
+		Use:   "merge <record-key>",
 		Short: "Merge a pull request",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -97,7 +97,7 @@ func newPRStateCommand(service *app.Service, use, status string) *cobra.Command 
 	var repository string
 
 	command := &cobra.Command{
-		Use:   use + " <rkey>",
+		Use:   use + " <record-key>",
 		Short: use + " a pull request",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {

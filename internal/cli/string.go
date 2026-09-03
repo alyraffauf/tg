@@ -8,6 +8,6 @@ import (
 func newStringCommand(_ *app.Service) *cobra.Command {
 	return &cobra.Command{
 		Use:   "string",
-		Short: "Manage strings on Tangled",
+		Short: "Manage strings",
 	}
 }

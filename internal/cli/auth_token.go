@@ -10,7 +10,7 @@ import (
 func newAuthTokenCommand(service *app.Service) *cobra.Command {
 	return &cobra.Command{
 		Use:   "token",
-		Short: "Print the current access token",
+		Short: "Print the active account's access token",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			token, err := service.AccessToken(cmd.Context())

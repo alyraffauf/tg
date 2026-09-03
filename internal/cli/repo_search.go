@@ -9,7 +9,7 @@ func newRepoSearchCommand(service *app.Service) *cobra.Command {
 	var limit int64
 	command := &cobra.Command{
 		Use:   "search <query>",
-		Short: "Search repositories on Tangled",
+		Short: "Search repositories",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			result, err := service.SearchRepos(cmd.Context(), args[0], limit)

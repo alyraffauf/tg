@@ -9,11 +9,10 @@ func newPRListCommand(service *app.Service) *cobra.Command {
 	var flags listFlags
 	command := &cobra.Command{
 		Use:   "list [handle/repo]",
-		Short: "List pull requests for a Tangled repository",
-		Long: `List pull requests for a Tangled repository.
+		Short: "List pull requests",
+		Long: `List pull requests for a repository.
 
-If no argument is given, the command detects the repository from the
-"origin" remote URL of the git repository in the current directory.`,
+Without a repository, tg uses the origin remote in the current directory.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			options, err := flags.options(cmd)
@@ -35,6 +34,6 @@ If no argument is given, the command detects the repository from the
 			})
 		},
 	}
-	flags.add(command)
+	flags.add(command, "open, closed, or merged")
 	return command
 }

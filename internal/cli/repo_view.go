@@ -10,8 +10,8 @@ import (
 func newRepoViewCommand(service *app.Service) *cobra.Command {
 	command := &cobra.Command{
 		Use:   "view <handle/repo>",
-		Short: "View a Tangled repository",
-		Long:  `View details for a Tangled repository, including the latest default-branch pipeline status when available.`,
+		Short: "View a repository",
+		Long:  `View a repository and its latest pipeline status, when available.`,
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()

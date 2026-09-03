@@ -9,8 +9,8 @@ import (
 
 func newStringDeleteCommand(service *app.Service) *cobra.Command {
 	return &cobra.Command{
-		Use:   "delete <rkey>",
-		Short: "Delete a string from your Tangled account",
+		Use:   "delete <record-key>",
+		Short: "Delete a string",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()

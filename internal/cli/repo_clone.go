@@ -11,15 +11,14 @@ import (
 func newRepoCloneCommand(service *app.Service, defaultProtocol string) *cobra.Command {
 	return &cobra.Command{
 		Use:   "clone <repo | handle/repo | repo-did> [directory]",
-		Short: "Clone a Tangled repository",
+		Short: "Clone a repository",
 		Long: `Clone a Tangled repository into a local directory.
 
-The default destination is the repository name. If only a repository name is
-given, the authenticated user's handle is used. If a record supplies a name
-that is unsafe as a default directory, provide the directory argument.
+The destination defaults to the repository name. Pass a directory to choose a
+different destination.
 
-Run "tg auth login" first when using the repository-only form. A repository DID
-does not require a tg login. The clone's origin remote uses the DID.`,
+When you pass only a repository name, tg uses your account as the owner. This
+form requires login. A handle/repo or repository DID does not.`,
 		Args: cobra.RangeArgs(1, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()

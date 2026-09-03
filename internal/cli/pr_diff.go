@@ -11,7 +11,7 @@ func newPRDiffCommand(service *app.Service) *cobra.Command {
 	var repository string
 
 	command := &cobra.Command{
-		Use:   "diff <rkey>",
+		Use:   "diff <record-key>",
 		Short: "Print the latest patch for a pull request",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {

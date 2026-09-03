@@ -8,6 +8,6 @@ import (
 func newRepoCommand(_ *app.Service) *cobra.Command {
 	return &cobra.Command{
 		Use:   "repo",
-		Short: "Manage repositories on Tangled",
+		Short: "Work with repositories",
 	}
 }

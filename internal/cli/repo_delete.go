@@ -12,7 +12,7 @@ func newRepoDeleteCommand(service *app.Service) *cobra.Command {
 
 	command := &cobra.Command{
 		Use:   "delete [handle/repo]",
-		Short: "Delete a Tangled repository",
+		Short: "Delete a repository",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if !confirm {

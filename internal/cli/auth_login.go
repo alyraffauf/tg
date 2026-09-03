@@ -21,8 +21,8 @@ func newAuthLoginCommand(service *app.Service) *cobra.Command {
 
 	command := &cobra.Command{
 		Use:   "login <handle> [app-password]",
-		Short: "Log in to atproto via OAuth or an app password",
-		Long:  `Log in with OAuth, or use an app password as the second argument for headless login.`,
+		Short: "Log in with OAuth or an app password",
+		Long:  `Log in with OAuth. For login without a browser, pass an app password.`,
 		Args:  cobra.RangeArgs(1, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			identifier := args[0]
@@ -83,7 +83,7 @@ func newAuthLoginCommand(service *app.Service) *cobra.Command {
 		},
 	}
 	command.Flags().BoolVar(&passwordStdin, "password-stdin", false, "Read the app password from standard input")
-	command.Flags().BoolVar(&useInsecureFileStore, "insecure", false, "Store credentials in a file (~/.local/share/tg/credentials.json) instead of the system keyring. Requires an app password.")
+	command.Flags().BoolVar(&useInsecureFileStore, "insecure", false, "Store credentials in ~/.local/share/tg/credentials.json instead of the system keyring. Requires an app password.")
 	return command
 }
 

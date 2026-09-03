@@ -12,7 +12,7 @@ func newAuthLogoutCommand(service *app.Service) *cobra.Command {
 
 	command := &cobra.Command{
 		Use:   "logout",
-		Short: "Log out of your AT Protocol account",
+		Short: "Log out of an account",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			result, err := service.Logout(cmd.Context(), logoutAll)

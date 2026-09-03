@@ -8,6 +8,6 @@ import (
 func newSSHKeyCommand(_ *app.Service) *cobra.Command {
 	return &cobra.Command{
 		Use:   "ssh-key",
-		Short: "Manage SSH keys on Tangled",
+		Short: "Manage SSH keys",
 	}
 }

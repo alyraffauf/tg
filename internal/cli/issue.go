@@ -8,6 +8,6 @@ import (
 func newIssueCommand(_ *app.Service) *cobra.Command {
 	return &cobra.Command{
 		Use:   "issue",
-		Short: "Manage issues on a Tangled repository",
+		Short: "Work with issues",
 	}
 }

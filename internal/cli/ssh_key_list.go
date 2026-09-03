@@ -10,11 +10,10 @@ import (
 func newSSHKeyListCommand(service *app.Service) *cobra.Command {
 	return &cobra.Command{
 		Use:   "list [handle]",
-		Short: "List SSH keys on a Tangled account",
+		Short: "List an account's SSH keys",
 		Long: `List SSH keys on a Tangled account.
 
-If no argument is given, lists the authenticated user's keys
-(run "tg auth login" first).`,
+Without a handle, tg lists keys on your account.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()

@@ -19,7 +19,7 @@ func newIssueEditCommand(service *app.Service) *cobra.Command {
 	var titleText, bodyText string
 
 	command := &cobra.Command{
-		Use:   "edit <rkey>",
+		Use:   "edit <record-key>",
 		Short: "Edit an issue",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -45,7 +45,7 @@ func newIssueStateCommand(service *app.Service, use, state string) *cobra.Comman
 	var repository string
 
 	command := &cobra.Command{
-		Use:   use + " <rkey>",
+		Use:   use + " <record-key>",
 		Short: use + " an issue",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {

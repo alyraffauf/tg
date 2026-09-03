@@ -14,9 +14,9 @@ type listFlags struct {
 	order  string
 }
 
-func (flags *listFlags) add(command *cobra.Command) {
+func (flags *listFlags) add(command *cobra.Command, states string) {
 	command.Flags().StringVar(&flags.author, "author", "", "Filter by author handle or DID")
-	command.Flags().StringVar(&flags.state, "state", "", "Filter by state")
+	command.Flags().StringVar(&flags.state, "state", "", "Filter by state: "+states)
 	command.Flags().Int64Var(&flags.limit, "limit", 0, "Maximum number of results")
 	command.Flags().StringVar(&flags.order, "order", "", "Sort order: asc or desc")
 }
@@ -37,11 +37,10 @@ func newIssueListCommand(service *app.Service) *cobra.Command {
 	var flags listFlags
 	command := &cobra.Command{
 		Use:   "list [handle/repo]",
-		Short: "List issues for a Tangled repository",
-		Long: `List issues for a Tangled repository.
+		Short: "List issues",
+		Long: `List issues for a repository.
 
-If no argument is given, the command detects the repository from the
-"origin" remote URL of the git repository in the current directory.`,
+Without a repository, tg uses the origin remote in the current directory.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			options, err := flags.options(cmd)
@@ -63,6 +62,6 @@ If no argument is given, the command detects the repository from the
 			})
 		},
 	}
-	flags.add(command)
+	flags.add(command, "open or closed")
 	return command
 }

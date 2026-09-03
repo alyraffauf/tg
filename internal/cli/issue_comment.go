@@ -18,9 +18,9 @@ func newIssueCommentCommand(service issueCommentService) *cobra.Command {
 	var bodyText, bodyFile, repository string
 
 	command := &cobra.Command{
-		Use:   "comment <rkey>",
+		Use:   "comment <record-key>",
 		Short: "Add a comment to an issue",
-		Long:  "Add a comment to an issue. When the body is omitted, tg opens $EDITOR.",
+		Long:  "Add a comment to an issue. Without --body or --body-file, tg opens $EDITOR.",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()

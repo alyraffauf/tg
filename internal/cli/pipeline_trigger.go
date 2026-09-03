@@ -13,13 +13,11 @@ func newPipelineTriggerCommand(service *app.Service) *cobra.Command {
 
 	command := &cobra.Command{
 		Use:   "trigger <revision>",
-		Short: "Trigger pipelines for a commit or branch",
+		Short: "Trigger pipelines for a Git revision",
 		Long: `Trigger pipelines for a commit or branch.
 
-A full commit SHA works without a local checkout. Other Git revisions, such
-as HEAD or a branch name, are resolved from the current checkout. If --repo
-is not set, the repository is detected from the current directory's git
-origin remote.`,
+A full commit SHA works outside a Git checkout. tg resolves other revisions in
+the current checkout. Without --repo, tg uses the origin remote.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			target, err := resolveTargetFlag(cmd.Context(), repository, service)
@@ -36,6 +34,6 @@ origin remote.`,
 		},
 	}
 	command.Flags().StringVarP(&repository, "repo", "R", "", "Target repository as handle/repo")
-	command.Flags().StringSliceVarP(&workflows, "workflow", "w", nil, "Workflow name to trigger (repeatable)")
+	command.Flags().StringSliceVarP(&workflows, "workflow", "w", nil, "Workflow to trigger (repeatable)")
 	return command
 }

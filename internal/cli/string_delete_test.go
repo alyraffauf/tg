@@ -9,8 +9,8 @@ func TestStringDeleteCmd(t *testing.T) {
 	if command == nil {
 		t.Fatal("stringDeleteCmd is nil")
 	}
-	if command.Use != "delete <rkey>" {
-		t.Errorf("Use = %q, want %q", command.Use, "delete <rkey>")
+	if command.Use != "delete <record-key>" {
+		t.Errorf("Use = %q, want %q", command.Use, "delete <record-key>")
 	}
 	// cobra.ExactArgs(1): zero args must error, one arg must succeed.
 	if err := command.Args(nil, []string{}); err == nil {

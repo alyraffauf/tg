@@ -15,11 +15,11 @@ func newPipelineCancelCommand(service *app.Service) *cobra.Command {
 
 	command := &cobra.Command{
 		Use:   "cancel <id>",
-		Short: "Cancel a pipeline or selected workflows",
-		Long: `Cancel every workflow in a pipeline, or only the workflows selected with --workflow.
+		Short: "Cancel pipeline workflows",
+		Long: `Cancel all pending and running workflows in a pipeline.
 
-If --repo is not set, the repository is detected from the current directory's
-git origin remote.`,
+Use --workflow to select workflows. Without --repo, tg uses the origin remote
+in the current directory.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			target, err := resolveTargetFlag(cmd.Context(), repository, service)
@@ -36,7 +36,7 @@ git origin remote.`,
 		},
 	}
 	command.Flags().StringVarP(&repository, "repo", "R", "", "Target repository as handle/repo")
-	command.Flags().StringSliceVarP(&workflows, "workflow", "w", nil, "Workflow name to cancel (repeatable)")
+	command.Flags().StringSliceVarP(&workflows, "workflow", "w", nil, "Workflow to cancel (repeatable)")
 	return command
 }
 

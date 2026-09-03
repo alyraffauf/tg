@@ -31,11 +31,10 @@ func newPipelineLogsCommand(service pipelineLogsService) *cobra.Command {
 	command := &cobra.Command{
 		Use:   "logs [id]",
 		Short: "Stream pipeline logs",
-		Long: `Stream log output from a pipeline in real time.
+		Long: `Stream logs from a pipeline.
 
-If no pipeline ID is given, streams the latest pipeline for the repository. If
---repo is not set, the repository is detected from the current directory's git
-origin remote. Use --workflow to filter to specific workflows.`,
+Without an ID, tg uses the latest pipeline. Without --repo, tg uses the origin
+remote in the current directory. Use --workflow to select workflows.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			target, err := resolveTargetFlag(cmd.Context(), repository, service)
@@ -64,7 +63,7 @@ origin remote. Use --workflow to filter to specific workflows.`,
 		},
 	}
 	command.Flags().StringVarP(&repository, "repo", "R", "", "Target repository as handle/repo")
-	command.Flags().StringSliceVarP(&workflows, "workflow", "w", nil, "Workflow name to stream (repeatable)")
+	command.Flags().StringSliceVarP(&workflows, "workflow", "w", nil, "Workflow to stream (repeatable)")
 	return command
 }
 

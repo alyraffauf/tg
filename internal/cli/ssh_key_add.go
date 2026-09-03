@@ -15,11 +15,10 @@ func newSSHKeyAddCommand(service *app.Service) *cobra.Command {
 
 	command := &cobra.Command{
 		Use:   "add [<key-file>]",
-		Short: "Add an SSH key to your Tangled account",
+		Short: "Add an SSH key",
 		Long: `Add an SSH public key to your Tangled account.
 
-If no key file is given, defaults to ~/.ssh/id_ed25519.pub.
-Requires authentication (run "tg auth login" first).`,
+The key file defaults to ~/.ssh/id_ed25519.pub. Run "tg auth login" first.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()

@@ -36,6 +36,6 @@ func newManCommand(_ *app.Service) *cobra.Command {
 			return doc.GenManTree(cmd.Root(), header, dir)
 		},
 	}
-	cmd.Flags().BoolVar(&markdown, "markdown", false, "generate Markdown command reference instead of man pages")
+	cmd.Flags().BoolVar(&markdown, "markdown", false, "Generate Markdown instead of man pages")
 	return cmd
 }

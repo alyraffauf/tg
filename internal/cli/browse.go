@@ -13,7 +13,7 @@ import (
 func newBrowseCommand(service *app.Service) *cobra.Command {
 	return &cobra.Command{
 		Use:   "browse [handle/repo]",
-		Short: "Open a Tangled repository in a browser",
+		Short: "Open a repository in your browser",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			target, err := resolveTarget(cmd.Context(), args, service)
