@@ -22,7 +22,7 @@ Tangled pipelines in `.tangled/workflows/` (nixery engine), not GitHub Actions: 
 
 - `internal/app/` — frontend-independent application layer. `app.Service` bundles the resolver, appview, and auth dependencies and exposes every operation (target resolution, issue/PR/repo/string/SSH-key CRUD, auth flows) as methods returning typed domain structs. All application logic lives here.
 - `internal/cli/` — thin Cobra frontend over `internal/app`: one file per command, all built in `NewRoot`. Each `RunE` parses flags/args into a service call and renders the returned struct.
-- `tangled/` — read-only client for the Bobbin appview XRPC API (default `https://bobbin.klbr.net`; override via `--appview`/`TG_APPVIEW`).
+- `tangled/` — read-only client for the Bobbin appview XRPC API (default `https://api.tangled.org`; override via `--appview`/`TG_APPVIEW`).
 - Writes go two ways: PDS record mutations with the user's session (`atproto/`), and knot server RPCs (`knot/`) authed with a PDS-minted service-auth JWT. Both are orchestrated by `internal/app`.
 - `atproto/` — handle↔DID resolution, PDS discovery, OAuth + app-password sessions stored in the OS keyring.
 - `internal/gitutil/` — git subprocesses (clone, fetch, patch apply); its tests need `git` in PATH.

@@ -1,5 +1,5 @@
 # Appview used for read operations.
-appview = "https://bobbin.klbr.net"
+appview = "https://api.tangled.org"
 
 # SSH port for repository creation and SSH clones.
 ssh-port = 22

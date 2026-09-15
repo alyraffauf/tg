@@ -6,7 +6,7 @@ description: Config file, environment variables, and flags.
 `tg` resolves configuration values from the following sources, in increasing
 precedence (later sources override earlier ones):
 
-1. **Defaults.** `appview` is `https://bobbin.klbr.net`. `knot` is unset to permit automatic verified Knot discovery. `ssh-port` is `22`. `protocol` is `ssh`.
+1. **Defaults.** `appview` is `https://api.tangled.org`. `knot` is unset to permit automatic verified Knot discovery. `ssh-port` is `22`. `protocol` is `ssh`.
 2. **Config file** — `$XDG_CONFIG_HOME/tg/config.toml` (or `~/.config/tg/config.toml`)
 3. **Environment variables** — prefixed `TG_` (e.g. `TG_APPVIEW`)
 4. **Command-line flags** — e.g. `--appview`
@@ -17,7 +17,7 @@ The config file is optional; a missing file is not an error.
 
 ```toml
 # ~/.config/tg/config.toml
-appview = "https://bobbin.klbr.net"
+appview = "https://api.tangled.org"
 knot = "knot.example.com"
 ssh-port = 2222
 protocol = "ssh"

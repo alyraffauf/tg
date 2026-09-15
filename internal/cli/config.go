@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	defaultAppview = "https://bobbin.klbr.net"
+	defaultAppview = "https://api.tangled.org"
 	configName     = "config"
 	configType     = "toml"
 )
