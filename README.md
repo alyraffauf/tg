@@ -49,6 +49,7 @@ When a repository record contains a repository DID, `tg` uses the DID in new Git
 
 ## Documentation
 
+- [Agent skill](SKILL.md) for using tg with a coding agent
 - Command reference — `tg <command> --help`, the man pages installed by the Nix package (`man tg`, `man tg-issue-list`, ...), or the [website](https://tgcli.wisp.place/reference/commands/tg/)
 - [Authentication](https://tgcli.wisp.place/cookbooks/authentication/) — OAuth and app-password login, multiple accounts, keyring token storage
 - [Configuration](https://tgcli.wisp.place/cookbooks/configuration/) — config file, environment variables, and flags
