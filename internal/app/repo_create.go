@@ -144,7 +144,9 @@ func (s *Service) provisionRepo(ctx context.Context, in provisionRepoInput) (*pr
 		Record:     record,
 	})
 	if err != nil {
-		cleanupErr := s.deleteProvisionedRepo(ctx, atClient, knotHost, did, in.Name)
+		cleanupErr := s.deleteProvisionedRepo(ctx, atClient, knotHost, knot.DeleteRepoInput{
+			Repo: repoDID, DID: did, Name: in.Name, Rkey: in.Name,
+		})
 		if cleanupErr != nil {
 			return nil, fmt.Errorf("write repository record: %w; delete orphaned Knot repository: %v", err, cleanupErr)
 		}
@@ -156,12 +158,12 @@ func (s *Service) provisionRepo(ctx context.Context, in provisionRepoInput) (*pr
 	}, nil
 }
 
-func (s *Service) deleteProvisionedRepo(ctx context.Context, atClient pdsClient, knotHost, did, name string) error {
+func (s *Service) deleteProvisionedRepo(ctx context.Context, atClient pdsClient, knotHost string, input knot.DeleteRepoInput) error {
 	token, err := atClient.GetServiceAuth(ctx, "did:web:"+knotHost, "sh.tangled.repo.delete")
 	if err != nil {
 		return fmt.Errorf("get Knot delete authorization: %w", err)
 	}
-	return s.knot.New(knotHost, token).DeleteRepo(ctx, knot.DeleteRepoInput{DID: did, Name: name, Rkey: name})
+	return s.knot.New(knotHost, token).DeleteRepo(ctx, input)
 }
 
 func (s *Service) selectCreationKnot(ctx context.Context, atClient pdsClient, did, configured string) (string, []string, error) {

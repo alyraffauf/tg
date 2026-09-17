@@ -64,7 +64,9 @@ func (s *Service) ForkRepoOnKnot(ctx context.Context, source Target, name, knotH
 		},
 	})
 	if err != nil {
-		cleanupErr := s.deleteFork(ctx, atClient, selectedKnot, ownerDID, name)
+		cleanupErr := s.deleteProvisionedRepo(ctx, atClient, selectedKnot, knot.DeleteRepoInput{
+			Repo: repoDID, DID: ownerDID, Name: name, Rkey: name,
+		})
 		if cleanupErr != nil {
 			return nil, fmt.Errorf("write fork record: %w; delete orphaned fork: %v", err, cleanupErr)
 		}
@@ -101,15 +103,4 @@ func (s *Service) getForkSource(ctx context.Context, t Target) (forkSource, erro
 		return forkSource{}, fmt.Errorf("source repository %s has no repo DID", t)
 	}
 	return forkSource{URI: repo.URI, Knot: repo.Value.Knot, RepoDID: stringValue(repo.Value.RepoDid)}, nil
-}
-
-func (s *Service) deleteFork(ctx context.Context, atClient pdsClient, knotHost, did, name string) error {
-	token, err := atClient.GetServiceAuth(ctx, "did:web:"+knotHost, "sh.tangled.repo.delete")
-	if err != nil {
-		return fmt.Errorf("get knot authorization: %w", err)
-	}
-	if err := s.knot.New(knotHost, token).DeleteRepo(ctx, knot.DeleteRepoInput{DID: did, Name: name, Rkey: name}); err != nil {
-		return err
-	}
-	return nil
 }

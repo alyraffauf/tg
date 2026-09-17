@@ -9,6 +9,7 @@ import (
 
 // DeleteRepoInput is the argument to sh.tangled.repo.delete.
 type DeleteRepoInput struct {
+	Repo string `json:"repo"` // repository DID
 	DID  string `json:"did"`
 	Name string `json:"name"`
 	Rkey string `json:"rkey"`

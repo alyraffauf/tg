@@ -24,6 +24,9 @@ func TestCreateRepoDeletesKnotRepoWhenRecordWriteFails(t *testing.T) {
 	if knotClient.createCalls != 1 || knotClient.deleteCalls != 1 {
 		t.Fatalf("Knot calls: create=%d delete=%d", knotClient.createCalls, knotClient.deleteCalls)
 	}
+	if knotClient.deleteInput.Repo != "did:plc:repo" {
+		t.Fatalf("create cleanup repo = %q, want newly created repository DID", knotClient.deleteInput.Repo)
+	}
 	if len(pds.serviceAuthLexiconMethods) != 2 || pds.serviceAuthLexiconMethods[1] != "sh.tangled.repo.delete" {
 		t.Fatalf("service auth methods = %q", pds.serviceAuthLexiconMethods)
 	}

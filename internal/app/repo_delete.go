@@ -25,6 +25,10 @@ func (s *Service) DeleteRepo(ctx context.Context, t Target) (*RepoDeleteResult, 
 	if repo.Value.Knot == "" {
 		return nil, fmt.Errorf("repo %q has no knot", t.String())
 	}
+	repoDID := stringValue(repo.Value.RepoDid)
+	if repoDID == "" {
+		return nil, fmt.Errorf("repo %q has no repository DID", t.String())
+	}
 	rkey := extractRKey(repo.URI)
 	existingRecord, getErr := atClient.GetRecord(ctx, did, repoCollection, rkey)
 	if getErr != nil && !isRecordNotFound(getErr) {
@@ -57,6 +61,7 @@ func (s *Service) DeleteRepo(ctx context.Context, t Target) (*RepoDeleteResult, 
 		}
 	}
 	if err := s.knot.New(repo.Value.Knot, token).DeleteRepo(ctx, knot.DeleteRepoInput{
+		Repo: repoDID,
 		DID:  did,
 		Name: t.Repo,
 		Rkey: rkey,
