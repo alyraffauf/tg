@@ -1,6 +1,8 @@
 package gitutil
 
 import (
+	"context"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -165,5 +167,93 @@ func TestOriginFirst(t *testing.T) {
 				t.Errorf("got %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestDetectRepoCandidatesFromBranchRemoteSettings(t *testing.T) {
+	tests := []struct {
+		name  string
+		setup func(t *testing.T, repoDir string)
+		want  []RepoContext
+	}{
+		{
+			// No named remotes: the branch fetches from and pushes to a URL.
+			name: "branch remote is a URL",
+			setup: func(t *testing.T, repoDir string) {
+				runGit(t, repoDir, "config", "branch.main.remote", "git@tangled.org:alice.example.com/project")
+			},
+			want: []RepoContext{{Handle: "alice.example.com", Repo: "project"}},
+		},
+		{
+			name: "branch pushRemote is a URL",
+			setup: func(t *testing.T, repoDir string) {
+				runGit(t, repoDir, "config", "branch.main.pushRemote", "https://tangled.org/alice.example.com/project")
+			},
+			want: []RepoContext{{Handle: "alice.example.com", Repo: "project"}},
+		},
+		{
+			name: "detached HEAD uses remote.pushDefault",
+			setup: func(t *testing.T, repoDir string) {
+				runGit(t, repoDir, "config", "branch.main.remote", "git@tangled.org:alice.example.com/ignored")
+				runGit(t, repoDir, "config", "remote.pushDefault", "git@tangled.org:alice.example.com/project")
+				runGit(t, repoDir, "checkout", "--detach")
+			},
+			want: []RepoContext{{Handle: "alice.example.com", Repo: "project"}},
+		},
+		{
+			// Named remotes keep precedence; a URL setting is appended once.
+			name: "named remotes first, repeated URL once",
+			setup: func(t *testing.T, repoDir string) {
+				runGit(t, repoDir, "remote", "add", "origin", "git@tangled.org:alice.example.com/origin")
+				runGit(t, repoDir, "config", "branch.main.remote", "git@tangled.org:alice.example.com/project")
+				runGit(t, repoDir, "config", "branch.main.pushRemote", "git@tangled.org:alice.example.com/project")
+			},
+			want: []RepoContext{
+				{Handle: "alice.example.com", Repo: "origin"},
+				{Handle: "alice.example.com", Repo: "project"},
+			},
+		},
+		{
+			// A setting that names a remote was already scanned via that remote.
+			name: "setting naming a remote is not scanned twice",
+			setup: func(t *testing.T, repoDir string) {
+				runGit(t, repoDir, "remote", "add", "origin", "git@tangled.org:alice.example.com/project")
+				runGit(t, repoDir, "config", "branch.main.remote", "origin")
+				runGit(t, repoDir, "config", "remote.pushDefault", "origin")
+			},
+			want: []RepoContext{{Handle: "alice.example.com", Repo: "project"}},
+		},
+		{
+			name: "multi-valued key does not fail detection",
+			setup: func(t *testing.T, repoDir string) {
+				runGit(t, repoDir, "config", "--add", "branch.main.pushRemote", "git@tangled.org:alice.example.com/project")
+				runGit(t, repoDir, "config", "--add", "branch.main.pushRemote", "https://example.com/not-tangled.git")
+			},
+			want: []RepoContext{{Handle: "alice.example.com", Repo: "project"}},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repoDir := newPullBaseTestRepo(t)
+			tt.setup(t, repoDir)
+			t.Chdir(repoDir)
+			got, err := NewClient(nil, nil).DetectRepoCandidatesFromCWD(context.Background())
+			if err != nil {
+				t.Fatalf("DetectRepoCandidatesFromCWD() error = %v", err)
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Fatalf("DetectRepoCandidatesFromCWD() = %+v, want %+v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestDetectRepoCandidatesWithoutAnyTangledRemote(t *testing.T) {
+	repoDir := newPullBaseTestRepo(t)
+	runGit(t, repoDir, "config", "branch.main.remote", "https://example.com/not-tangled.git")
+	t.Chdir(repoDir)
+	_, err := NewClient(nil, nil).DetectRepoCandidatesFromCWD(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "current branch's remote settings") {
+		t.Fatalf("DetectRepoCandidatesFromCWD() error = %v, want a no-candidate error naming branch settings", err)
 	}
 }

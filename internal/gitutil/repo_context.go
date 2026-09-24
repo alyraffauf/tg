@@ -89,10 +89,44 @@ func (c *Client) DetectRepoCandidatesFromCWD(ctx context.Context) ([]RepoContext
 			}
 		}
 	}
+	urls, err := c.branchRemoteURLs(ctx, remotes)
+	if err != nil {
+		return nil, err
+	}
+	for _, raw := range urls {
+		if candidate, ok := parseRepoCandidate(raw); ok {
+			candidates = append(candidates, *candidate)
+		}
+	}
 	if len(candidates) == 0 {
-		return nil, fmt.Errorf("no Tangled remote candidate found among %d remote(s) %q; pass the repository as handle/repo", len(remotes), remotes)
+		return nil, fmt.Errorf("no Tangled remote candidate found among %d remote(s) %q or the current branch's remote settings; pass the repository as handle/repo", len(remotes), remotes)
 	}
 	return candidates, nil
+}
+
+// branchRemoteURLs returns the current branch's remote settings that are URLs rather than remote names.
+func (c *Client) branchRemoteURLs(ctx context.Context, remotes []string) ([]string, error) {
+	keys := []string{"remote.pushDefault"}
+	branch, err := c.gitOptionalLines(ctx, "symbolic-ref", "--quiet", "--short", "HEAD")
+	if err != nil {
+		return nil, fmt.Errorf("read current branch: %w", err)
+	}
+	if len(branch) == 1 {
+		keys = []string{"branch." + branch[0] + ".remote", "branch." + branch[0] + ".pushRemote", "remote.pushDefault"}
+	}
+	var urls []string
+	for _, key := range keys {
+		values, err := c.gitOptionalLines(ctx, "config", "--get-all", key)
+		if err != nil {
+			return nil, fmt.Errorf("read git config %s: %w", key, err)
+		}
+		for _, value := range values {
+			if !slices.Contains(remotes, value) && !slices.Contains(urls, value) {
+				urls = append(urls, value)
+			}
+		}
+	}
+	return urls, nil
 }
 
 func DetectRepoCandidatesFromCWD(ctx context.Context) ([]RepoContext, error) {
@@ -204,6 +238,16 @@ func splitHandleRepo(path string) (*RepoContext, bool) {
 		Handle: parts[0],
 		Repo:   strings.TrimSuffix(parts[1], ".git"),
 	}, true
+}
+
+// gitOptionalLines is gitLines that treats exit status 1 (unset key, detached HEAD) as no lines.
+func (c *Client) gitOptionalLines(ctx context.Context, args ...string) ([]string, error) {
+	lines, err := c.gitLines(ctx, args...)
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) && exitErr.ExitCode() == 1 {
+		return nil, nil
+	}
+	return lines, err
 }
 
 // gitLines runs git with the given args and returns non-empty output lines.
