@@ -16,11 +16,6 @@ _: {
         ++ [config.packages.tg]
         ++ lib.attrValues config.treefmt.build.programs;
 
-      env = {
-        UV_PYTHON = pkgs.python314.interpreter;
-        UV_PYTHON_DOWNLOADS = "never";
-      };
-
       shellHook = ''
         echo "👋 Welcome to the tg devShell!"
       '';

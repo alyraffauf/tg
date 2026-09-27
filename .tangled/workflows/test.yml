@@ -9,10 +9,16 @@ dependencies:
   nixpkgs/nixpkgs-unstable:
     - go
     - gcc
+    - python314
+    - uv
 
 steps:
-  - name: "Run tests"
+  - name: "Test tg"
     command: "go test -race ./..."
+  - name: "Test mcp"
+    command: |
+      cd mcp
+      uv run pytest
   - name: "Check generated lexicons"
     command: |
       go generate ./internal/tangledlex
