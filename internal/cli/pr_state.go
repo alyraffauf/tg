@@ -19,11 +19,14 @@ func newPRUpdateCommand(service *app.Service) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return service.UpdatePullRound(cmd.Context(), app.UpdatePullRoundInput{
+			if err := service.UpdatePullRound(cmd.Context(), app.UpdatePullRoundInput{
 				RepoDir: repoDir,
 				Rkey:    args[0],
 				Base:    base,
-			})
+			}); err != nil {
+				return err
+			}
+			return outputRecordUpdate(cmd, args[0])
 		},
 	}
 	command.Flags().StringVarP(&base, "base", "B", "", "Target branch or local remote-tracking branch. Required for forks.")
@@ -56,7 +59,10 @@ func newPREditCommand(service *app.Service) *cobra.Command {
 			if title == nil && body == nil {
 				return fmt.Errorf("provide --title or --body")
 			}
-			return service.EditPull(cmd.Context(), args[0], title, body)
+			if err := service.EditPull(cmd.Context(), args[0], title, body); err != nil {
+				return err
+			}
+			return outputRecordUpdate(cmd, args[0])
 		},
 	}
 	command.Flags().StringVarP(&titleText, "title", "t", "", "New title")

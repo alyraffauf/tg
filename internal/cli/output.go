@@ -30,3 +30,7 @@ func output[T any](cmd *cobra.Command, data T, human func(T)) error {
 	human(data)
 	return nil
 }
+
+func outputRecordUpdate(cmd *cobra.Command, rkey string) error {
+	return output(cmd, app.UpdatedRecordResult{Rkey: rkey}, func(app.UpdatedRecordResult) {})
+}

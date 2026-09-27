@@ -43,6 +43,39 @@ func TestOutputJSONPropagatesWriterFailure(t *testing.T) {
 	}
 }
 
+func TestOutputRecordUpdate(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		json bool
+		want string
+	}{
+		{name: "human", want: ""},
+		{name: "json", json: true, want: "{\n  \"rkey\": \"abc123\"\n}\n"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			var stdout bytes.Buffer
+			command := &cobra.Command{}
+			command.Flags().Bool("json", test.json, "")
+			command.SetOut(&stdout)
+			if err := outputRecordUpdate(command, "abc123"); err != nil {
+				t.Fatalf("outputRecordUpdate() error = %v", err)
+			}
+			if got := stdout.String(); got != test.want {
+				t.Errorf("output = %q, want %q", got, test.want)
+			}
+		})
+	}
+}
+
+func TestOutputRecordUpdatePropagatesWriterFailure(t *testing.T) {
+	command := &cobra.Command{}
+	command.Flags().Bool("json", true, "")
+	command.SetOut(errorWriter{})
+	if err := outputRecordUpdate(command, "abc123"); !errors.Is(err, errWrite) {
+		t.Fatalf("outputRecordUpdate() error = %v", err)
+	}
+}
+
 var errWrite = errors.New("write failed")
 
 type errorWriter struct{}

@@ -155,6 +155,10 @@ type DeletedRecordResult struct {
 	Rkey string `json:"rkey"`
 }
 
+type UpdatedRecordResult struct {
+	Rkey string `json:"rkey"`
+}
+
 // StateResult is returned by issue/PR state changes (close and reopen).
 type StateResult struct {
 	Rkey  string `json:"rkey"`

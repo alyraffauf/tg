@@ -33,7 +33,10 @@ func newIssueEditCommand(service *app.Service) *cobra.Command {
 			if title == nil && body == nil {
 				return fmt.Errorf("provide --title or --body")
 			}
-			return service.EditIssue(cmd.Context(), args[0], title, body)
+			if err := service.EditIssue(cmd.Context(), args[0], title, body); err != nil {
+				return err
+			}
+			return outputRecordUpdate(cmd, args[0])
 		},
 	}
 	command.Flags().StringVarP(&titleText, "title", "t", "", "New title")
