@@ -231,6 +231,11 @@ type PRCheckoutResult struct {
 	Branch string `json:"branch"`
 }
 
+// PullDiffResult contains the latest pull request patch as text.
+type PullDiffResult struct {
+	Patch string `json:"patch"`
+}
+
 // SSHKeyAddResult is returned by SSH key addition.
 type SSHKeyAddResult struct {
 	Name string `json:"name"`

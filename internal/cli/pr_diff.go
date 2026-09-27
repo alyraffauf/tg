@@ -24,6 +24,9 @@ func newPRDiffCommand(service *app.Service) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			if jsonOutput, _ := cmd.Flags().GetBool("json"); jsonOutput {
+				return output(cmd, app.PullDiffResult{Patch: string(patch.Patch)}, nil)
+			}
 			if _, err := cmd.OutOrStdout().Write(patch.Patch); err != nil {
 				return fmt.Errorf("write patch: %w", err)
 			}
