@@ -8,6 +8,13 @@
 2. `nix build` — the real gate: compiles, runs `go test ./...`, and generates man pages + shell completions. **`go build` passing is not enough.**
 3. Quick iteration only: `go build ./cmd/tg`, `go test ./...`.
 
+## MCP server
+
+- `mcp/` is the tgmcp Python package, using FastMCP and Pydantic to wrap tg's JSON commands.
+- Run Python commands from `mcp/` with uv. Its dependencies and tests are separate from Go.
+- `nix build .#tgmcp` builds the MCP server with tg from the same checkout.
+- Keep `mcp/src/tgmcp/models.py` in sync with JSON types in `internal/app/domain_types.go`.
+
 ## Nix gotchas
 
 - Changing `go.mod`/`go.sum` invalidates `vendorHash` in `nix/tg.nix`. `nix build` fails with a hash mismatch; copy the `got:` hash into `vendorHash` and rebuild. Don't commit dependency changes until the build passes with the updated hash.

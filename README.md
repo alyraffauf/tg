@@ -47,6 +47,11 @@ tg pr merge <rkey>
 
 When a repository record contains a repository DID, `tg` uses the DID in new Git remotes. Automatically selected Knots use the `tangled.org` proxy. An explicitly configured Knot uses a direct remote and the configured SSH port. These remotes remain valid after handle changes, repository renames, and transfers. If `tg` cannot resolve the repository record for an SSH clone, it creates a `handle/repo` remote and prints the resolution error as a warning.
 
+## MCP server
+
+The [tgmcp package](mcp/README.md) exposes Tangled tools to MCP clients.
+Run it from this checkout with `nix run .#tgmcp`. It uses tg from the same checkout.
+
 ## Documentation
 
 - [Agent skill](SKILL.md) for using tg with a coding agent

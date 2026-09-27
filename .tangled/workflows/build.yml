@@ -15,3 +15,9 @@ steps:
     command: "nix --extra-experimental-features 'nix-command flakes' fmt -- --ci"
   - name: "Build tg"
     command: "nix --extra-experimental-features 'nix-command flakes' build .#tg"
+  - name: "Build tgmcp"
+    command: "nix --extra-experimental-features 'nix-command flakes' build .#tgmcp"
+  - name: "Test tgmcp"
+    command: |
+      cd mcp
+      nix --extra-experimental-features 'nix-command flakes' develop .. -c uv run --locked pytest

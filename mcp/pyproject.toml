@@ -1,0 +1,32 @@
+[project]
+name = "tgmcp"
+version = "0.1.0"
+description = "A typed MCP server for the tg Tangled client"
+readme = "README.md"
+authors = [
+    { name = "Aly Raffauf", email = "aly@aly.codes" }
+]
+requires-python = ">=3.14"
+dependencies = [
+    "fastmcp>=4.0.10",
+    "pydantic>=2.13.5",
+    "ruff>=0.16.9",
+    "ty>=0.0.84",
+]
+
+[project.scripts]
+tgmcp = "tgmcp:main"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[build-system]
+requires = ["uv_build>=0.12.17,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+]
