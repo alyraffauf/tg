@@ -231,27 +231,48 @@ func TestValidateRecordAcceptsFutureKnownValues(t *testing.T) {
 	}
 }
 
-func TestValidateMarkdownBlobConstraints(t *testing.T) {
-	record := validRecords()["sh.tangled.feed.comment"].(FeedComment)
+func TestValidateImageBlobConstraints(t *testing.T) {
 	validLink := lexutil.LexLink(cid.MustParse(testCID))
 	tests := []struct {
-		name string
-		blob *lexutil.LexBlob
+		name  string
+		blob  *lexutil.LexBlob
+		valid bool
 	}{
+		{name: "image at size limit", blob: &lexutil.LexBlob{Ref: validLink, MimeType: "image/png", Size: 1_000_000}, valid: true},
 		{name: "nil", blob: nil},
 		{name: "missing reference", blob: &lexutil.LexBlob{MimeType: "image/png"}},
 		{name: "non-image", blob: &lexutil.LexBlob{Ref: validLink, MimeType: "text/plain"}},
 		{name: "negative size", blob: &lexutil.LexBlob{Ref: validLink, MimeType: "image/png", Size: -1}},
 		{name: "oversized", blob: &lexutil.LexBlob{Ref: validLink, MimeType: "image/png", Size: 1_000_001}},
 	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			candidate := record
-			markdown := *record.Body.MarkupMarkdown
-			markdown.Blobs = []*lexutil.LexBlob{test.blob}
-			candidate.Body = &FeedComment_Body{MarkupMarkdown: &markdown}
-			if err := ValidateRecord("sh.tangled.feed.comment", candidate); err == nil {
-				t.Fatal("ValidateRecord() accepted invalid markdown blob")
+	for _, collection := range []string{"sh.tangled.feed.comment", "sh.tangled.repo.issue", "sh.tangled.repo.pull"} {
+		t.Run(collection, func(t *testing.T) {
+			for _, test := range tests {
+				t.Run(test.name, func(t *testing.T) {
+					blobs := []*lexutil.LexBlob{test.blob}
+					var candidate any
+					field := "blobs[0]"
+					switch record := validRecords()[collection].(type) {
+					case FeedComment:
+						record.Body.MarkupMarkdown.Blobs = blobs
+						candidate = record
+						field = "body.blobs[0]"
+					case RepoIssue:
+						record.Blobs = blobs
+						candidate = record
+					case RepoPull:
+						record.Blobs = blobs
+						candidate = record
+					}
+					err := ValidateRecord(collection, candidate)
+					if test.valid {
+						if err != nil {
+							t.Fatalf("ValidateRecord() rejected valid image blob: %v", err)
+						}
+					} else if err == nil || !strings.Contains(err.Error(), field) {
+						t.Fatalf("ValidateRecord() error = %v, want error for %s", err, field)
+					}
+				})
 			}
 		})
 	}

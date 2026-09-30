@@ -110,6 +110,9 @@ func validateIssue(collection string, record RepoIssue) error {
 	if err := validateReferences(record.References); err != nil {
 		return err
 	}
+	if err := validateImageBlobs("blobs", record.Blobs); err != nil {
+		return err
+	}
 	return datetimeField(record.CreatedAt)
 }
 
@@ -126,7 +129,7 @@ func validateFeedComment(collection string, record FeedComment) error {
 	if err := required("body.text", record.Body.MarkupMarkdown.Text); err != nil {
 		return err
 	}
-	if err := validateMarkdownBlobs(record.Body.MarkupMarkdown.Blobs); err != nil {
+	if err := validateImageBlobs("body.blobs", record.Body.MarkupMarkdown.Blobs); err != nil {
 		return err
 	}
 	if record.ReplyTo != nil {
@@ -231,6 +234,9 @@ func validatePull(collection string, record RepoPull) error {
 	if err := validateReferences(record.References); err != nil {
 		return err
 	}
+	if err := validateImageBlobs("blobs", record.Blobs); err != nil {
+		return err
+	}
 	return datetimeField(record.CreatedAt)
 }
 
@@ -308,20 +314,20 @@ func graphemesBetween(value string, minimum, maximum int) bool {
 	return length >= minimum && length <= maximum
 }
 
-func validateMarkdownBlobs(blobs []*lexutil.LexBlob) error {
+func validateImageBlobs(field string, blobs []*lexutil.LexBlob) error {
 	for index, blob := range blobs {
 		if blob == nil || !blob.Ref.Defined() {
-			return fmt.Errorf("body.blobs[%d] must reference a blob", index)
+			return fmt.Errorf("%s[%d] must reference a blob", field, index)
 		}
 		mediaType, _, err := mime.ParseMediaType(blob.MimeType)
 		if err != nil || !strings.HasPrefix(mediaType, "image/") || len(mediaType) == len("image/") {
-			return fmt.Errorf("body.blobs[%d] must have an image MIME type", index)
+			return fmt.Errorf("%s[%d] must have an image MIME type", field, index)
 		}
 		if blob.Size < 0 {
-			return fmt.Errorf("body.blobs[%d] size must be non-negative", index)
+			return fmt.Errorf("%s[%d] size must be non-negative", field, index)
 		}
 		if blob.Size > 1_000_000 {
-			return fmt.Errorf("body.blobs[%d] must not exceed 1000000 bytes", index)
+			return fmt.Errorf("%s[%d] must not exceed 1000000 bytes", field, index)
 		}
 	}
 	return nil

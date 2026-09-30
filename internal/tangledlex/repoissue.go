@@ -13,11 +13,12 @@ func init() {
 }
 
 type RepoIssue struct {
-	LexiconTypeID string   `json:"$type" cborgen:"$type,const=sh.tangled.repo.issue"`
-	Body          *string  `json:"body,omitempty" cborgen:"body,omitempty"`
-	CreatedAt     string   `json:"createdAt" cborgen:"createdAt"`
-	Mentions      []string `json:"mentions,omitempty" cborgen:"mentions,omitempty"`
-	References    []string `json:"references,omitempty" cborgen:"references,omitempty"`
-	Repo          string   `json:"repo" cborgen:"repo"`
-	Title         string   `json:"title" cborgen:"title"`
+	LexiconTypeID string             `json:"$type" cborgen:"$type,const=sh.tangled.repo.issue"`
+	Blobs         []*lexutil.LexBlob `json:"blobs,omitempty" cborgen:"blobs,omitempty"`
+	Body          *string            `json:"body,omitempty" cborgen:"body,omitempty"`
+	CreatedAt     string             `json:"createdAt" cborgen:"createdAt"`
+	Mentions      []string           `json:"mentions,omitempty" cborgen:"mentions,omitempty"`
+	References    []string           `json:"references,omitempty" cborgen:"references,omitempty"`
+	Repo          string             `json:"repo" cborgen:"repo"`
+	Title         string             `json:"title" cborgen:"title"`
 }

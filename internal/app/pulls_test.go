@@ -116,11 +116,13 @@ func TestUpdatePullRoundAppendsWithCompareAndSwap(t *testing.T) {
 	oldCID := cid.MustParse("bafybeigdyrzt5m6b5nkn55vsgzzfw5cfs2tidw6zqugycdkyybf2z7kz4q")
 	newCID := cid.MustParse("bafybeibwzifrf5tfwmbtw6ewjqr5q6rh5y5b6gzzledmxce5ilrjzsozoa")
 	oldBlob := lexutil.LexBlob{MimeType: "application/gzip", Ref: lexutil.LexLink(oldCID)}
+	imageBlob := lexutil.LexBlob{MimeType: "image/png", Ref: lexutil.LexLink(oldCID), Size: 100}
 	pds := &testPDS{
 		record: &atproto.GetRecordOutput{
 			CID: func() *syntax.CID { value := syntax.CID("bafyreicurrent"); return &value }(),
 			Value: tangledlex.RepoPull{
 				LexiconTypeID: pullCollection,
+				Blobs:         []*lexutil.LexBlob{&imageBlob},
 				Title:         "Example",
 				CreatedAt:     "2026-07-29T00:00:00Z",
 				Target:        &tangledlex.RepoPull_Target{Repo: "did:plc:target", Branch: "main"},
@@ -159,6 +161,9 @@ func TestUpdatePullRoundAppendsWithCompareAndSwap(t *testing.T) {
 	}
 	if len(record.Rounds) != 2 {
 		t.Fatalf("round count = %d, want 2", len(record.Rounds))
+	}
+	if len(record.Blobs) != 1 || *record.Blobs[0] != imageBlob {
+		t.Fatalf("image attachments = %+v, want preserved attachment", record.Blobs)
 	}
 	if record.Rounds[0].PatchBlob.Ref.String() != oldCID.String() || record.Rounds[1].PatchBlob.Ref.String() != newCID.String() {
 		t.Fatalf("rounds = %+v", record.Rounds)

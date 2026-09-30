@@ -13,16 +13,17 @@ func init() {
 }
 
 type RepoPull struct {
-	LexiconTypeID string            `json:"$type" cborgen:"$type,const=sh.tangled.repo.pull"`
-	Body          *string           `json:"body,omitempty" cborgen:"body,omitempty"`
-	CreatedAt     string            `json:"createdAt" cborgen:"createdAt"`
-	DependentOn   *string           `json:"dependentOn,omitempty" cborgen:"dependentOn,omitempty"`
-	Mentions      []string          `json:"mentions,omitempty" cborgen:"mentions,omitempty"`
-	References    []string          `json:"references,omitempty" cborgen:"references,omitempty"`
-	Rounds        []*RepoPull_Round `json:"rounds" cborgen:"rounds"`
-	Source        *RepoPull_Source  `json:"source,omitempty" cborgen:"source,omitempty"`
-	Target        *RepoPull_Target  `json:"target" cborgen:"target"`
-	Title         string            `json:"title" cborgen:"title"`
+	LexiconTypeID string             `json:"$type" cborgen:"$type,const=sh.tangled.repo.pull"`
+	Blobs         []*lexutil.LexBlob `json:"blobs,omitempty" cborgen:"blobs,omitempty"`
+	Body          *string            `json:"body,omitempty" cborgen:"body,omitempty"`
+	CreatedAt     string             `json:"createdAt" cborgen:"createdAt"`
+	DependentOn   *string            `json:"dependentOn,omitempty" cborgen:"dependentOn,omitempty"`
+	Mentions      []string           `json:"mentions,omitempty" cborgen:"mentions,omitempty"`
+	References    []string           `json:"references,omitempty" cborgen:"references,omitempty"`
+	Rounds        []*RepoPull_Round  `json:"rounds" cborgen:"rounds"`
+	Source        *RepoPull_Source   `json:"source,omitempty" cborgen:"source,omitempty"`
+	Target        *RepoPull_Target   `json:"target" cborgen:"target"`
+	Title         string             `json:"title" cborgen:"title"`
 }
 
 // RepoPull_Round is a "round" in the sh.tangled.repo.pull schema.
