@@ -146,6 +146,10 @@ func newPullRecord(input pullRecordInput, createdAt time.Time) (tangledlex.RepoP
 	if err != nil {
 		return tangledlex.RepoPull{}, err
 	}
+	var sourceRepo *string
+	if input.SourceRepoDid != input.TargetRepoDid {
+		sourceRepo = optionalString(input.SourceRepoDid)
+	}
 	return tangledlex.RepoPull{
 		LexiconTypeID: pullCollection,
 		Title:         input.Title,
@@ -156,7 +160,7 @@ func newPullRecord(input pullRecordInput, createdAt time.Time) (tangledlex.RepoP
 			Branch: input.Base,
 		},
 		Source: &tangledlex.RepoPull_Source{
-			Repo:   optionalString(input.SourceRepoDid),
+			Repo:   sourceRepo,
 			Branch: input.Head,
 		},
 		Rounds: []*tangledlex.RepoPull_Round{{

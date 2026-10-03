@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -14,6 +15,34 @@ import (
 	lexutil "github.com/bluesky-social/indigo/lex/util"
 	"github.com/ipfs/go-cid"
 )
+
+func TestNewPullRecordOmitsSameRepoSource(t *testing.T) {
+	for _, source := range []string{"", "did:plc:target"} {
+		t.Run(source, func(t *testing.T) {
+			record, err := newPullRecord(pullRecordInput{
+				Title: "Branch change", TargetRepoDid: "did:plc:target",
+				SourceRepoDid: source, Base: "main", Head: "feature",
+			}, time.Now().UTC())
+			if err != nil {
+				t.Fatal(err)
+			}
+			data, err := json.Marshal(record.Source)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var wire map[string]json.RawMessage
+			if err := json.Unmarshal(data, &wire); err != nil {
+				t.Fatal(err)
+			}
+			if _, exists := wire["repo"]; exists {
+				t.Fatalf("same-repo source includes repo: %s", data)
+			}
+			if string(wire["branch"]) != `"feature"` {
+				t.Fatalf("source branch missing: %s", data)
+			}
+		})
+	}
+}
 
 func TestNewPullRecordUsesDistinctSourceAndTarget(t *testing.T) {
 	record, err := newPullRecord(pullRecordInput{
