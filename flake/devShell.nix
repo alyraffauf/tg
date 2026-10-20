@@ -8,12 +8,14 @@ _: {
     devShells.default = pkgs.mkShell {
       packages =
         (with pkgs; [
-          go
           just
           python314
           uv
         ])
-        ++ [config.packages.tg]
+        ++ [
+          (pkgs.callPackage ../nix/go.nix {})
+          config.packages.tg
+        ]
         ++ lib.attrValues config.treefmt.build.programs;
 
       shellHook = ''

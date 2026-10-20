@@ -1,6 +1,9 @@
 {inputs, ...}: {
   perSystem = {pkgs, ...}: let
-    tg = pkgs.callPackage ../nix/tg.nix {};
+    go = pkgs.callPackage ../nix/go.nix {};
+    tg = pkgs.callPackage ../nix/tg.nix {
+      buildGoModule = pkgs.buildGoModule.override {inherit go;};
+    };
     workspace = inputs.uv2nix.lib.workspace.loadWorkspace {workspaceRoot = ../mcp;};
     overlay = workspace.mkPyprojectOverlay {sourcePreference = "wheel";};
     pythonSet =
