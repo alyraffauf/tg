@@ -13,7 +13,7 @@ _: {
           uv
         ])
         ++ [
-          (pkgs.callPackage ../nix/go.nix {})
+          pkgs.go_1_27
           config.packages.tg
         ]
         ++ lib.attrValues config.treefmt.build.programs;

@@ -1,6 +1,6 @@
 {inputs, ...}: {
   perSystem = {pkgs, ...}: let
-    go = pkgs.callPackage ../nix/go.nix {};
+    go = pkgs.go_1_27;
     tg = pkgs.callPackage ../nix/tg.nix {
       buildGoModule = pkgs.buildGoModule.override {inherit go;};
     };
