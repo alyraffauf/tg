@@ -32,15 +32,7 @@ func (s *Service) PullPatch(ctx context.Context, t Target, rkey string) (*PullPa
 }
 func (s *Service) pullPatch(ctx context.Context, repo *tangled.Repo, rkey string) (*PullPatch, error) {
 	did := stringValue(repo.Value.RepoDid)
-	pulls, err := s.appview.ListPulls(ctx, did, tangled.ListOpts{Limit: 100})
-	if err != nil {
-		return nil, err
-	}
-	item, err := findByRKey(pulls.Items, rkey, "pull request")
-	if err != nil {
-		return nil, err
-	}
-	ticket, err := decodePull(item.Value)
+	item, ticket, err := s.readTicket(ctx, repo, rkey, true)
 	if err != nil {
 		return nil, err
 	}
@@ -60,7 +52,11 @@ func (s *Service) pullPatch(ctx context.Context, repo *tangled.Repo, rkey string
 	if err != nil {
 		return nil, explainMirrorError(err)
 	}
-	return &PullPatch{URI: item.URI, CID: item.CID, Title: ticket.Title, Body: ticket.Body, TargetBranch: ticket.TargetBranch, Patch: data, Base: last.Value.Base.OID, Head: last.Value.Head.OID}, nil
+	body := ""
+	if ticket.Body != nil {
+		body = ticket.Body.Text
+	}
+	return &PullPatch{URI: item.URI, CID: item.CID, Title: ticket.Title.Text, Body: body, TargetBranch: ticket.TargetBranch, Patch: data, Base: last.Value.Base.OID, Head: last.Value.Head.OID}, nil
 }
 
 func explainMirrorError(err error) error {

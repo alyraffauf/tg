@@ -194,7 +194,7 @@ func TestCreateAndUpdatePullUsePublishedCommitRanges(t *testing.T) {
 		t.Fatalf("tokens reused: %d", pds.serviceAuthCalls)
 	}
 	view := service.appview.(testAppview)
-	view.pulls = ticketList(true)
+	view.ticket = &ticketList(true).Items[0]
 	service.appview = view
 	if _, err := service.UpdatePullRound(context.Background(), UpdatePullRoundInput{Target: migrationTarget(), Rkey: "3m2zq4c6pmk2a"}); err != nil {
 		t.Fatal(err)
@@ -219,7 +219,7 @@ func TestCreatePullRejectsUnpublishedHeadBeforeCreatingTicket(t *testing.T) {
 func TestMergeReportsGitSuccessWhenTicketCompletionFails(t *testing.T) {
 	service, _, origin := migrationService(t)
 	view := service.appview.(testAppview)
-	view.pulls = ticketList(true)
+	view.ticket = &ticketList(true).Items[0]
 	merged := false
 	view.mergeHook = func(token string, input any) {
 		merged = true
@@ -299,8 +299,7 @@ func TestIssueAndPullCommentsUseCorrectStrongReferences(t *testing.T) {
 		t.Run(fmt.Sprint(pull), func(t *testing.T) {
 			service, _, origin := migrationService(t)
 			view := service.appview.(testAppview)
-			view.issues = ticketList(false)
-			view.pulls = ticketList(true)
+			view.ticket = &ticketList(pull).Items[0]
 			service.appview = view
 			var err error
 			if pull {
@@ -459,7 +458,7 @@ func TestCreatePullPreservesSourceMirrorFailure(t *testing.T) {
 func TestMergeCompletesTicketWithCAS(t *testing.T) {
 	service, _, origin := migrationService(t)
 	view := service.appview.(testAppview)
-	view.pulls = ticketList(true)
+	view.ticket = &ticketList(true).Items[0]
 	service.appview = view
 	origin.records = map[string]*atproto.GetRecordOutput{tangled.IssueCollection + "/3m2zq4c6pmk2a": {CID: cidPointer(), Value: ticketRecord("PR", "", "main")}}
 	result, err := service.MergePull(context.Background(), migrationTarget(), "3m2zq4c6pmk2a")
@@ -544,7 +543,7 @@ func TestFosterReadsStopAfterOriginUpgradeAndNeverHideProbeFailures(t *testing.T
 func TestForkPullReadsAndMergesFromSourceRepository(t *testing.T) {
 	service, _, origin := migrationService(t)
 	view := service.appview.(testAppview)
-	view.pulls = ticketList(true)
+	view.ticket = &ticketList(true).Items[0]
 	var patch tangled.Patch
 	if err := json.Unmarshal([]byte(`{"uri":"at://did:plc:repo/org.tangled.review.patch/patch","cid":"`+testCID+`","value":{"base":{"oid":"base"},"head":{"oid":"head"},"source":{"repo":"did:plc:fork","branch":"feature"}}}`), &patch); err != nil {
 		t.Fatal(err)
@@ -575,7 +574,7 @@ func TestForkPullReadsAndMergesFromSourceRepository(t *testing.T) {
 func TestMirrorLagPreservesErrorsAndDoesNotCompletePull(t *testing.T) {
 	service, _, origin := migrationService(t)
 	view := service.appview.(testAppview)
-	view.pulls = ticketList(true)
+	view.ticket = &ticketList(true).Items[0]
 	failure := &atclient.APIError{StatusCode: 404, Name: "RevisionNotFound"}
 	view.formatErr, view.mergeErr = failure, failure
 	service.appview = view

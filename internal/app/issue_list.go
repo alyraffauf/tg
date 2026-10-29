@@ -30,7 +30,7 @@ func (s *Service) ListIssues(ctx context.Context, t Target, options ListOptions)
 	if err != nil {
 		return nil, fmt.Errorf("list issues for %q: %w", t.Repo, err)
 	}
-	items, warnings := s.buildItems(ctx, issues.Items, decodeIssue)
+	items, warnings := s.buildItems(ctx, issues.Items, false)
 	warnings = append(recordWarnings(issues.Warnings), warnings...)
 	return &ItemListResult{Items: items, Warnings: warnings}, nil
 }

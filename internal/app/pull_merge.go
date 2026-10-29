@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/alyraffauf/tg/tangled"
+	"github.com/bluesky-social/indigo/atproto/syntax"
 )
 
 func (s *Service) MergePull(ctx context.Context, t Target, rkey string) (*MergePullResult, error) {
@@ -16,17 +16,12 @@ func (s *Service) MergePull(ctx context.Context, t Target, rkey string) (*MergeP
 		return nil, err
 	}
 	did := stringValue(repo.Value.RepoDid)
-	pulls, err := s.appview.ListPulls(ctx, did, tangled.ListOpts{Limit: 100})
+	item, ticket, err := s.readTicket(ctx, repo, rkey, true)
 	if err != nil {
 		return nil, err
 	}
-	item, err := findByRKey(pulls.Items, rkey, "pull request")
-	if err != nil {
-		return nil, err
-	}
-	ticket, err := decodePull(item.Value)
-	if err != nil {
-		return nil, err
+	if _, err := syntax.ParseCID(item.CID); err != nil {
+		return nil, fmt.Errorf("ticket has no valid CID: %w", err)
 	}
 	if item.State != "open" {
 		return nil, fmt.Errorf("only an open pull request can be merged")

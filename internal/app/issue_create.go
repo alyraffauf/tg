@@ -16,9 +16,6 @@ func (s *Service) CreateIssue(ctx context.Context, t Target, title, body string)
 	if err != nil {
 		return nil, err
 	}
-	if err := s.requireNative(ctx, repo); err != nil {
-		return nil, err
-	}
 	receipt, warnings, err := s.socialProcedure(ctx, repo, "com.atproto.repo.createRecord", map[string]any{"collection": tangled.IssueCollection, "record": ticketRecord(title, body, "")})
 
 	if err != nil {

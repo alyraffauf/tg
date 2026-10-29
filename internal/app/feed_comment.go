@@ -10,7 +10,7 @@ import (
 	"github.com/bluesky-social/indigo/atproto/syntax"
 )
 
-func (s *Service) createFeedComment(ctx context.Context, item tangled.ListItem, body string, round *int64) (*CreatedRecordResult, error) {
+func (s *Service) createFeedComment(ctx context.Context, repo *tangled.Repo, item tangled.ListItem, body string) (*CreatedRecordResult, error) {
 	if strings.TrimSpace(body) == "" {
 		return nil, fmt.Errorf("comment body must not be empty")
 	}
@@ -18,22 +18,9 @@ func (s *Service) createFeedComment(ctx context.Context, item tangled.ListItem, 
 	if err != nil {
 		return nil, err
 	}
-	repo, err := s.resolveRepo(ctx, Target{RepoDID: extractDID(item.URI)})
-	if err != nil {
-		return nil, err
+	if extractDID(item.URI) != stringValue(repo.Value.RepoDid) {
+		return nil, fmt.Errorf("comment subject belongs to a different repository")
 	}
-	if round != nil {
-		patches, err := s.appview.ListPatches(ctx, item.URI)
-		if err != nil {
-			return nil, err
-		}
-		if *round < 0 || *round >= int64(len(patches)) {
-			return nil, fmt.Errorf("pull request round does not exist")
-		}
-		patch := patches[*round]
-		subject = &comatproto.RepoStrongRef{LexiconTypeID: "com.atproto.repo.strongRef", Uri: patch.URI, Cid: patch.CID}
-	}
-
 	record := map[string]any{"$type": tangled.FeedCommentCollection, "subject": subject, "body": tangled.Markdown{Type: "org.tangled.markup.markdown", Text: body}, "createdAt": nowString()}
 	receipt, warnings, err := s.socialProcedure(ctx, repo, "com.atproto.repo.createRecord", map[string]any{"collection": tangled.FeedCommentCollection, "record": record})
 	if err != nil {

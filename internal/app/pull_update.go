@@ -3,8 +3,6 @@ package app
 import (
 	"context"
 	"fmt"
-
-	"github.com/alyraffauf/tg/tangled"
 )
 
 type UpdatePullRoundInput struct {
@@ -21,15 +19,7 @@ func (s *Service) UpdatePullRound(ctx context.Context, in UpdatePullRoundInput) 
 	if err != nil {
 		return nil, err
 	}
-	pulls, err := s.appview.ListPulls(ctx, stringValue(repo.Value.RepoDid), tangled.ListOpts{Limit: 100})
-	if err != nil {
-		return nil, err
-	}
-	item, err := findByRKey(pulls.Items, in.Rkey, "pull request")
-	if err != nil {
-		return nil, err
-	}
-	ticket, err := decodePull(item.Value)
+	item, ticket, err := s.readTicket(ctx, repo, in.Rkey, true)
 	if err != nil {
 		return nil, err
 	}

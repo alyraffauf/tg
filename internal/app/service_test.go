@@ -386,6 +386,7 @@ type testAppview struct {
 	mergeErr         error
 	mergeHook        func(string, any)
 	ticket           *tangled.ListItem
+	getTicketHook    func(string) (*tangled.ListItem, error)
 	repo             *tangled.Repo
 	repos            map[string]*tangled.Repo
 	repoErr          error
@@ -483,7 +484,10 @@ func (a testAppview) Merge(_ context.Context, token string, input any) error {
 	}
 	return a.mergeErr
 }
-func (a testAppview) GetTicket(context.Context, string) (*tangled.ListItem, error) {
+func (a testAppview) GetTicket(_ context.Context, uri string) (*tangled.ListItem, error) {
+	if a.getTicketHook != nil {
+		return a.getTicketHook(uri)
+	}
 	if a.ticket != nil {
 		return a.ticket, nil
 	}

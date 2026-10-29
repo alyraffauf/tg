@@ -8,15 +8,11 @@ import (
 )
 
 func (s *Service) CommentPull(ctx context.Context, t Target, rkey, body string) (*CreatedRecordResult, error) {
-	did, err := s.repoDID(ctx, t)
+	repo, err := s.resolveRepo(ctx, t)
 	if err != nil {
 		return nil, err
 	}
-	pulls, err := s.appview.ListPulls(ctx, did, tangled.ListOpts{Limit: defaultListLimit})
-	if err != nil {
-		return nil, err
-	}
-	item, err := findByRKey(pulls.Items, rkey, "pull request")
+	item, _, err := s.readTicket(ctx, repo, rkey, true)
 	if err != nil {
 		return nil, err
 	}
@@ -28,5 +24,5 @@ func (s *Service) CommentPull(ctx context.Context, t Target, rkey, body string) 
 		return nil, fmt.Errorf("pull request has no patch rounds")
 	}
 	latest := patches[len(patches)-1]
-	return s.createFeedComment(ctx, tangled.ListItem{URI: latest.URI, CID: latest.CID}, body, nil)
+	return s.createFeedComment(ctx, repo, tangled.ListItem{URI: latest.URI, CID: latest.CID}, body)
 }
