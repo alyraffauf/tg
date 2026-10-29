@@ -85,6 +85,7 @@ func sampleSession(did syntax.DID) oauth.ClientSessionData {
 		HostURL:      "https://example.com",
 		AccessToken:  "access-token",
 		RefreshToken: "refresh-token",
+		Scopes:       append([]string(nil), DefaultScopes...),
 	}
 }
 
@@ -413,7 +414,7 @@ func fullyPopulatedSession(t *testing.T, did syntax.DID) oauth.ClientSessionData
 		AuthServerURL:                "https://auth.example.com",
 		AuthServerTokenEndpoint:      "https://auth.example.com/token",
 		AuthServerRevocationEndpoint: "https://auth.example.com/revoke",
-		Scopes:                       []string{"atproto", "repo:sh.tangled.repo"},
+		Scopes:                       append([]string(nil), DefaultScopes...),
 		AccessToken:                  "access-token-123",
 		RefreshToken:                 "refresh-token-456",
 		DPoPAuthServerNonce:          "authserver-nonce",

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"slices"
 	"strings"
 
 	"github.com/bluesky-social/indigo/atproto/atclient"
@@ -16,7 +15,10 @@ import (
 	"github.com/zalando/go-keyring"
 )
 
-var ErrNotAuthenticated = errors.New("not authenticated")
+var (
+	ErrNotAuthenticated   = errors.New("not authenticated")
+	ErrOAuthScopeMismatch = errors.New("OAuth permissions changed")
+)
 
 const (
 	SessionStatusActive  = "active"
@@ -228,6 +230,9 @@ func (m *AuthManager) FinishLogin(ctx context.Context, query url.Values) error {
 	}
 	m.pendingIdentifier = ""
 	did := session.AccountDID.String()
+	if err := m.validateOAuthScopes(ctx, Account{DID: did, Handle: handle}, session.Scopes); err != nil {
+		return err
+	}
 	if err := m.store.SetAccountHandle(did, handle); err != nil {
 		return err
 	}
@@ -298,7 +303,7 @@ func (m *AuthManager) OAuthSessionHasScope(ctx context.Context, scope string) (h
 	if err != nil {
 		return false, false, err
 	}
-	return slices.Contains(session.Data.Scopes, scope), true, nil
+	return hasOAuthScopes(session.Data.Scopes, []string{scope}), true, nil
 }
 
 // APIClient returns an API client and the account DID for the active session,
@@ -370,9 +375,6 @@ func (m *AuthManager) restoreOAuthClient(account Account) error {
 }
 
 func (m *AuthManager) resumeOAuthSession(ctx context.Context, account Account) (*oauth.ClientSession, error) {
-	if err := m.restoreOAuthClient(account); err != nil {
-		return nil, err
-	}
 	did, err := syntax.ParseDID(account.DID)
 	if err != nil {
 		return nil, err
@@ -382,6 +384,12 @@ func (m *AuthManager) resumeOAuthSession(ctx context.Context, account Account) (
 		if errors.Is(err, keyring.ErrNotFound) {
 			return nil, ErrNotAuthenticated
 		}
+		return nil, err
+	}
+	if err := m.validateOAuthScopes(ctx, account, session.Data.Scopes); err != nil {
+		return nil, err
+	}
+	if err := m.restoreOAuthClient(account); err != nil {
 		return nil, err
 	}
 	return session, nil

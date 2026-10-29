@@ -31,7 +31,7 @@ func TestAuthManagerOAuthSessionHasScope(t *testing.T) {
 	manager := newAuthManagerForTest("http://127.0.0.1:8095/callback", store)
 	did := mustDID(t, "did:plc:aaaabbbbccccddddeeeeffff")
 	session := fullyPopulatedSession(t, did)
-	session.Scopes = []string{"atproto", "rpc:sh.tangled.repo.push?aud=*"}
+	session.Scopes = append(append([]string(nil), DefaultScopes...), "rpc:sh.tangled.repo.push?aud=*")
 	if err := store.SaveSession(context.Background(), session); err != nil {
 		t.Fatalf("SaveSession() error = %v", err)
 	}
