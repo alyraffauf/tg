@@ -1,6 +1,6 @@
 [project]
 name = "tgmcp"
-version = "0.7.0"
+version = "0.8.0"
 description = "A typed MCP server for the tg Tangled client"
 readme = "README.md"
 authors = [
