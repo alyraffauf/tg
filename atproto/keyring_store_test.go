@@ -55,8 +55,11 @@ func (f *fakeKeyring) Delete(service, user string) error {
 func newAuthManagerForTest(callbackURL string, store *KeyringStore) *AuthManager {
 	config := oauth.NewLocalhostConfig(callbackURL, DefaultScopes)
 	config.UserAgent = "tg"
+	app := oauth.NewClientApp(&config, store)
+	// Test sessions use loopback servers, which Indigo's default client blocks.
+	app.Client = http.DefaultClient
 	return &AuthManager{
-		app:    oauth.NewClientApp(&config, store),
+		app:    app,
 		store:  store,
 		client: http.DefaultClient,
 	}
