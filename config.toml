@@ -10,5 +10,5 @@ protocol = "ssh"
 # Account handle or DID to use by default.
 # account = "alice.example"
 
-# Knot selected for repository creation. Omit for automatic discovery.
+# Knot selected for repository creation. Omit to use knot1.tangled.sh.
 # knot = "knot.example"

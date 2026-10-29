@@ -6,7 +6,7 @@ description: Config file, environment variables, and flags.
 `tg` resolves configuration values from the following sources, in increasing
 precedence (later sources override earlier ones):
 
-1. **Defaults.** `appview` is `https://api.tangled.org`. `knot` is unset to permit automatic verified Knot discovery. `ssh-port` is `22`. `protocol` is `ssh`.
+1. **Defaults.** `appview` is `https://api.tangled.org`. Repository creation uses `knot1.tangled.sh`. `ssh-port` is `22`. `protocol` is `ssh`.
 2. **Config file** — `$XDG_CONFIG_HOME/tg/config.toml` (or `~/.config/tg/config.toml`)
 3. **Environment variables** — prefixed `TG_` (e.g. `TG_APPVIEW`)
 4. **Command-line flags** — e.g. `--appview`
@@ -57,19 +57,10 @@ Keys containing `.` or `-` map to `TG_`-prefixed underscore-separated names
 | `--appview` | Appview host URL (overrides config file and `TG_APPVIEW`) |
 | `--account` | Account handle or DID for this command                    |
 
-## Automatic verified Knot discovery
+## Repository creation host
 
-When you don't specify a Knot with `--knot`, repo creation reads up to 10 Knot
-registrations from your PDS and verifies each registration. Select a Knot
-explicitly if you have more than 10 registrations. Exactly one verified Knot is
-selected automatically. If no registrations exist, it falls back to
-`knot1.tangled.sh`. One registration that can't be verified errors. If `tg`
-successfully verifies multiple Knots, it errors and lists the candidates so you
-can specify one with `--knot` or set it in the config file.
-
-Set `knot` in your config, `TG_KNOT` in your environment, or pass `--knot` to
-select a host explicitly and bypass automatic discovery. The flag overrides
-the environment, which overrides the config file.
+Repository creation uses `knot1.tangled.sh` by default. Select another host with
+`knot` in your config, `TG_KNOT`, or `tg repo create --knot`.
 
 ## Shell completions
 

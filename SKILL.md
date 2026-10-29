@@ -54,17 +54,17 @@ tg pr view <key> --json
 tg pr diff <key>
 ```
 
-To submit local commits, write the description to `body.md`, then create the PR:
+Push your source branch, write the description to `body.md`, then create the PR:
 
 ```bash
 tg pr create --title 'Fix clone failure' --body-file body.md --json
 ```
 
-tg uploads a patch of committed changes. For forks, set `--repo` to the target and `--source-repo` to the fork. Fetch the target branch, then pass that remote-tracking branch as `--base`.
+tg submits a published commit range. For forks, set `--repo` to the target and `--source-repo` to the fork. Fetch the target branch, then pass that remote-tracking branch as `--base`.
 
 To submit revised commits, run `tg pr update <key>`. It appends a patch round from the PR's recorded source branch. For forks, pass `--base` again.
 
-Issue edits, PR edits, and PR updates address the selected account's records and do not accept `--repo`. For edits, use `--title` or `--body`.
+Issue edits, PR edits, and PR updates accept `--repo` or detect the repository from the checkout. For edits, use `--title` or `--body`.
 
 ## Inspect CI
 
