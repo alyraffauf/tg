@@ -18,6 +18,9 @@ go build ./cmd/tg
 go test ./...
 ```
 
+Run upstream integration tests against a disposable Tangled localinfra stack with
+the `upstream_integration` build tag and `TG_UPSTREAM_INTEGRATION=1`.
+
 ## Nix
 
 Nix is a first-class citizen: the flake builds the package, runs the tests,
