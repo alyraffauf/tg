@@ -10,6 +10,8 @@ from fastmcp.exceptions import ToolError
 from pydantic import Field
 
 from tgmcp.models import (
+    AttestationListResult,
+    AttestationRetryResult,
     AuthAccountListResult,
     AuthStatusResult,
     CreatedRecordResult,
@@ -17,7 +19,9 @@ from tgmcp.models import (
     ItemListResult,
     MergePullResult,
     Pipeline,
+    PipelineApproveResult,
     PipelineCancelResult,
+    PipelineRetryResult,
     PipelineListResult,
     PipelineLogsResult,
     PipelineTriggerResult,
@@ -126,7 +130,7 @@ def item_list_arguments(
 async def list_issues(
     repo: RepoTarget,
     author: Account | None = None,
-    state: Literal["open", "closed"] | None = None,
+    state: Literal["open", "closed", "completed"] | None = None,
     limit: ResultLimit = 50,
     order: SortOrder | None = None,
 ) -> ItemListResult:
@@ -161,16 +165,22 @@ async def create_issue(
 
 @mcp.tool(annotations={**WRITE, "idempotentHint": True})
 async def edit_issue(
-    rkey: RecordKey, title: RecordTitle | None = None, body: str | None = None
+    repo: RepoTarget,
+    rkey: RecordKey,
+    title: RecordTitle | None = None,
+    body: str | None = None,
+    expected_cid: str | None = None,
 ) -> UpdatedRecordResult:
-    """Edit an issue owned by the tg account.
+    """Edit an issue in the specified repository.
 
     Provide a title or body. Omitted or null fields stay unchanged.
     Set body to an empty string to clear it.
     """
     if title is None and body is None:
         raise ToolError("Provide title or body to edit an issue")
-    arguments = ["issue", "edit"]
+    arguments = ["issue", "edit", "--repo", repo]
+    if expected_cid is not None:
+        arguments.append(f"--expected-cid={expected_cid}")
     if title is not None:
         arguments.append(f"--title={title}")
     if body is not None:
@@ -193,18 +203,40 @@ async def comment_on_issue(
 
 
 @mcp.tool(annotations=WRITE)
-async def close_issue(repo: RepoTarget, rkey: RecordKey) -> StateResult:
+async def close_issue(
+    repo: RepoTarget, rkey: RecordKey, expected_cid: str | None = None
+) -> StateResult:
     """Close an issue."""
     return await runner.run_json(
-        ["issue", "close", "--repo", repo, "--", rkey], StateResult
+        [
+            "issue",
+            "close",
+            "--repo",
+            repo,
+            *([f"--expected-cid={expected_cid}"] if expected_cid is not None else []),
+            "--",
+            rkey,
+        ],
+        StateResult,
     )
 
 
 @mcp.tool(annotations=WRITE)
-async def reopen_issue(repo: RepoTarget, rkey: RecordKey) -> StateResult:
+async def reopen_issue(
+    repo: RepoTarget, rkey: RecordKey, expected_cid: str | None = None
+) -> StateResult:
     """Reopen a closed issue."""
     return await runner.run_json(
-        ["issue", "reopen", "--repo", repo, "--", rkey], StateResult
+        [
+            "issue",
+            "reopen",
+            "--repo",
+            repo,
+            *([f"--expected-cid={expected_cid}"] if expected_cid is not None else []),
+            "--",
+            rkey,
+        ],
+        StateResult,
     )
 
 
@@ -239,16 +271,22 @@ async def diff_pull_request(repo: RepoTarget, rkey: RecordKey) -> PullDiffResult
 
 @mcp.tool(annotations={**WRITE, "idempotentHint": True})
 async def edit_pull_request(
-    rkey: RecordKey, title: RecordTitle | None = None, body: str | None = None
+    repo: RepoTarget,
+    rkey: RecordKey,
+    title: RecordTitle | None = None,
+    body: str | None = None,
+    expected_cid: str | None = None,
 ) -> UpdatedRecordResult:
-    """Change the title or body of a pull request authored by the tg account.
+    """Change the title or body of a pull request in the specified repository.
 
     Null leaves a field unchanged. An empty body clears it.
     Use update_pull_request to submit code changes.
     """
     if title is None and body is None:
         raise ToolError("Provide title or body to edit a pull request")
-    arguments = ["pr", "edit"]
+    arguments = ["pr", "edit", "--repo", repo]
+    if expected_cid is not None:
+        arguments.append(f"--expected-cid={expected_cid}")
     if title is not None:
         arguments.append(f"--title={title}")
     if body is not None:
@@ -268,18 +306,40 @@ async def comment_on_pull_request(
 
 
 @mcp.tool(annotations=WRITE)
-async def close_pull_request(repo: RepoTarget, rkey: RecordKey) -> StateResult:
+async def close_pull_request(
+    repo: RepoTarget, rkey: RecordKey, expected_cid: str | None = None
+) -> StateResult:
     """Mark a pull request as closed."""
     return await runner.run_json(
-        ["pr", "close", "--repo", repo, "--", rkey], StateResult
+        [
+            "pr",
+            "close",
+            "--repo",
+            repo,
+            *([f"--expected-cid={expected_cid}"] if expected_cid is not None else []),
+            "--",
+            rkey,
+        ],
+        StateResult,
     )
 
 
 @mcp.tool(annotations=WRITE)
-async def reopen_pull_request(repo: RepoTarget, rkey: RecordKey) -> StateResult:
+async def reopen_pull_request(
+    repo: RepoTarget, rkey: RecordKey, expected_cid: str | None = None
+) -> StateResult:
     """Reopen a closed pull request."""
     return await runner.run_json(
-        ["pr", "reopen", "--repo", repo, "--", rkey], StateResult
+        [
+            "pr",
+            "reopen",
+            "--repo",
+            repo,
+            *([f"--expected-cid={expected_cid}"] if expected_cid is not None else []),
+            "--",
+            rkey,
+        ],
+        StateResult,
     )
 
 
@@ -403,6 +463,7 @@ async def create_repo(
     push_path: AbsolutePath | None = None,
     remote: NonEmptyText = "origin",
     ssh_port: Annotated[int, Field(ge=1, le=65535)] | None = None,
+    contribution_policy: Literal["anyone", "members", "collaborators"] | None = None,
 ) -> RepoCreateResult:
     """Create a repository under the tg account.
 
@@ -423,6 +484,7 @@ async def create_repo(
             push=push_path,
             remote=remote,
             ssh_port=ssh_port,
+            contribution_policy=contribution_policy,
         ),
     ]
     if clone:
@@ -448,12 +510,18 @@ async def edit_repo(
     spindle: str | None = None,
     add_labels: list[NonEmptyText] | None = None,
     remove_labels: list[NonEmptyText] | None = None,
+    contribution_policy: Literal["anyone", "members", "collaborators"] | None = None,
 ) -> RepoEditResult:
     """Change repository metadata or labels.
 
     Null leaves a field unchanged. An empty string clears it.
     """
-    flags = optional_flags(description=description, website=website, spindle=spindle)
+    flags = optional_flags(
+        description=description,
+        website=website,
+        spindle=spindle,
+        contribution_policy=contribution_policy,
+    )
     flags += list_flag("add-label", add_labels) + list_flag(
         "remove-label", remove_labels
     )
@@ -493,7 +561,7 @@ async def create_pull_request(
     head: NonEmptyText | None = None,
     source_repo: RepoTarget | None = None,
 ) -> PRCreateResult:
-    """Create a pull request from a local checkout.
+    """Create a pull request using published commits from a local checkout.
 
     head defaults to the current branch. For a fork, provide source_repo and base.
     Use an existing checkout as working_directory.
@@ -517,14 +585,25 @@ async def create_pull_request(
 
 @mcp.tool(annotations=WRITE)
 async def update_pull_request(
-    rkey: RecordKey, working_directory: AbsolutePath, base: NonEmptyText | None = None
+    repo: RepoTarget,
+    rkey: RecordKey,
+    working_directory: AbsolutePath,
+    base: NonEmptyText | None = None,
+    head: NonEmptyText | None = None,
+    source_repo: RepoTarget | None = None,
 ) -> UpdatedRecordResult:
-    """Submit code changes as a new patch round for a PR authored by the tg account.
+    """Submit published commits as a new patch round for a PR.
 
     Use the source checkout as working_directory.
     Use edit_pull_request for title or body changes.
     """
-    arguments = ["pr", "update", *optional_flags(base=base), "--", rkey]
+    arguments = [
+        "pr",
+        "update",
+        *optional_flags(repo=repo, base=base, head=head, source_repo=source_repo),
+        "--",
+        rkey,
+    ]
     return await runner.run_json(
         arguments, UpdatedRecordResult, working_directory=working_directory
     )
@@ -560,10 +639,13 @@ async def trigger_pipeline(
     working_directory: AbsolutePath | None = None,
 ) -> PipelineTriggerResult:
     """Start CI for a commit or branch. Branch names need a local checkout."""
-    if working_directory is None and re.fullmatch(r"[0-9a-fA-F]{40}", revision) is None:
+    if (
+        working_directory is None
+        and re.fullmatch(r"(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})", revision) is None
+    ):
         raise ToolError(
             "Provide an absolute working_directory containing a checkout to resolve "
-            "the revision, or pass a full 40-character commit SHA"
+            "the revision, or pass a full 40- or 64-character commit SHA"
         )
     arguments = [
         "pipeline",
@@ -584,7 +666,7 @@ async def cancel_pipeline(
     pipeline_id: NonEmptyText,
     workflows: list[NonEmptyText] | None = None,
 ) -> PipelineCancelResult:
-    """Cancel pending or running workflows. Omit workflows to cancel all."""
+    """Cancel blocked, pending or running workflows. Omit workflows to cancel all."""
     arguments = [
         "pipeline",
         "cancel",
@@ -668,3 +750,54 @@ async def add_ssh_key(
 async def delete_ssh_key(rkey: RecordKey) -> DeletedRecordResult:
     """Remove a public SSH key from the tg account."""
     return await runner.run_json(["ssh-key", "delete", "--", rkey], DeletedRecordResult)
+
+
+@mcp.tool(annotations=READ_ONLY)
+async def list_pending_attestations() -> AttestationListResult:
+    """List saved knot changes awaiting an attestation from the active account."""
+    return await runner.run_json(
+        ["auth", "attestations", "list"], AttestationListResult
+    )
+
+
+@mcp.tool(annotations={**WRITE, "idempotentHint": True})
+async def retry_pending_attestations() -> AttestationRetryResult:
+    """Retry queued attestations without repeating the original knot mutations."""
+    return await runner.run_json(
+        ["auth", "attestations", "retry"], AttestationRetryResult
+    )
+
+
+@mcp.tool(annotations=WRITE)
+async def approve_pipeline(
+    repo: RepoTarget,
+    pipeline_id: NonEmptyText,
+) -> PipelineApproveResult:
+    """Allow blocked workflows to run. Review the pipeline's source first."""
+    return await runner.run_json(
+        ["pipeline", "approve", *optional_flags(repo=repo), "--", pipeline_id],
+        PipelineApproveResult,
+    )
+
+
+@mcp.tool(annotations=WRITE)
+async def retry_pipeline(
+    repo: RepoTarget,
+    pipeline_id: NonEmptyText,
+    workflows: list[NonEmptyText] | None = None,
+) -> PipelineRetryResult:
+    """Rerun a pipeline's stored specification, optionally selecting workflows.
+
+    A blocked pipeline must be approved before it can be retried.
+    """
+    return await runner.run_json(
+        [
+            "pipeline",
+            "retry",
+            *optional_flags(repo=repo),
+            *list_flag("workflow", workflows),
+            "--",
+            pipeline_id,
+        ],
+        PipelineRetryResult,
+    )

@@ -104,3 +104,13 @@ async def test_cancellation_stops_stream_tree(fake_tg: FakeTG, log_line: str) ->
     finally:
         task.cancel()
         await asyncio.gather(task, return_exceptions=True)
+
+
+async def test_log_step_outcome_survives_collection(fake_tg: FakeTG) -> None:
+    fake_tg.configure(
+        stdout='{"type":"control","control":{"kind":"user","step":0,"time":"2026-10-28T00:00:00Z","status":"end","outcome":"failed","content":"build","workflow":"ci.yml"}}\n'
+    )
+    result = await fake_tg.runner().collect_logs(
+        [], max_events=10, max_bytes=4096, timeout_seconds=2
+    )
+    assert result.events[0].control.outcome == "failed"

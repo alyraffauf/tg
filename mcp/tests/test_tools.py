@@ -25,7 +25,12 @@ async def test_create_issue_preserves_literal_input(
             "body": "first\nsecond",
         },
     )
-    assert result.structured_content == {"rkey": "key", "uri": "at://example"}
+    assert result.structured_content == {
+        "rkey": "key",
+        "uri": "at://example",
+        "cid": "",
+        "warnings": [],
+    }
     assert fake_tg.requests[0]["arguments"] == [
         "--json",
         "issue",
@@ -55,13 +60,22 @@ async def test_edit_field_semantics(
     fields: dict[str, Any],
     expected: list[str],
 ) -> None:
-    result = await client.call_tool(tool, {"rkey": "key", **fields})
-    assert result.structured_content == {"rkey": "key"}
+    result = await client.call_tool(
+        tool, {"repo": "alice.example/repo", "rkey": "key", **fields}
+    )
+    assert result.structured_content == {
+        "rkey": "key",
+        "warnings": [],
+        "uri": "",
+        "cid": "",
+    }
     kind = "issue" if tool == "edit_issue" else "pr"
     assert fake_tg.requests[0]["arguments"] == [
         "--json",
         kind,
         "edit",
+        "--repo",
+        "alice.example/repo",
         *expected,
         "--",
         "key",
@@ -117,13 +131,19 @@ async def test_git_tool_uses_cwd(
 ) -> None:
     await client.call_tool(
         "update_pull_request",
-        {"rkey": "key", "working_directory": str(tmp_path), "base": "main"},
+        {
+            "repo": "alice.example/repo",
+            "rkey": "key",
+            "working_directory": str(tmp_path),
+            "base": "main",
+        },
     )
     assert fake_tg.requests[0]["cwd"] == str(tmp_path)
     assert fake_tg.requests[0]["arguments"] == [
         "--json",
         "pr",
         "update",
+        "--repo=alice.example/repo",
         "--base=main",
         "--",
         "key",
@@ -273,7 +293,7 @@ def check_schema(schema: Any, path: str) -> None:
 
 async def test_discovery_schemas_and_annotations(client: Client) -> None:
     tools = {tool.name: tool for tool in await client.list_tools()}
-    assert len(tools) == 42
+    assert len(tools) == 46
     for tool in tools.values():
         check_schema(tool.input_schema, f"{tool.name}.input")
         check_schema(tool.output_schema, f"{tool.name}.output")
@@ -289,5 +309,126 @@ async def test_discovery_schemas_and_annotations(client: Client) -> None:
     assert write.idempotent_hint is False
     assert delete.destructive_hint is True
     assert merge.destructive_hint is True
+    assert tools["approve_pipeline"].annotations.read_only_hint is False
+    assert tools["retry_pipeline"].output_schema is not None
     assert tools["pipeline_logs"].output_schema is not None
     assert "stopReason" in tools["pipeline_logs"].output_schema["properties"]
+
+
+async def test_pending_attestation_tools(client: Client, fake_tg: FakeTG) -> None:
+    fake_tg.configure(stdout='{"items":[]}')
+    listed = await client.call_tool("list_pending_attestations", {})
+    assert listed.structured_content == {"items": []}
+    assert fake_tg.requests[0]["arguments"] == [
+        "--json",
+        "auth",
+        "attestations",
+        "list",
+    ]
+    fake_tg.configure(stdout='{"retried":1,"pending":1,"warnings":["PDS unavailable"]}')
+    retried = await client.call_tool("retry_pending_attestations", {})
+    assert retried.structured_content["pending"] == 1
+    assert fake_tg.requests[-1]["arguments"] == [
+        "--json",
+        "auth",
+        "attestations",
+        "retry",
+    ]
+
+
+async def test_saved_write_preserves_warning(client: Client, fake_tg: FakeTG) -> None:
+    fake_tg.configure(
+        stdout='{"rkey":"key","uri":"at://saved","warnings":["attestation pending"]}'
+    )
+    result = await client.call_tool(
+        "create_issue", {"repo": "alice.example/repo", "title": "Saved"}
+    )
+    assert result.structured_content["warnings"] == ["attestation pending"]
+    assert len(fake_tg.requests) == 1
+
+
+@pytest.mark.parametrize(
+    "tool, payload, expected_command",
+    [
+        (
+            "approve_pipeline",
+            {"pipeline": "opaque-id", "approvalRequested": True},
+            "approve",
+        ),
+        (
+            "retry_pipeline",
+            {"pipeline": "new-id", "originalPipeline": "opaque-id"},
+            "retry",
+        ),
+    ],
+)
+async def test_pipeline_approval_and_retry_tools(
+    client: Client,
+    fake_tg: FakeTG,
+    tool: str,
+    payload: dict[str, Any],
+    expected_command: str,
+) -> None:
+    fake_tg.configure(stdout=json.dumps(payload))
+    await client.call_tool(
+        tool, {"repo": "alice.example/repo", "pipeline_id": "opaque-id"}
+    )
+    assert fake_tg.requests[0]["arguments"] == [
+        "--json",
+        "pipeline",
+        expected_command,
+        "--repo=alice.example/repo",
+        "--",
+        "opaque-id",
+    ]
+
+
+async def test_trigger_pipeline_accepts_sha256_without_checkout(
+    client: Client, fake_tg: FakeTG
+) -> None:
+    commit = "a" * 64
+    fake_tg.configure(stdout=json.dumps({"pipeline": "opaque-id", "commit": commit}))
+    await client.call_tool(
+        "trigger_pipeline", {"repo": "alice.example/repo", "revision": commit}
+    )
+    assert fake_tg.requests[0]["arguments"][-1] == commit
+
+
+@pytest.mark.parametrize("tool", ["edit_issue", "edit_pull_request"])
+async def test_expected_cid_is_passed_to_edit(
+    client: Client, fake_tg: FakeTG, tool: str
+) -> None:
+    fake_tg.configure(stdout='{"rkey":"key","cid":"version","uri":"at://example"}')
+    result = await client.call_tool(
+        tool,
+        {
+            "repo": "alice.example/repo",
+            "rkey": "key",
+            "title": "New",
+            "expected_cid": "version",
+        },
+    )
+    assert "--expected-cid=version" in fake_tg.requests[0]["arguments"]
+    assert result.structured_content["cid"] == "version"
+
+
+async def test_trigger_pipeline_preserves_all_scheduled_pipelines(
+    client: Client, fake_tg: FakeTG
+) -> None:
+    commit = "a" * 64
+    fake_tg.configure(
+        stdout=json.dumps(
+            {
+                "pipeline": "first",
+                "pipelines": ["first", "second"],
+                "message": "Started verification",
+                "commit": commit,
+            }
+        )
+    )
+    result = await client.call_tool(
+        "trigger_pipeline", {"repo": "alice.example/repo", "revision": commit}
+    )
+    assert result.structured_content["pipeline"] == "first"
+    assert result.structured_content["pipelines"] == ["first", "second"]
+    assert result.structured_content["message"] == "Started verification"

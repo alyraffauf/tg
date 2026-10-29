@@ -131,6 +131,8 @@ class SSHKeyListResult(TGOutput):
 
 
 class ViewResult(TGOutput):
+    cid: str = ""
+    uri: str = ""
     """Issue or pull request detail."""
 
     rkey: str
@@ -154,6 +156,8 @@ class StringViewResult(TGOutput):
 
 
 class CreatedRecordResult(TGOutput):
+    cid: str = ""
+    warnings: list[str] = Field(default_factory=list)
     rkey: str = Field(description="Record key for view or edit calls")
     uri: str = Field(description="ATProto record URI. The final component is the rkey.")
 
@@ -163,6 +167,9 @@ class DeletedRecordResult(TGOutput):
 
 
 class UpdatedRecordResult(TGOutput):
+    cid: str = ""
+    uri: str = ""
+    warnings: list[str] = Field(default_factory=list)
     """Record key returned after an edit or pull request update."""
 
     rkey: str = Field(
@@ -171,6 +178,9 @@ class UpdatedRecordResult(TGOutput):
 
 
 class StateResult(TGOutput):
+    cid: str = ""
+    uri: str = ""
+    warnings: list[str] = Field(default_factory=list)
     rkey: str
     state: str
 
@@ -212,6 +222,7 @@ class RepoCloneResult(TGOutput):
 
 
 class RepoEditResult(TGOutput):
+    warnings: list[str] = Field(default_factory=list)
     uri: str
     description: str
 
@@ -221,11 +232,15 @@ class RepoDeleteResult(TGOutput):
 
 
 class RepoDefaultBranchResult(TGOutput):
+    warnings: list[str] = Field(default_factory=list)
     uri: str
     branch: str
 
 
 class RepoForkResult(TGOutput):
+    import_status: str = ""
+    import_reason: str = ""
+    warnings: list[str] = Field(default_factory=list)
     handle: str
     name: str
     uri: str
@@ -233,6 +248,8 @@ class RepoForkResult(TGOutput):
 
 
 class PRCreateResult(TGOutput):
+    cid: str = ""
+    warnings: list[str] = Field(default_factory=list)
     uri: str = Field(
         description="Created PR record URI. The final component is the rkey."
     )
@@ -295,11 +312,14 @@ class PipelineCancelResult(TGOutput):
 
 class PipelineTriggerResult(TGOutput):
     pipeline: str
+    pipelines: list[str] = Field(default_factory=list)
+    message: str = ""
     commit: str
     workflows: list[str] = Field(default_factory=list)
 
 
 class PipelineLogControl(TGOutput):
+    outcome: str = ""
     kind: str
     step: int
     time: str
@@ -338,3 +358,36 @@ class PipelineLogsResult(TGOutput):
         default=None,
         description="Stream error. Collected events remain available.",
     )
+
+
+class AttestationSubject(TGOutput):
+    uri: str
+    cid: str
+
+
+class AttestationEntry(TGOutput):
+    rkey: str
+    subject: AttestationSubject
+    change: str = ""
+    created_at: str
+
+
+class AttestationListResult(TGOutput):
+    items: list[AttestationEntry]
+
+
+class AttestationRetryResult(TGOutput):
+    retried: int
+    pending: int
+    warnings: list[str] = Field(default_factory=list)
+
+
+class PipelineApproveResult(TGOutput):
+    pipeline: str
+    approval_requested: bool
+
+
+class PipelineRetryResult(TGOutput):
+    pipeline: str
+    original_pipeline: str
+    workflows: list[str] = Field(default_factory=list)
