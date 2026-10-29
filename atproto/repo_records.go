@@ -29,9 +29,10 @@ type PutRecordInput struct {
 }
 
 type DeleteRecordInput struct {
-	Repo       string `json:"repo"`
-	Collection string `json:"collection"`
-	Rkey       string `json:"rkey"`
+	SwapRecord *syntax.CID `json:"swapRecord,omitempty"`
+	Repo       string      `json:"repo"`
+	Collection string      `json:"collection"`
+	Rkey       string      `json:"rkey"`
 }
 
 // Blob is the blob reference returned by com.atproto.repo.uploadBlob.
@@ -72,7 +73,7 @@ const maxRecordPages = 1000
 
 // PutRecord writes a record to the PDS, returning its at:// URI and CID.
 func (a *ATProto) PutRecord(ctx context.Context, in PutRecordInput) (uri, cid string, err error) {
-	if strings.HasPrefix(in.Collection, "sh.tangled.") {
+	if strings.HasPrefix(in.Collection, "org.tangled.") {
 		if err := tangledlex.ValidateRecord(in.Collection, in.Record); err != nil {
 			return "", "", fmt.Errorf("validate %s record: %w", in.Collection, err)
 		}
@@ -182,4 +183,23 @@ func (a *ATProto) ListAllRecords(ctx context.Context, repo, collection string, o
 	}
 
 	return nil, fmt.Errorf("exceeded %d pages listing %s records for %q", maxRecordPages, collection, repo)
+}
+
+func (a *ATProto) CreateRecord(ctx context.Context, in PutRecordInput) (string, string, error) {
+	if strings.HasPrefix(in.Collection, "org.tangled.") {
+		if err := tangledlex.ValidateRecord(in.Collection, in.Record); err != nil {
+			return "", "", err
+		}
+	}
+	var out struct {
+		URI string `json:"uri"`
+		CID string `json:"cid"`
+	}
+	if err := a.Client.Post(ctx, syntax.NSID("com.atproto.repo.createRecord"), in, &out); err != nil {
+		return "", "", err
+	}
+	if out.URI == "" || out.CID == "" {
+		return "", "", fmt.Errorf("create record accepted without receipt; inspect before retrying")
+	}
+	return out.URI, out.CID, nil
 }

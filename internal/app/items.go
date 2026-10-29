@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/alyraffauf/tg/internal/tangledlex"
 	"github.com/alyraffauf/tg/tangled"
 )
 
@@ -25,26 +24,20 @@ type recordView struct {
 }
 
 func decodeIssue(raw json.RawMessage) (recordView, error) {
-	var r tangledlex.RepoIssue
-	if err := json.Unmarshal(raw, &r); err != nil {
+	var ticket tangled.Ticket
+	if err := json.Unmarshal(raw, &ticket); err != nil {
 		return recordView{}, err
 	}
-	return recordView{Title: r.Title, Body: stringValue(r.Body), CreatedAt: r.CreatedAt}, nil
-}
-
-func decodePull(raw json.RawMessage) (recordView, error) {
-	var r tangledlex.RepoPull
-	if err := json.Unmarshal(raw, &r); err != nil {
-		return recordView{}, err
+	if ticket.Type != tangled.IssueCollection {
+		return recordView{}, fmt.Errorf("unexpected ticket type %q", ticket.Type)
 	}
-	return recordView{
-		Title:        r.Title,
-		Body:         stringValue(r.Body),
-		CreatedAt:    r.CreatedAt,
-		SourceBranch: pullSourceBranch(r.Source),
-		TargetBranch: pullTargetBranch(r.Target),
-	}, nil
+	body := ""
+	if ticket.Body != nil {
+		body = ticket.Body.Text
+	}
+	return recordView{Title: ticket.Title.Text, Body: body, CreatedAt: ticket.CreatedAt, TargetBranch: ticket.TargetBranch}, nil
 }
+func decodePull(raw json.RawMessage) (recordView, error) { return decodeIssue(raw) }
 
 func stringValue(value *string) string {
 	if value == nil {
@@ -53,30 +46,9 @@ func stringValue(value *string) string {
 	return *value
 }
 
-func pullSourceBranch(source *tangledlex.RepoPull_Source) string {
-	if source == nil {
-		return ""
-	}
-	return source.Branch
-}
-
-func pullTargetBranch(target *tangledlex.RepoPull_Target) string {
-	if target == nil {
-		return ""
-	}
-	return target.Branch
-}
-
-// resolveAuthor resolves a DID to an author, falling back to the raw DID
-// string for Handle if resolution fails.
+// resolveAuthor uses the DID when an author has no usable handle.
 func (s *Service) resolveAuthor(ctx context.Context, did string) Author {
-	result := Author{DID: did}
-	if ident, err := s.resolver.ResolveDID(ctx, did); err == nil {
-		result.Handle = ident.Handle.String()
-	} else {
-		result.Handle = did
-	}
-	return result
+	return Author{DID: did, Handle: s.ownerHandle(ctx, did)}
 }
 
 // buildItems decodes a listing's items into display/JSON-ready items,
@@ -98,6 +70,15 @@ func (s *Service) buildItems(ctx context.Context, items []tangled.ListItem, deco
 			updated = decoded.CreatedAt
 		}
 
+		if decoded.TargetBranch != "" {
+			patches, err := s.appview.ListPatches(ctx, listItem.URI)
+			if err != nil {
+				warnings = append(warnings, RecordWarning{URI: listItem.URI, Error: fmt.Sprintf("read patch source: %v", err)})
+			} else if len(patches) > 0 && patches[len(patches)-1].Value.Source != nil {
+				decoded.SourceBranch = patches[len(patches)-1].Value.Source.Branch
+			}
+		}
+
 		title := decoded.Title
 		if title == "" {
 			title = "(no title)"
@@ -108,7 +89,7 @@ func (s *Service) buildItems(ctx context.Context, items []tangled.ListItem, deco
 			URI:          listItem.URI,
 			Title:        title,
 			State:        listItem.State,
-			Author:       s.resolveAuthor(ctx, extractDID(listItem.URI)),
+			Author:       s.resolveAuthor(ctx, listItem.Author),
 			CreatedAt:    decoded.CreatedAt,
 			UpdatedAt:    updated,
 			CommentCount: listItem.CommentCount,
@@ -150,41 +131,4 @@ func findByRKey(items []tangled.ListItem, rkey, what string) (*tangled.ListItem,
 		}
 	}
 	return nil, fmt.Errorf("%s %q not found", what, rkey)
-}
-
-// targetRecord resolves t, finds the issue/pull record rkey, and returns the
-// record URI and the repo record URI. collection selects issues or pulls.
-func (s *Service) targetRecord(ctx context.Context, t Target, collection, rkey string) (string, string, error) {
-	repoRecord, err := s.resolveRepo(ctx, t)
-	if err != nil {
-		return "", "", err
-	}
-	repoDID := stringValue(repoRecord.Value.RepoDid)
-	if repoDID == "" {
-		return "", "", fmt.Errorf("repository %q has no repository DID", t.String())
-	}
-
-	var items []tangled.ListItem
-	var recordType string
-	if collection == issueCollection {
-		issues, err := s.appview.ListIssues(ctx, repoDID, tangled.ListOpts{Limit: defaultListLimit})
-		if err != nil {
-			return "", "", fmt.Errorf("list issues for %s: %w", t, err)
-		}
-		items = issues.Items
-		recordType = "issue"
-	} else {
-		pulls, err := s.appview.ListPulls(ctx, repoDID, tangled.ListOpts{Limit: defaultListLimit})
-		if err != nil {
-			return "", "", fmt.Errorf("list pull requests for %s: %w", t, err)
-		}
-		items = pulls.Items
-		recordType = "pull request"
-	}
-
-	record, err := findByRKey(items, rkey, recordType)
-	if err != nil {
-		return "", "", err
-	}
-	return record.URI, repoRecord.URI, nil
 }

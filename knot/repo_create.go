@@ -7,25 +7,32 @@ import (
 	"github.com/bluesky-social/indigo/atproto/syntax"
 )
 
-// CreateRepoInput is the argument to sh.tangled.repo.create.
 type CreateRepoInput struct {
 	Name          string `json:"name"`
-	Rkey          string `json:"rkey"`
-	Source        string `json:"source,omitempty"`
+	Source        string `json:"-"`
+	Description   string `json:"description,omitempty"`
 	DefaultBranch string `json:"defaultBranch,omitempty"`
 }
 
-// CreateRepo creates the repo via sh.tangled.repo.create, returning the minted
-// repoDid. Use the repo name as the rkey (current schema).
-func (c *Client) CreateRepo(ctx context.Context, input CreateRepoInput) (string, error) {
+func (c *Client) CreateRepo(ctx context.Context, in CreateRepoInput) (string, error) {
+	input := map[string]any{"name": in.Name}
+	if in.Source != "" {
+		input["source"] = map[string]string{"$type": "org.tangled.repo.defs#sourceTangled", "did": in.Source}
+	}
+	if in.Description != "" {
+		input["description"] = in.Description
+	}
+	if in.DefaultBranch != "" {
+		input["defaultBranch"] = in.DefaultBranch
+	}
 	var out struct {
-		RepoDid *string `json:"repoDid,omitempty"`
+		DID string `json:"did"`
 	}
-	if err := c.Post(ctx, syntax.NSID("sh.tangled.repo.create"), input, &out); err != nil {
-		return "", fmt.Errorf("create repo on knot: %w", err)
+	if err := c.Post(ctx, syntax.NSID("org.tangled.repo.createRepo"), input, &out); err != nil {
+		return "", err
 	}
-	if out.RepoDid == nil || *out.RepoDid == "" {
-		return "", fmt.Errorf("knot did not return a repoDid")
+	if _, err := syntax.ParseDID(out.DID); err != nil {
+		return "", fmt.Errorf("knot returned no valid repository DID: %w", err)
 	}
-	return *out.RepoDid, nil
+	return out.DID, nil
 }

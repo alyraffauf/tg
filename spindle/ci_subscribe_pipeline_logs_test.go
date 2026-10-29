@@ -56,7 +56,8 @@ func TestDecodeLogEventControl(t *testing.T) {
 		[2][]byte{cborString("kind"), cborString("system")},
 		[2][]byte{cborString("step"), cborInt(-1)},
 		[2][]byte{cborString("time"), cborString("2026-07-31T06:34:08+03:00")},
-		[2][]byte{cborString("status"), cborString("start")},
+		[2][]byte{cborString("status"), cborString("end")},
+		[2][]byte{cborString("outcome"), cborString("failed")},
 		[2][]byte{cborString("content"), cborString("Pull image")},
 		[2][]byte{cborString("workflow"), cborString("build.yml")},
 	)
@@ -67,7 +68,7 @@ func TestDecodeLogEventControl(t *testing.T) {
 	if event.Type != "control" || event.Control == nil {
 		t.Fatalf("decodeLogEvent() = %+v, want control event", event)
 	}
-	if event.Control.Workflow != "build.yml" || event.Control.Step != -1 {
+	if event.Control.Workflow != "build.yml" || event.Control.Step != -1 || event.Control.Outcome != "failed" {
 		t.Fatalf("control = %+v", event.Control)
 	}
 	if event.Data != nil {
@@ -237,5 +238,33 @@ func TestSubscribePipelineLogsHonorsCancellation(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("SubscribePipelineLogs() did not return after cancellation")
+	}
+}
+
+func TestSubscribePipelineLogsRejectsUnconfirmedCompletion(t *testing.T) {
+	upgrader := websocket.Upgrader{CheckOrigin: func(*http.Request) bool { return true }}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		// Upstream currently closes this way even after delivering the archived logs.
+		// A truncated stream has the same close code and must remain an error.
+		defer conn.Close()
+		frame := append(cborMap([2][]byte{cborString("t"), cborString("#data")}), cborMap([2][]byte{cborString("content"), cborString("partial")})...)
+		if err := conn.WriteMessage(websocket.BinaryMessage, frame); err != nil {
+			t.Error(err)
+		}
+	}))
+	defer server.Close()
+	client, err := New(server.URL, server.Client())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var received int
+	err = client.SubscribePipelineLogs(context.Background(), "pipeline", nil, func(PipelineLogEvent) error { received++; return nil })
+	if err == nil || received != 1 {
+		t.Fatalf("received=%d err=%v", received, err)
 	}
 }

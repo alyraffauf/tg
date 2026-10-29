@@ -123,3 +123,12 @@ func (c *Client) remoteBranch(ctx context.Context, dir, remoteAndBranch string) 
 	}
 	return branch, nil
 }
+
+// MergeBase returns the common ancestor used for a commit-based pull request.
+func (c *Client) MergeBase(ctx context.Context, dir, base, head string) (string, error) {
+	data, err := c.gitOutput(ctx, dir, "merge-base", base, head)
+	if err != nil {
+		return "", fmt.Errorf("find pull request merge base: %w", err)
+	}
+	return strings.TrimSpace(string(data)), nil
+}

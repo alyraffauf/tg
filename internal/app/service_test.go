@@ -1,18 +1,12 @@
 package app
 
 import (
-	"bytes"
-	"compress/gzip"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"net/http"
-	"net/http/httptest"
 	"reflect"
 	"strings"
-	"sync"
 	"testing"
 
 	"github.com/alyraffauf/tg/atproto"
@@ -23,240 +17,30 @@ import (
 	"github.com/bluesky-social/indigo/atproto/atclient"
 	"github.com/bluesky-social/indigo/atproto/identity"
 	"github.com/bluesky-social/indigo/atproto/syntax"
-	lexutil "github.com/bluesky-social/indigo/lex/util"
-	"github.com/ipfs/go-cid"
 )
 
-func TestCreateRepoRecordsDefaultBranchOutcome(t *testing.T) {
-	tests := []struct {
-		name           string
-		setBranchErr   error
-		wantWarnings   bool
-		wantDefaultRef string
-	}{
-		{name: "default branch set", wantDefaultRef: "main"},
-		{name: "default branch warning", setBranchErr: errors.New("knot unavailable"), wantWarnings: true, wantDefaultRef: "main"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			pds := &testPDS{}
-			git := &testGit{branch: "main"}
-			knotClient := &testKnot{setDefaultBranchErr: tt.setBranchErr}
-			service := testService(pds, git, knotClient)
-
-			result, err := service.CreateRepo(context.Background(), CreateRepoInput{
-				KnotHost: "knot.example", SSHPort: 2222, Name: "example", PushPath: ".", RemoteName: "origin",
-			})
-			if err != nil {
-				t.Fatalf("CreateRepo() error = %v", err)
-			}
-			if !result.Pushed || result.DefaultBranch != tt.wantDefaultRef {
-				t.Fatalf("CreateRepo() result = %+v", result)
-			}
-			if got := len(result.Warnings) > 0; got != tt.wantWarnings {
-				t.Fatalf("CreateRepo() warnings = %v, want warnings %t", result.Warnings, tt.wantWarnings)
-			}
-			if len(pds.puts) != 1 || pds.puts[0].Collection != repoCollection {
-				t.Fatalf("repository record writes = %+v", pds.puts)
-			}
-			if len(git.pushes) != 1 {
-				t.Fatalf("git pushes = %+v", git.pushes)
-			}
-			if knotClient.setDefaultBranchInput.Repo != "did:plc:repo" {
-				t.Fatalf("SetDefaultBranch() repo = %q, want newly created repository DID", knotClient.setDefaultBranchInput.Repo)
-			}
-			if git.pushes[0].RepoDID != "did:plc:repo" || git.pushes[0].KnotHost != "knot.example" || git.pushes[0].SSHPort != 2222 {
-				t.Fatalf("git push destination = %+v", git.pushes[0])
-			}
-		})
-	}
-}
-
-func TestSetRepoDefaultBranchUsesRepositoryDID(t *testing.T) {
-	pds := &testPDS{}
-	knotClient := &testKnot{}
-	service := testService(pds, &testGit{}, knotClient)
-	service.appview = testAppview{repo: &tangled.Repo{
-		URI: "at://did:plc:owner/sh.tangled.repo/example",
-		Value: tangledlex.Repo{
-			Knot:    "knot.example",
-			RepoDid: optionalString("did:plc:repository"),
-		},
-	}}
-
-	_, err := service.SetRepoDefaultBranch(context.Background(), Target{Handle: "owner.test", Repo: "example"}, "main")
-	if err != nil {
-		t.Fatalf("SetRepoDefaultBranch() error = %v", err)
-	}
-	if knotClient.setDefaultBranchInput.Repo != "did:plc:repository" {
-		t.Fatalf("SetDefaultBranch() repo = %q, want repository DID", knotClient.setDefaultBranchInput.Repo)
-	}
-}
-
-func TestDeleteRepoRestoresRecordWhenKnotDeleteFails(t *testing.T) {
-	pds := &testPDS{record: &atproto.GetRecordOutput{Value: map[string]any{"$type": repoCollection, "knot": "knot.example", "createdAt": "2026-07-25T12:00:00Z", "repoDid": "did:plc:repository"}}}
-	knotClient := &testKnot{deleteErr: errors.New("knot unavailable")}
-	service := testService(pds, &testGit{}, knotClient)
-	service.appview = testAppview{repo: &tangled.Repo{
-		URI:   "at://did:plc:owner/sh.tangled.repo/example",
-		Value: tangledlex.Repo{Knot: "knot.example", RepoDid: optionalString("did:plc:repository")},
-	}}
-
-	_, err := service.DeleteRepo(context.Background(), Target{Handle: "owner.test", Repo: "example"})
-	if err == nil || err.Error() != "knot unavailable" {
-		t.Fatalf("DeleteRepo() error = %v, want knot error", err)
-	}
-	if len(pds.deletes) != 1 {
-		t.Fatalf("DeleteRepo() deletes = %+v", pds.deletes)
-	}
-	if len(pds.puts) != 1 || pds.puts[0].Collection != repoCollection {
-		t.Fatalf("DeleteRepo() restores = %+v", pds.puts)
-	}
-	if knotClient.deleteInput.Repo != "did:plc:repository" {
-		t.Fatalf("Knot delete repo = %q, want repository DID", knotClient.deleteInput.Repo)
-	}
-}
-
-func TestForkRepoCleansUpWhenRecordWriteFails(t *testing.T) {
-	pds := &testPDS{putErr: errors.New("PDS unavailable")}
-	knotClient := &testKnot{}
-	service := testService(pds, &testGit{}, knotClient)
-	service.appview = testAppview{repo: &tangled.Repo{
-		URI:   "at://did:plc:source/sh.tangled.repo/source",
-		Value: tangledlex.Repo{Knot: "knot.example", RepoDid: optionalString("did:plc:source-repo")},
-	}}
-
-	_, err := service.ForkRepo(context.Background(), Target{Handle: "source.test", Repo: "source"}, "fork")
-	if err == nil || !strings.Contains(err.Error(), "write fork record") {
-		t.Fatalf("ForkRepo() error = %v", err)
-	}
-	if knotClient.deleteCalls != 1 {
-		t.Fatalf("ForkRepo() orphan cleanup calls = %d, want 1", knotClient.deleteCalls)
-	}
-	if knotClient.deleteInput.Repo != "did:plc:repo" {
-		t.Fatalf("fork cleanup repo = %q, want newly created repository DID", knotClient.deleteInput.Repo)
-	}
-}
-
-func TestMergePullReportsStatusWriteFailureAfterMerge(t *testing.T) {
-	pds := &testPDS{putErr: errors.New("PDS unavailable")}
-	knotClient := &testKnot{}
-	patchServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		_, _ = writer.Write(gzipContents(t, []byte("patch")))
-	}))
-	defer patchServer.Close()
-	service := testService(pds, &testGit{}, knotClient)
-	service.resolver = testResolver{
-		identity: &identity.Identity{DID: syntax.DID("did:plc:owner")},
-		pdsURL:   patchServer.URL,
-	}
-	service.httpClient = patchServer.Client()
-	patchCID := cid.MustParse("bafybeigdyrzt5m6b5nkn55vsgzzfw5cfs2tidw6zqugycdkyybf2z7kz4q")
-	pullRecord := tangledlex.RepoPull{
-		Title: "Example", CreatedAt: "2026-07-29T00:00:00Z",
-		Target: &tangledlex.RepoPull_Target{Repo: "did:plc:repo", Branch: "master"},
-		Rounds: []*tangledlex.RepoPull_Round{{PatchBlob: &lexutil.LexBlob{Ref: lexutil.LexLink(patchCID)}}},
-	}
-	service.appview = testAppview{
-		repo: &tangled.Repo{
-			URI:   "at://did:plc:owner/sh.tangled.repo/example",
-			Value: tangledlex.Repo{Name: optionalString("example"), Knot: "knot.example", RepoDid: optionalString("did:plc:repo")},
-		},
-		pulls: &tangled.List{Items: []tangled.ListItem{{
-			URI: "at://did:plc:owner/sh.tangled.repo.pull/pr-1",
-			Value: func() json.RawMessage {
-				value, err := json.Marshal(pullRecord)
-				if err != nil {
-					t.Fatal(err)
-				}
-				return value
-			}(),
-		}}},
-	}
-
-	result, err := service.MergePull(context.Background(), Target{Handle: "owner.test", Repo: "example"}, "pr-1")
-	if err != nil {
-		t.Fatalf("MergePull() error = %v", err)
-	}
-	if !result.Merged || result.StatusRecorded || len(result.Warnings) != 1 {
-		t.Fatalf("MergePull() result = %+v", result)
-	}
-	if knotClient.mergeCalls != 1 {
-		t.Fatalf("MergePull() calls = %d, want 1", knotClient.mergeCalls)
-	}
-	if knotClient.mergeInput.DID != "did:plc:owner" || knotClient.mergeInput.Name != "example" || knotClient.mergeInput.Repo != "did:plc:repo" || knotClient.mergeInput.Branch != "master" || knotClient.mergeInput.Patch != "patch" {
-		t.Fatalf("MergeInput = %+v", knotClient.mergeInput)
-	}
-}
-
-func TestDownloadPullPatch(t *testing.T) {
-	patch := gzipContents(t, []byte("diff --git a/file b/file\n"))
-	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		if request.URL.Path != "/xrpc/com.atproto.sync.getBlob" {
-			t.Fatalf("request path = %q", request.URL.Path)
-		}
-		_, _ = writer.Write(patch)
-	}))
-	defer server.Close()
-
-	service := testService(&testPDS{}, &testGit{}, &testKnot{})
-	service.resolver = testResolver{identity: &identity.Identity{DID: syntax.DID("did:plc:owner")}, pdsURL: server.URL}
-	service.httpClient = server.Client()
-
-	contents, err := service.downloadPullPatch(context.Background(), "did:plc:owner", "bafycid")
-	if err != nil {
-		t.Fatalf("downloadPullPatch() error = %v", err)
-	}
-	if got, want := string(contents), "diff --git a/file b/file\n"; got != want {
-		t.Fatalf("downloadPullPatch() = %q, want %q", got, want)
-	}
-}
-
-func gzipContents(t *testing.T, contents []byte) []byte {
-	t.Helper()
-	var compressed bytes.Buffer
-	writer := gzip.NewWriter(&compressed)
-	if _, err := writer.Write(contents); err != nil {
-		t.Fatalf("write gzip: %v", err)
-	}
-	if err := writer.Close(); err != nil {
-		t.Fatalf("close gzip: %v", err)
-	}
-	data, err := io.ReadAll(&compressed)
-	if err != nil {
-		t.Fatalf("read gzip: %v", err)
-	}
-	return data
-}
-
-func testService(pds *testPDS, git *testGit, knotClient *testKnot) *Service {
-	resolver := testResolver{identity: &identity.Identity{
-		DID:    syntax.DID("did:plc:owner"),
-		Handle: syntax.Handle("owner.test"),
-	}}
-	return &Service{
-		resolver:              resolver,
-		sessions:              testSessions{pds: pds},
-		git:                   git,
-		knot:                  &testKnotFactory{client: knotClient},
-		knotOwnershipVerifier: &testKnotOwnershipVerifier{},
-	}
-}
-
 type testResolver struct {
-	identity *identity.Identity
-	pdsURL   string
+	identity   *identity.Identity
+	identities map[string]*identity.Identity
+	pdsURL     string
 }
 
 func (r testResolver) ResolveHandle(context.Context, string) (*identity.Identity, error) {
-	return r.identity, nil
+	if r.identity != nil {
+		return r.identity, nil
+	}
+	return repositoryIdentity("did:plc:owner", "owner.test", "https://knot.example"), nil
 }
 
-func (r testResolver) ResolveDID(context.Context, string) (*identity.Identity, error) {
-	return r.identity, nil
+func (r testResolver) ResolveDID(_ context.Context, did string) (*identity.Identity, error) {
+	if found := r.identities[did]; found != nil {
+		return found, nil
+	}
+	if r.identity != nil {
+		return r.identity, nil
+	}
+	return repositoryIdentity(did, "owner.test", "https://knot.example"), nil
 }
-
 func (r testResolver) ResolvePDS(context.Context, string) (string, error) {
 	if r.pdsURL != "" {
 		return r.pdsURL, nil
@@ -324,12 +108,15 @@ func (s testSessions) OAuthSessionHasScope(context.Context, string) (bool, bool,
 }
 
 type testPDS struct {
+	getRecordHook             func(string, string) (*atproto.GetRecordOutput, error)
+	claims                    map[string]string
 	puts                      []atproto.PutRecordInput
 	deletes                   []atproto.DeleteRecordInput
 	record                    *atproto.GetRecordOutput
 	getErr                    error
 	records                   []atproto.RecordItem
 	putErr                    error
+	putHook                   func(context.Context)
 	uploadBlob                *atproto.Blob
 	uploadErr                 error
 	listErr                   error
@@ -342,17 +129,20 @@ type testPDS struct {
 	serviceAuthErr            error
 }
 
-func (p *testPDS) PutRecord(_ context.Context, input atproto.PutRecordInput) (string, string, error) {
+func (p *testPDS) PutRecord(ctx context.Context, input atproto.PutRecordInput) (string, string, error) {
+	if p.putHook != nil {
+		p.putHook(ctx)
+	}
 	p.puts = append(p.puts, input)
 	if p.putErr != nil {
 		return "", "", p.putErr
 	}
-	if strings.HasPrefix(input.Collection, "sh.tangled.") {
+	if strings.HasPrefix(input.Collection, "org.tangled.") {
 		if err := tangledlex.ValidateRecord(input.Collection, input.Record); err != nil {
 			return "", "", err
 		}
 	}
-	return fmt.Sprintf("at://%s/%s/%s", input.Repo, input.Collection, input.Rkey), "", nil
+	return fmt.Sprintf("at://%s/%s/%s", input.Repo, input.Collection, input.Rkey), testCID, nil
 }
 
 func (p *testPDS) DeleteRecord(_ context.Context, input atproto.DeleteRecordInput) error {
@@ -370,9 +160,23 @@ func (p *testPDS) UploadBlob(context.Context, []byte, string) (*atproto.Blob, er
 	return nil, errors.New("not implemented")
 }
 
-func (p *testPDS) GetRecord(context.Context, string, string, string) (*atproto.GetRecordOutput, error) {
+func (p *testPDS) GetRecord(_ context.Context, _ string, collection, key string) (*atproto.GetRecordOutput, error) {
 	p.getCalls++
-	return p.record, p.getErr
+	if p.getRecordHook != nil {
+		return p.getRecordHook(collection, key)
+	}
+	if p.getErr != nil {
+		return nil, p.getErr
+	}
+	if p.record != nil {
+		return p.record, nil
+	}
+	return &atproto.GetRecordOutput{CID: cidPointer(), Value: map[string]any{"$type": tangled.DeclarationCollection, "repo": func() string {
+		if did := p.claims[key]; did != "" {
+			return did
+		}
+		return "did:plc:repo"
+	}(), "createdAt": "2026-10-01T00:00:00Z"}}, nil
 }
 
 func (p *testPDS) ListRecords(_ context.Context, _, _ string, opts atproto.ListRecordsOpts) (*atproto.ListRecordsOutput, error) {
@@ -479,20 +283,10 @@ func (f *testKnotFactory) NewPublic(host string) knotClient {
 	return f.client
 }
 
-type testKnotOwnershipVerifier struct {
-	errors map[string]error
-	hosts  []string
-	mu     sync.Mutex
-}
-
-func (v *testKnotOwnershipVerifier) Verify(_ context.Context, host, _ string) error {
-	v.mu.Lock()
-	defer v.mu.Unlock()
-	v.hosts = append(v.hosts, host)
-	return v.errors[host]
-}
-
 type testKnot struct {
+	importStatus          *knot.ImportStatus
+	importErr             error
+	importCalls           int
 	setDefaultBranchErr   error
 	setDefaultBranchInput knot.SetDefaultBranchInput
 	defaultBranch         *knot.DefaultBranch
@@ -500,16 +294,24 @@ type testKnot struct {
 	deleteCalls           int
 	deleteInput           knot.DeleteRepoInput
 	mergeCalls            int
-	mergeInput            knot.MergeInput
+	mergeErr              error
+	procedureErr          error
+	procedureInputs       []map[string]any
+	procedureMethods      []string
+	records               map[string]*atproto.GetRecordOutput
+	recordErr             error
+	capabilities          []string
+	legacy                bool
+	probeErr              error
+	receipt               knot.Receipt
+	createInput           knot.CreateRepoInput
 	createCalls           int
 	createErr             error
-	description           *knot.RepoDescription
-	describeErr           error
-	describeDIDs          []string
 }
 
-func (k *testKnot) CreateRepo(context.Context, knot.CreateRepoInput) (string, error) {
+func (k *testKnot) CreateRepo(_ context.Context, input knot.CreateRepoInput) (string, error) {
 	k.createCalls++
+	k.createInput = input
 	return "did:plc:repo", k.createErr
 }
 func (k *testKnot) DeleteRepo(_ context.Context, input knot.DeleteRepoInput) error {
@@ -527,23 +329,63 @@ func (k *testKnot) GetDefaultBranch(context.Context, string) (*knot.DefaultBranc
 	}
 	return k.defaultBranch, nil
 }
-func (k *testKnot) DescribeRepo(_ context.Context, repoDID string) (*knot.RepoDescription, error) {
-	k.describeDIDs = append(k.describeDIDs, repoDID)
-	if k.describeErr != nil {
-		return nil, k.describeErr
+func (k *testKnot) DescribeKnot(context.Context) (*knot.Description, error) {
+	caps := k.capabilities
+	if caps == nil {
+		caps = []string{"knot-social-writes"}
 	}
-	if k.description == nil {
-		return nil, errors.New("not implemented")
-	}
-	return k.description, nil
+	return &knot.Description{DID: "did:web:knot.example", Capabilities: caps, Legacy: k.legacy}, k.probeErr
 }
-func (k *testKnot) Merge(_ context.Context, input knot.MergeInput) error {
-	k.mergeCalls++
-	k.mergeInput = input
+func (k *testKnot) GetRecord(_ context.Context, repo, collection, rkey string) (*atproto.GetRecordOutput, error) {
+	if k.recordErr != nil {
+		return nil, k.recordErr
+	}
+	if record := k.records[collection+"/"+rkey]; record != nil {
+		return record, nil
+	}
+	return &atproto.GetRecordOutput{URI: "at://" + repo + "/" + collection + "/" + rkey, CID: cidPointer(), Value: map[string]any{"$type": collection, "title": map[string]any{"$type": "org.tangled.markup.markdown#inline", "text": "Original"}, "state": "open", "createdAt": "2026-10-01T00:00:00Z"}}, nil
+}
+func (k *testKnot) Procedure(_ context.Context, method string, input, out any) error {
+	data, _ := json.Marshal(input)
+	var body map[string]any
+	_ = json.Unmarshal(data, &body)
+	k.procedureInputs = append(k.procedureInputs, body)
+	k.procedureMethods = append(k.procedureMethods, method)
+	if k.procedureErr != nil {
+		return k.procedureErr
+	}
+	if method == "org.tangled.repo.mintToken" {
+		return json.Unmarshal([]byte(`{"token":"repo-token"}`), out)
+	}
+	receipt := k.receipt
+	if receipt.URI == "" {
+		collection, _ := body["collection"].(string)
+		if method == "org.tangled.review.submitPatch" {
+			collection = "org.tangled.review.patch"
+		}
+		key, _ := body["rkey"].(string)
+		if key == "" {
+			key = "3m2zq4c6pmk2a"
+		}
+		receipt = knot.Receipt{URI: "at://did:plc:repo/" + collection + "/" + key, CID: testCID, Change: strings.Repeat("a", 40)}
+	}
+	data, _ = json.Marshal(receipt)
+	if out != nil {
+		return json.Unmarshal(data, out)
+	}
 	return nil
 }
 
 type testAppview struct {
+	awaitErr         error
+	formatHook       func(string, string, string)
+	formatErr        error
+	patches          []tangled.Patch
+	ref              string
+	refErr           error
+	mergeErr         error
+	mergeHook        func(string, any)
+	ticket           *tangled.ListItem
 	repo             *tangled.Repo
 	repos            map[string]*tangled.Repo
 	repoErr          error
@@ -564,16 +406,16 @@ func (a testAppview) GetRepo(_ context.Context, uri string) (*tangled.Repo, erro
 	if repo, found := a.repos[uri]; found {
 		return repo, nil
 	}
-	return a.repo, a.repoErr
+	return normalizedTestRepo(a.repo), a.repoErr
 }
 func (a testAppview) GetRepoByDID(_ context.Context, repoDID string) (*tangled.Repo, error) {
 	if a.getRepoByDIDHook != nil {
 		a.getRepoByDIDHook(repoDID)
 	}
 	if a.repoByDID != nil || a.repoByDIDErr != nil {
-		return a.repoByDID, a.repoByDIDErr
+		return normalizedTestRepo(a.repoByDID), a.repoByDIDErr
 	}
-	return a.repo, a.repoErr
+	return normalizedTestRepo(a.repo), a.repoErr
 }
 func (testAppview) ListRepos(context.Context, string) (*tangled.RepoList, error) {
 	return nil, errors.New("not implemented")
@@ -597,3 +439,97 @@ func (a testAppview) Search(context.Context, string, int64) (*tangled.SearchResu
 	return a.search, nil
 }
 func (a testAppview) CountStars(context.Context, string) (int64, error) { return a.stars, nil }
+
+const testCID = "bafybeigdyrzt5m6b5nkn55vsgzzfw5cfs2tidw6zqugycdkyybf2z7kz4q"
+
+func cidPointer() *syntax.CID { value := syntax.CID(testCID); return &value }
+func (p *testPDS) CreateRecord(ctx context.Context, in atproto.PutRecordInput) (string, string, error) {
+	return p.PutRecord(ctx, in)
+}
+func (g *testGit) MergeBase(context.Context, string, string, string) (string, error) {
+	return strings.Repeat("b", 40), nil
+}
+func (a testAppview) AwaitRecord(context.Context, string, string) error { return a.awaitErr }
+func (a testAppview) ListPatches(context.Context, string) ([]tangled.Patch, error) {
+	if a.patches != nil {
+		return a.patches, nil
+	}
+	patch := tangled.Patch{URI: "at://did:plc:repo/org.tangled.review.patch/" + testCID, CID: testCID}
+	patch.Value.Base.OID = strings.Repeat("b", 40)
+	patch.Value.Head.OID = strings.Repeat("a", 40)
+	return []tangled.Patch{patch}, nil
+}
+func (a testAppview) FormatPatch(_ context.Context, repo, base, head string) ([]byte, error) {
+	if a.formatHook != nil {
+		a.formatHook(repo, base, head)
+	}
+	if a.formatErr != nil {
+		return nil, a.formatErr
+	}
+	return []byte("diff --git a/file b/file\n"), nil
+}
+func (a testAppview) GetRef(context.Context, string, string) (string, error) {
+	if a.refErr != nil {
+		return "", a.refErr
+	}
+	if a.ref != "" {
+		return a.ref, nil
+	}
+	return strings.Repeat("a", 40), nil
+}
+func (a testAppview) Merge(_ context.Context, token string, input any) error {
+	if a.mergeHook != nil {
+		a.mergeHook(token, input)
+	}
+	return a.mergeErr
+}
+func (a testAppview) GetTicket(context.Context, string) (*tangled.ListItem, error) {
+	if a.ticket != nil {
+		return a.ticket, nil
+	}
+	return nil, errors.New("not implemented")
+}
+func normalizedTestRepo(repo *tangled.Repo) *tangled.Repo {
+	if repo == nil {
+		return nil
+	}
+	copy := *repo
+	if copy.OwnerDID == "" {
+		copy.OwnerDID = "did:plc:owner"
+	}
+	if copy.Value.Name == nil {
+		copy.Value.Name = optionalString("example")
+	}
+	if copy.Value.RepoDid == nil {
+		copy.Value.RepoDid = optionalString("did:plc:repo")
+	}
+	if copy.Value.Knot == "" {
+		copy.Value.Knot = "knot.example"
+	}
+	return &copy
+}
+func repositoryIdentity(did, handle, host string) *identity.Identity {
+	return &identity.Identity{DID: syntax.DID(did), Handle: syntax.Handle(handle), Services: map[string]identity.ServiceEndpoint{"atproto_pds": {Type: "AtprotoPersonalDataServer", URL: host}, "tangled_knot": {Type: "TangledKnot", URL: host + "/repo/tag"}}}
+}
+func testService(pds *testPDS, git *testGit, client *testKnot) *Service {
+	if pds == nil {
+		pds = &testPDS{}
+	}
+	if git == nil {
+		git = &testGit{}
+	}
+	if client == nil {
+		client = &testKnot{}
+	}
+	return &Service{resolver: testResolver{}, sessions: testSessions{pds: pds}, git: git, knot: &testKnotFactory{client: client}, appview: testAppview{repo: &tangled.Repo{URI: "at://did:plc:repo/org.tangled.repo.manifest/self", Value: tangled.RepoMetadata{RepoDid: optionalString("did:plc:repo"), Knot: "knot.example"}}}, attestationDirectory: ""}
+}
+
+func (s testSessions) CurrentDID(context.Context) (string, error) { return "did:plc:owner", nil }
+
+func (k *testKnot) GetImportStatus(context.Context, string) (*knot.ImportStatus, error) {
+	k.importCalls++
+	if k.importStatus == nil {
+		return &knot.ImportStatus{Status: "present"}, k.importErr
+	}
+	return k.importStatus, k.importErr
+}

@@ -33,13 +33,9 @@ func (s *Service) CancelPipeline(ctx context.Context, target Target, pipelineID 
 	if err != nil {
 		return nil, err
 	}
-	audience, err := spindle.ServiceDID(spindleHost)
+	token, err := s.spindleToken(ctx, target, pds, spindleHost, repoDID, "org.tangled.ci.cancelPipeline")
 	if err != nil {
 		return nil, err
-	}
-	token, err := pds.GetServiceAuth(ctx, audience, "sh.tangled.ci.cancelPipeline")
-	if err != nil {
-		return nil, fmt.Errorf("mint pipeline cancel token: %w", err)
 	}
 	authenticatedClient, err := s.spindle.NewWithToken(spindleHost, token)
 	if err != nil {
@@ -70,7 +66,7 @@ func validateSelectedWorkflows(workflows []spindle.Workflow, selected []string) 
 		if !found {
 			return fmt.Errorf("workflow %q was not found in the pipeline", name)
 		}
-		if status != "pending" && status != "running" {
+		if status != "pending" && status != "running" && status != "blocked" {
 			return fmt.Errorf("workflow %q is already finished with status %q", name, status)
 		}
 	}
@@ -85,7 +81,7 @@ func selectCancellableWorkflows(workflows []spindle.Workflow, selected []string)
 
 	cancellable := make([]string, 0, len(workflows))
 	for _, workflow := range workflows {
-		if workflow.Status != "pending" && workflow.Status != "running" {
+		if workflow.Status != "pending" && workflow.Status != "running" && workflow.Status != "blocked" {
 			continue
 		}
 		if len(selectedWorkflows) == 0 || selectedWorkflows[workflow.Name] {

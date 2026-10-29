@@ -3,22 +3,22 @@ package app
 import (
 	"context"
 	"fmt"
-	"sort"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/alyraffauf/tg/atproto"
 	"github.com/alyraffauf/tg/internal/gitutil"
-	"github.com/alyraffauf/tg/internal/tangledlex"
 	"github.com/alyraffauf/tg/knot"
+	"github.com/alyraffauf/tg/tangled"
 	"github.com/bluesky-social/indigo/atproto/syntax"
 )
 
 type provisionRepoInput struct {
-	KnotHost    string
-	Name        string
-	Description string
+	Source             string
+	ContributionPolicy string
+	KnotHost           string
+	Name               string
+	Description        string
 }
 
 type provisionedRepo struct {
@@ -31,14 +31,15 @@ type provisionedRepo struct {
 
 // CreateRepoInput configures provisioning and optional local setup.
 type CreateRepoInput struct {
-	KnotHost      string
-	SSHPort       int
-	Name          string
-	Description   string
-	Clone         bool
-	CloneProtocol string
-	PushPath      string
-	RemoteName    string
+	ContributionPolicy string
+	KnotHost           string
+	SSHPort            int
+	Name               string
+	Description        string
+	Clone              bool
+	CloneProtocol      string
+	PushPath           string
+	RemoteName         string
 }
 
 // CreateRepo provisions a repository and performs requested local Git setup.
@@ -65,7 +66,7 @@ func (s *Service) CreateRepo(ctx context.Context, in CreateRepoInput) (*RepoCrea
 		in.KnotHost = knotHost
 	}
 	provisioned, err := s.provisionRepo(ctx, provisionRepoInput{
-		KnotHost: in.KnotHost, Name: in.Name, Description: in.Description,
+		KnotHost: in.KnotHost, Name: in.Name, Description: in.Description, ContributionPolicy: in.ContributionPolicy,
 	})
 	if err != nil {
 		return nil, err
@@ -109,129 +110,64 @@ func (s *Service) CreateRepo(ctx context.Context, in CreateRepoInput) (*RepoCrea
 }
 
 func (s *Service) provisionRepo(ctx context.Context, in provisionRepoInput) (*provisionedRepo, error) {
-	atClient, did, err := s.authenticatedPDS(ctx)
+	if err := validateContributionPolicy(in.ContributionPolicy); err != nil {
+		return nil, err
+	}
+	pds, actor, err := s.authenticatedPDS(ctx)
 	if err != nil {
 		return nil, err
 	}
-	knotHost, warnings, err := s.selectCreationKnot(ctx, atClient, did, in.KnotHost)
+	host := in.KnotHost
+	if host == "" {
+		host = DefaultKnot
+	}
+	key := strings.ToLower(in.Name)
+	if _, err := pds.GetRecord(ctx, actor, tangled.DeclarationCollection, key); err == nil {
+		return nil, fmt.Errorf("repository declaration %q already exists", key)
+	} else if !isRecordNotFound(err) {
+		return nil, fmt.Errorf("check repository declaration: %w", err)
+	}
+	token, err := pds.GetServiceAuth(ctx, serviceDID(host), "org.tangled.repo.createRepo")
 	if err != nil {
 		return nil, err
 	}
-	token, err := atClient.GetServiceAuth(ctx, "did:web:"+knotHost, "sh.tangled.repo.create")
+	did, err := s.knot.New(host, token).CreateRepo(ctx, knot.CreateRepoInput{Name: in.Name, Description: in.Description, Source: in.Source})
 	if err != nil {
 		return nil, err
 	}
-	repoDID, err := s.knot.New(knotHost, token).CreateRepo(ctx, knot.CreateRepoInput{
-		Name: in.Name,
-		Rkey: in.Name,
-	})
-	if err != nil {
-		return nil, err
-	}
-	record := tangledlex.Repo{
-		LexiconTypeID: repoCollection,
-		Knot:          knotHost,
-		CreatedAt:     time.Now().UTC().Format(time.RFC3339),
-		RepoDid:       optionalString(repoDID),
-	}
-	if in.Description != "" {
-		record.Description = optionalString(in.Description)
-	}
-	uri, _, err := atClient.PutRecord(ctx, atproto.PutRecordInput{
-		Repo:       did,
-		Collection: repoCollection,
-		Rkey:       in.Name,
-		Record:     record,
-	})
-	if err != nil {
-		cleanupErr := s.deleteProvisionedRepo(ctx, atClient, knotHost, knot.DeleteRepoInput{
-			Repo: repoDID, DID: did, Name: in.Name, Rkey: in.Name,
-		})
-		if cleanupErr != nil {
-			return nil, fmt.Errorf("write repository record: %w; delete orphaned Knot repository: %v", err, cleanupErr)
-		}
-		return nil, fmt.Errorf("write repository record: %w", err)
-	}
-	return &provisionedRepo{
-		URI: uri, RepoDID: repoDID, Handle: s.ownerHandle(ctx, did),
-		KnotHost: knotHost, Warnings: warnings,
-	}, nil
-}
-
-func (s *Service) deleteProvisionedRepo(ctx context.Context, atClient pdsClient, knotHost string, input knot.DeleteRepoInput) error {
-	token, err := atClient.GetServiceAuth(ctx, "did:web:"+knotHost, "sh.tangled.repo.delete")
-	if err != nil {
-		return fmt.Errorf("get Knot delete authorization: %w", err)
-	}
-	return s.knot.New(knotHost, token).DeleteRepo(ctx, input)
-}
-
-func (s *Service) selectCreationKnot(ctx context.Context, atClient pdsClient, did, configured string) (string, []string, error) {
-	if configured != "" {
-		return configured, nil, nil
-	}
-	page, err := atClient.ListRecords(ctx, did, knotCollection, atproto.ListRecordsOpts{Limit: maxKnotRegistrations + 1})
-	if err != nil {
-		return "", nil, fmt.Errorf("discover verified Knots: %w", err)
-	}
-	records := page.Records
-	if len(records) == 0 {
-		return DefaultKnot, nil, nil
-	}
-	if len(records) > maxKnotRegistrations {
-		return "", nil, fmt.Errorf("found more than %d Knot registrations; select one with --knot or set it in the config file", maxKnotRegistrations)
-	}
-	hosts := make([]string, 0, len(records))
-	warnings := make([]string, 0, len(records))
-	seen := make(map[string]bool, len(records))
-	for _, record := range records {
-		uri, err := syntax.ParseATURI(record.URI)
-		if err != nil || uri.Authority().String() != did || uri.Collection().String() != knotCollection || uri.RecordKey().String() == "" {
-			warnings = append(warnings, fmt.Sprintf("ignored invalid Knot registration URI %q", record.URI))
-			continue
-		}
-		if err := validateKnotRegistration(record.Value); err != nil {
-			warnings = append(warnings, fmt.Sprintf("ignored invalid Knot registration %q: %v", record.URI, err))
-			continue
-		}
-		host, err := parseKnotHostname(uri.RecordKey().String())
+	var warnings []string
+	if in.ContributionPolicy != "" {
+		repo := &tangled.Repo{Value: tangled.RepoMetadata{Knot: host, RepoDid: &did, Name: &in.Name}}
+		policyWarnings, err := s.editManifest(ctx, repo, func(record map[string]any) error { record["contributionPolicy"] = in.ContributionPolicy; return nil })
 		if err != nil {
-			warnings = append(warnings, fmt.Sprintf("ignored Knot registration %q: %v", record.URI, err))
-			continue
+			return nil, fmt.Errorf("repository %s was created but its policy could not be set: %w", did, err)
 		}
-		if seen[host] {
-			warnings = append(warnings, fmt.Sprintf("ignored duplicate Knot registration for %s", host))
-			continue
+		warnings = append(warnings, policyWarnings...)
+	}
+	record := map[string]any{"$type": tangled.DeclarationCollection, "repo": did, "createdAt": nowString()}
+	uri, cid, err := pds.CreateRecord(ctx, atproto.PutRecordInput{Repo: actor, Collection: tangled.DeclarationCollection, Rkey: key, Record: record})
+	if err != nil {
+		if isDefiniteRejection(err) {
+			cleanup := s.deleteProvisionedRepo(ctx, pds, host, knot.DeleteRepoInput{Repo: did})
+			if cleanup != nil {
+				return nil, fmt.Errorf("write declaration: %w; repository %s cleanup failed: %v", err, did, cleanup)
+			}
 		}
-		seen[host] = true
-		hosts = append(hosts, host)
+		return nil, fmt.Errorf("write declaration for repository %s: %w; inspect it before retrying", did, err)
 	}
-	verificationErrors := make([]error, len(hosts))
-	var verificationGroup sync.WaitGroup
-	for index, host := range hosts {
-		verificationGroup.Add(1)
-		go func() {
-			defer verificationGroup.Done()
-			verificationErrors[index] = s.knotOwnershipVerifier.Verify(ctx, host, did)
-		}()
+	indexCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	if err := s.appview.AwaitRecord(indexCtx, uri, cid); err != nil {
+		warnings = append(warnings, fmt.Sprintf("repository saved, but indexing is pending: %v", err))
 	}
-	verificationGroup.Wait()
-	verified := make([]string, 0, len(hosts))
-	for index, host := range hosts {
-		if err := verificationErrors[index]; err != nil {
-			warnings = append(warnings, fmt.Sprintf("could not verify Knot registration for %s: %v", host, err))
-			continue
-		}
-		verified = append(verified, host)
+	return &provisionedRepo{URI: "at://" + did + "/" + tangled.RepoCollection + "/self", RepoDID: did, Handle: s.ownerHandle(ctx, actor), KnotHost: host, Warnings: warnings}, nil
+}
+func (s *Service) deleteProvisionedRepo(ctx context.Context, pds pdsClient, host string, in knot.DeleteRepoInput) error {
+	token, err := pds.GetServiceAuth(ctx, serviceDID(host), "org.tangled.repo.deleteRepo")
+	if err != nil {
+		return err
 	}
-	if len(verified) == 0 {
-		return "", nil, fmt.Errorf("no Knot registrations could be verified: %s", strings.Join(warnings, "; "))
-	}
-	if len(verified) > 1 {
-		sort.Strings(verified)
-		return "", nil, fmt.Errorf("multiple verified Knots found (%s); select one with --knot or set it in the config file", strings.Join(verified, ", "))
-	}
-	return verified[0], warnings, nil
+	return s.knot.New(host, token).DeleteRepo(ctx, in)
 }
 
 func (s *Service) setDefaultBranchFromDir(ctx context.Context, knotHost, repoDID, dir string) (string, error) {

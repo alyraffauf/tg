@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"testing"
 
 	"github.com/alyraffauf/tg/tangled"
@@ -47,79 +48,6 @@ func TestExtractRKey(t *testing.T) {
 	}
 }
 
-func TestDecodeIssue(t *testing.T) {
-	tests := []struct {
-		name    string
-		raw     string
-		want    recordView
-		wantErr bool
-	}{
-		{
-			name: "full record",
-			raw:  `{"title":"Bug report","body":"details","createdAt":"2026-07-18T12:00:00Z"}`,
-			want: recordView{Title: "Bug report", Body: "details", CreatedAt: "2026-07-18T12:00:00Z"},
-		},
-		{
-			name: "title only",
-			raw:  `{"title":"Bug report"}`,
-			want: recordView{Title: "Bug report"},
-		},
-		{name: "invalid json", raw: `{`, wantErr: true},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := decodeIssue([]byte(tt.raw))
-			if (err != nil) != tt.wantErr {
-				t.Fatalf("error = %v, wantErr %v", err, tt.wantErr)
-			}
-			if got != tt.want {
-				t.Fatalf("got %+v, want %+v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestDecodePull(t *testing.T) {
-	tests := []struct {
-		name    string
-		raw     string
-		want    recordView
-		wantErr bool
-	}{
-		{
-			name: "full record",
-			raw: `{"title":"Add feature","body":"details","createdAt":"2026-07-18T12:00:00Z",` +
-				`"source":{"branch":"feature"},"target":{"branch":"main"}}`,
-			want: recordView{
-				Title:        "Add feature",
-				Body:         "details",
-				CreatedAt:    "2026-07-18T12:00:00Z",
-				SourceBranch: "feature",
-				TargetBranch: "main",
-			},
-		},
-		{
-			name: "title only",
-			raw:  `{"title":"Add feature"}`,
-			want: recordView{Title: "Add feature"},
-		},
-		{name: "invalid json", raw: `{`, wantErr: true},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := decodePull([]byte(tt.raw))
-			if (err != nil) != tt.wantErr {
-				t.Fatalf("error = %v, wantErr %v", err, tt.wantErr)
-			}
-			if got != tt.want {
-				t.Fatalf("got %+v, want %+v", got, tt.want)
-			}
-		})
-	}
-}
-
 func TestFindByRKey(t *testing.T) {
 	items := []tangled.ListItem{
 		{URI: "at://did:plc:abc123/sh.tangled.repo.issue/3kdui"},
@@ -148,5 +76,14 @@ func TestFindByRKey(t *testing.T) {
 				t.Fatalf("got %q, want %q", got.URI, tt.wantURI)
 			}
 		})
+	}
+}
+
+func TestResolveAuthorFallsBackWhenHandleIsInvalid(t *testing.T) {
+	service := testService(nil, nil, nil)
+	service.resolver = testResolver{identity: repositoryIdentity("did:plc:author", "handle.invalid", "https://knot.example")}
+	author := service.resolveAuthor(context.Background(), "did:plc:author")
+	if author.Handle != "did:plc:author" || author.DID != "did:plc:author" {
+		t.Fatalf("author=%+v", author)
 	}
 }

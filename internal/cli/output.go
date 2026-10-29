@@ -27,6 +27,11 @@ func output[T any](cmd *cobra.Command, data T, human func(T)) error {
 		enc.SetIndent("", "  ")
 		return enc.Encode(data)
 	}
+	if result, ok := any(data).(interface{ MutationWarnings() []string }); ok {
+		for _, warning := range result.MutationWarnings() {
+			fmt.Fprintf(cmd.ErrOrStderr(), "warning: %s\n", warning)
+		}
+	}
 	human(data)
 	return nil
 }

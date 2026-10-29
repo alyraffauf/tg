@@ -162,7 +162,7 @@ func workflowStatusColor(status string) color.Color {
 		return lipgloss.Red
 	case "running":
 		return lipgloss.Blue
-	case "pending":
+	case "pending", "blocked", "awaiting approval":
 		return lipgloss.Yellow
 	default:
 		return nil

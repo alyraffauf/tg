@@ -2,11 +2,9 @@ package app
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 
 	"github.com/alyraffauf/tg/atproto"
-	"github.com/alyraffauf/tg/internal/tangledlex"
 )
 
 // ListStrings lists every string owned by handle.
@@ -27,26 +25,15 @@ func buildStringItems(records []atproto.RecordItem) ([]StringItem, []RecordWarni
 	items := make([]StringItem, 0, len(records))
 	var warnings []RecordWarning
 	for _, rec := range records {
-		var str tangledlex.String
-		data, err := json.Marshal(rec.Value)
+		str, err := decodeStringRecord(rec.Value)
 		if err != nil {
-			warnings = append(warnings, RecordWarning{URI: rec.URI, Error: fmt.Sprintf("encode string record: %v", err)})
-			continue
-		}
-		if err := json.Unmarshal(data, &str); err != nil {
-			warnings = append(warnings, RecordWarning{URI: rec.URI, Error: fmt.Sprintf("decode string record: %v", err)})
-			continue
-		}
-		// Records without a filename are not strings; skip them rather
-		// than rendering a blank row.
-		if str.Filename == "" {
-			warnings = append(warnings, RecordWarning{URI: rec.URI, Error: "string record has no filename"})
+			warnings = append(warnings, RecordWarning{URI: rec.URI, Error: err.Error()})
 			continue
 		}
 		items = append(items, StringItem{
 			Rkey:        extractRKey(rec.URI),
 			URI:         rec.URI,
-			Filename:    str.Filename,
+			Filename:    str.Snippet.Name,
 			Description: str.Description,
 			CreatedAt:   str.CreatedAt,
 		})

@@ -24,6 +24,7 @@ func newPRCreateCommand(service pullCreateService) *cobra.Command {
 
 The current branch is the source branch. The origin remote and its default
 branch are the target. For a fork, set --repo, --source-repo, and --base.
+Push the source branch first. tg submits published commits without pushing.
 
 Without title or body flags, tg opens $EDITOR. Write the title on the first line,
 leave the second line blank, and write the body below it.`,

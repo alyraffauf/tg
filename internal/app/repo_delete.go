@@ -5,80 +5,65 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/http"
+	"strings"
 
 	"github.com/alyraffauf/tg/atproto"
-	"github.com/alyraffauf/tg/internal/tangledlex"
 	"github.com/alyraffauf/tg/knot"
+	"github.com/alyraffauf/tg/tangled"
 	"github.com/bluesky-social/indigo/atproto/atclient"
 )
 
 func (s *Service) DeleteRepo(ctx context.Context, t Target) (*RepoDeleteResult, error) {
-	atClient, did, err := s.authenticatedPDS(ctx)
+	pds, actor, err := s.authenticatedPDS(ctx)
 	if err != nil {
 		return nil, err
 	}
-	repo, err := s.requireOwnedRepo(ctx, t, did)
+	repo, err := s.requireOwnedRepo(ctx, t, actor)
 	if err != nil {
 		return nil, err
 	}
-	if repo.Value.Knot == "" {
-		return nil, fmt.Errorf("repo %q has no knot", t.String())
-	}
-	repoDID := stringValue(repo.Value.RepoDid)
-	if repoDID == "" {
-		return nil, fmt.Errorf("repo %q has no repository DID", t.String())
-	}
-	rkey := extractRKey(repo.URI)
-	existingRecord, getErr := atClient.GetRecord(ctx, did, repoCollection, rkey)
-	if getErr != nil && !isRecordNotFound(getErr) {
-		return nil, fmt.Errorf("fetch repository record before deletion: %w", getErr)
-	}
-	var recordToRestore tangledlex.Repo
-	if getErr == nil {
-		data, err := json.Marshal(existingRecord.Value)
-		if err != nil {
-			return nil, fmt.Errorf("encode repository record for restore: %w", err)
-		}
-		if err := json.Unmarshal(data, &recordToRestore); err != nil {
-			return nil, fmt.Errorf("decode repository record for restore: %w", err)
-		}
-		if err := tangledlex.ValidateRecord(repoCollection, recordToRestore); err != nil {
-			return nil, fmt.Errorf("validate repository record for restore: %w", err)
-		}
-	}
-	token, err := atClient.GetServiceAuth(ctx, "did:web:"+repo.Value.Knot, "sh.tangled.repo.delete")
+	key := strings.ToLower(stringValue(repo.Value.Name))
+	found, err := pds.GetRecord(ctx, actor, tangled.DeclarationCollection, key)
 	if err != nil {
-		return nil, fmt.Errorf("get knot authorization: %w", err)
+		return nil, err
 	}
-	if getErr == nil {
-		if err := atClient.DeleteRecord(ctx, atproto.DeleteRecordInput{
-			Repo:       did,
-			Collection: repoCollection,
-			Rkey:       rkey,
-		}); err != nil {
-			return nil, fmt.Errorf("delete repository record: %w", err)
-		}
+	if found.CID == nil {
+		return nil, fmt.Errorf("declaration response has no CID")
 	}
-	if err := s.knot.New(repo.Value.Knot, token).DeleteRepo(ctx, knot.DeleteRepoInput{
-		Repo: repoDID,
-		DID:  did,
-		Name: t.Repo,
-		Rkey: rkey,
-	}); err != nil {
-		if getErr == nil {
-			if _, _, restoreErr := atClient.PutRecord(ctx, atproto.PutRecordInput{
-				Repo: did, Collection: repoCollection, Rkey: rkey, Record: recordToRestore,
-			}); restoreErr != nil {
-				return nil, fmt.Errorf("delete knot repository: %w; restore repository record: %v", err, restoreErr)
+	data, err := json.Marshal(found.Value)
+	if err != nil {
+		return nil, err
+	}
+	var declaration struct {
+		Repo string `json:"repo"`
+	}
+	if err := json.Unmarshal(data, &declaration); err != nil {
+		return nil, err
+	}
+	if declaration.Repo != stringValue(repo.Value.RepoDid) {
+		return nil, fmt.Errorf("repository declaration changed while preparing deletion; inspect it before retrying")
+	}
+	token, err := pds.GetServiceAuth(ctx, serviceDID(repo.Value.Knot), "org.tangled.repo.deleteRepo")
+	if err != nil {
+		return nil, err
+	}
+	if err := pds.DeleteRecord(ctx, atproto.DeleteRecordInput{Repo: actor, Collection: tangled.DeclarationCollection, Rkey: key, SwapRecord: found.CID}); err != nil {
+		return nil, err
+	}
+	if err := s.knot.New(repo.Value.Knot, token).DeleteRepo(ctx, knot.DeleteRepoInput{Repo: stringValue(repo.Value.RepoDid)}); err != nil {
+		if isDefiniteRejection(err) {
+			if _, _, restore := pds.CreateRecord(ctx, atproto.PutRecordInput{Repo: actor, Collection: tangled.DeclarationCollection, Rkey: key, Record: found.Value}); restore != nil {
+				return nil, fmt.Errorf("delete repository: %w; restore declaration: %v", err, restore)
 			}
 		}
-		return nil, err
+		return nil, fmt.Errorf("repository deletion was not confirmed: %w; inspect the repository before retrying", err)
 	}
 	return &RepoDeleteResult{URI: repo.URI}, nil
 }
-
 func isRecordNotFound(err error) bool {
-	var apiError *atclient.APIError
-	return errors.As(err, &apiError) && apiError.StatusCode == http.StatusNotFound && apiError.Name == "RecordNotFound"
+	var e *atclient.APIError
+	if !errors.As(err, &e) {
+		return false
+	}
+	return (e.Name == "RecordNotFound" && (e.StatusCode == 400 || e.StatusCode == 404)) || (e.Name == "NotFound" && e.StatusCode == 404)
 }

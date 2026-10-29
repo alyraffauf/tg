@@ -39,7 +39,7 @@ func newRoot(service *app.Service, defaultKnot, defaultSSHPort, defaultProtocol 
 	configureRoot(rootCmd)
 
 	auth := newAuthCommand(service)
-	auth.AddCommand(newAuthLoginCommand(service), newAuthLogoutCommand(service), newAuthStatusCommand(service), newAuthTokenCommand(service), newAuthListCommand(service), newAuthSwitchCommand(service), newAuthGitCredentialCommand(service))
+	auth.AddCommand(newAuthLoginCommand(service), newAuthLogoutCommand(service), newAuthStatusCommand(service), newAuthTokenCommand(service), newAuthListCommand(service), newAuthSwitchCommand(service), newAuthGitCredentialCommand(service), newAttestationsCommand(service))
 	rootCmd.AddCommand(auth)
 
 	issue := newIssueCommand(service)
@@ -55,7 +55,7 @@ func newRoot(service *app.Service, defaultKnot, defaultSSHPort, defaultProtocol 
 	rootCmd.AddCommand(repo)
 
 	pipeline := newPipelineCommand(service)
-	pipeline.AddCommand(newPipelineListCommand(service), newPipelineViewCommand(service), newPipelineStatusCommand(service), newPipelineCancelCommand(service), newPipelineTriggerCommand(service), newPipelineLogsCommand(service))
+	pipeline.AddCommand(newPipelineListCommand(service), newPipelineViewCommand(service), newPipelineStatusCommand(service), newPipelineCancelCommand(service), newPipelineTriggerCommand(service), newPipelineApproveCommand(service), newPipelineRetryCommand(service), newPipelineLogsCommand(service))
 	rootCmd.AddCommand(pipeline)
 
 	keys := newSSHKeyCommand(service)
@@ -86,6 +86,9 @@ func ExecuteWith(arguments []string, input io.Reader, output, errorOutput io.Wri
 	}
 	service := app.NewWithStreams(settings.Appview, output, errorOutput)
 	service.SetAccount(settings.Account)
+	if err := service.SetFosterKnot(settings.FosterKnot); err != nil {
+		return err
+	}
 	root := newRoot(service, settings.Knot, settings.SSHPort, settings.Protocol)
 	root.SetArgs(arguments)
 	root.SetIn(input)
@@ -115,6 +118,9 @@ func parseFlagSettings(arguments []string) (flagSettings, error) {
 		case "--config":
 			flags.ConfigPath = flagValue(arguments, index, value, hasValue)
 			flags.ConfigSet = true
+		case "--foster-knot":
+			flags.FosterKnot = flagValue(arguments, index, value, hasValue)
+			flags.FosterKnotSet = true
 		case "--appview":
 			flags.Appview = flagValue(arguments, index, value, hasValue)
 			flags.AppviewSet = true
@@ -122,7 +128,7 @@ func parseFlagSettings(arguments []string) (flagSettings, error) {
 			flags.Account = flagValue(arguments, index, value, hasValue)
 			flags.AccountSet = true
 		}
-		if !hasValue && (name == "--config" || name == "--appview" || name == "--account") {
+		if !hasValue && (name == "--config" || name == "--appview" || name == "--foster-knot" || name == "--account") {
 			if index+1 >= len(arguments) || arguments[index+1] == "--" {
 				return flagSettings{}, fmt.Errorf("flag %s requires a value", name)
 			}
@@ -145,6 +151,7 @@ func flagValue(arguments []string, index int, value string, hasValue bool) strin
 func configureRoot(rootCmd *cobra.Command) {
 	rootCmd.PersistentFlags().String("config", "", "Config file (default: $XDG_CONFIG_HOME/tg/config.toml)")
 	rootCmd.PersistentFlags().Bool("json", false, "Print JSON output")
+	rootCmd.PersistentFlags().String("foster-knot", "", "Foster knot origin for legacy social history reads")
 	rootCmd.PersistentFlags().String("appview", defaultAppview, "Appview URL")
 	rootCmd.PersistentFlags().String("account", "", "Account handle or DID")
 }

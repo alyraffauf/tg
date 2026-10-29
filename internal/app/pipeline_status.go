@@ -24,9 +24,9 @@ func (s *Service) PipelineStatus(ctx context.Context, target Target) (*PipelineS
 	if err != nil {
 		return nil, err
 	}
-	client, err := s.spindle.New(spindleHost)
+	client, _, err := s.pipelineClient(ctx, target)
 	if err != nil {
-		return nil, fmt.Errorf("connect to pipeline spindle: %w", err)
+		return nil, err
 	}
 	pipeline, err := findDefaultBranchPipeline(ctx, client, repoDID, defaultBranch.Name, defaultBranch.Hash)
 	if err != nil {
@@ -76,7 +76,7 @@ func latestDefaultBranchPipeline(pipelines []Pipeline, branchName, branchHash st
 
 func pipelineTargetsBranch(pipeline Pipeline, branchName string) bool {
 	triggerType, _ := pipeline.Trigger["$type"].(string)
-	if triggerType == "sh.tangled.ci.trigger#pullRequest" {
+	if triggerType == "org.tangled.event.pullRequest" {
 		targetBranch, _ := pipeline.Trigger["targetBranch"].(string)
 		return targetBranch == branchName
 	}

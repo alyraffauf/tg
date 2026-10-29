@@ -1,18 +1,19 @@
 package tangledlex
 
-import "testing"
+import (
+	"encoding/json"
+	"testing"
+)
 
 func FuzzValidateRecord(f *testing.F) {
-	f.Add("title", "did:plc:abc123", "2026-07-25T12:00:00Z")
-	f.Fuzz(func(t *testing.T, title, repo, createdAt string) {
-		if len(title)+len(repo)+len(createdAt) > 64<<10 {
+	f.Add([]byte(`{"$type":"org.tangled.track.ticket"}`))
+	f.Fuzz(func(t *testing.T, data []byte) {
+		if len(data) > 1<<20 {
 			t.Skip()
 		}
-		_ = ValidateRecord("sh.tangled.repo.issue", RepoIssue{
-			LexiconTypeID: "sh.tangled.repo.issue",
-			Title:         title,
-			Repo:          repo,
-			CreatedAt:     createdAt,
-		})
+		var value any
+		if json.Unmarshal(data, &value) == nil {
+			_ = ValidateRecord("org.tangled.track.ticket", value)
+		}
 	})
 }

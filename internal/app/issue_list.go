@@ -36,7 +36,7 @@ func (s *Service) ListIssues(ctx context.Context, t Target, options ListOptions)
 }
 
 func (s *Service) issueListOptions(ctx context.Context, options ListOptions) (tangled.ListOpts, error) {
-	return s.appviewListOptions(ctx, options, "issue", "open", "closed")
+	return s.appviewListOptions(ctx, options, "issue", "open", "closed", "completed")
 }
 
 func (s *Service) pullListOptions(ctx context.Context, options ListOptions) (tangled.ListOpts, error) {

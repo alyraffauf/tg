@@ -23,26 +23,27 @@ func (s *Service) TriggerPipeline(ctx context.Context, target Target, revision s
 	if err != nil {
 		return nil, err
 	}
-	audience, err := spindle.ServiceDID(spindleHost)
+	token, err := s.spindleToken(ctx, target, pds, spindleHost, repoDID, "org.tangled.event.notifyEvent")
 	if err != nil {
 		return nil, err
-	}
-	token, err := pds.GetServiceAuth(ctx, audience, "sh.tangled.ci.triggerPipeline")
-	if err != nil {
-		return nil, fmt.Errorf("mint pipeline trigger token: %w", err)
 	}
 	client, err := s.spindle.NewWithToken(spindleHost, token)
 	if err != nil {
 		return nil, fmt.Errorf("connect to pipeline spindle: %w", err)
 	}
 	response, err := client.TriggerPipeline(ctx, spindle.TriggerPipelineInput{
-		Repo: repoDID, Workflows: workflows,
-		Trigger: spindle.ManualTrigger{LexiconTypeID: "sh.tangled.ci.trigger#manual", SHA: commit, Ref: ref},
+		Repo:  repoDID,
+		Event: spindle.ManualTrigger{LexiconTypeID: "org.tangled.ci.trigger.manual", Repo: repoDID, SHA: commit, Ref: ref, Workflows: workflows},
 	})
 	if err != nil {
 		return nil, err
 	}
-	return &PipelineTriggerResult{Pipeline: extractRKey(response.Pipeline), Commit: commit, Workflows: workflows}, nil
+	result := &PipelineTriggerResult{Pipelines: response.Pipelines, Message: response.Message, Commit: commit, Workflows: workflows}
+	if len(response.Pipelines) > 0 {
+		// Preserve the existing JSON field for callers expecting a single pipeline.
+		result.Pipeline = response.Pipelines[0]
+	}
+	return result, nil
 }
 
 func (s *Service) resolvePipelineRevision(ctx context.Context, revision string) (commit, ref string, err error) {
@@ -63,7 +64,7 @@ func (s *Service) resolvePipelineRevision(ctx context.Context, revision string) 
 }
 
 func isFullCommitSHA(revision string) bool {
-	if len(revision) != 40 {
+	if len(revision) != 40 && len(revision) != 64 {
 		return false
 	}
 	return strings.Trim(revision, "0123456789abcdefABCDEF") == ""

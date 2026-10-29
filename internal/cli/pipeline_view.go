@@ -76,6 +76,8 @@ func workflowStatusLabel(status string) string {
 		return "● running"
 	case "pending":
 		return "○ pending"
+	case "blocked":
+		return "○ awaiting approval"
 	case "cancelled":
 		return "⊘ cancelled"
 	default:

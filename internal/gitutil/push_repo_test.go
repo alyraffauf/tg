@@ -39,7 +39,8 @@ func TestParseRepoCandidateRejectsMalformedHTTPSIdentity(t *testing.T) {
 	for _, remote := range []string{
 		"https:///owner/repo",
 		"https://user@knot.example/owner/repo",
-		"https://knot.example:8443/owner/repo",
+		"https://knot.example:0/owner/repo",
+		"https://knot.example:65536/owner/repo",
 		"https://knot.example/owner/repo?token=secret",
 	} {
 		if candidate, ok := parseRepoCandidate(remote); ok {

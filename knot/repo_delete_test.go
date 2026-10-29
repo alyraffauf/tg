@@ -11,7 +11,7 @@ import (
 
 func TestDeleteRepoPostsRepositoryDID(t *testing.T) {
 	server := httptest.NewTLSServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		if request.Method != http.MethodPost || request.URL.Path != "/xrpc/sh.tangled.repo.delete" {
+		if request.Method != http.MethodPost || request.URL.Path != "/xrpc/org.tangled.repo.deleteRepo" {
 			t.Errorf("request = %s %s", request.Method, request.URL.Path)
 			return
 		}
@@ -29,7 +29,7 @@ func TestDeleteRepoPostsRepositoryDID(t *testing.T) {
 
 	client := NewWithClient(strings.TrimPrefix(server.URL, "https://"), "token", server.Client())
 	err := client.DeleteRepo(context.Background(), DeleteRepoInput{
-		Repo: "did:plc:repository", DID: "did:plc:owner", Name: "example", Rkey: "record-key",
+		Repo: "did:plc:repository",
 	})
 	if err != nil {
 		t.Fatalf("DeleteRepo() error = %v", err)

@@ -2,22 +2,44 @@ package knot
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"strings"
 
-	"github.com/bluesky-social/indigo/atproto/syntax"
+	lexutil "github.com/bluesky-social/indigo/lex/util"
 )
 
-// DefaultBranch describes the repository's default branch and its latest commit.
 type DefaultBranch struct {
 	Name string `json:"name"`
 	Hash string `json:"hash"`
 }
 
-// GetDefaultBranch returns the default branch for a repository DID and name.
 func (c *Client) GetDefaultBranch(ctx context.Context, repo string) (*DefaultBranch, error) {
-	var branch DefaultBranch
-	if err := c.Get(ctx, syntax.NSID("sh.tangled.repo.getDefaultBranch"), map[string]any{"repo": repo}, &branch); err != nil {
-		return nil, fmt.Errorf("get default branch for %q: %w", repo, err)
+	record, err := c.GetRecord(ctx, repo, "org.tangled.git.refs", "self")
+	if err != nil {
+		return nil, err
 	}
-	return &branch, nil
+	var refs struct {
+		DefaultBranch string           `json:"defaultBranch"`
+		Refs          lexutil.LexBytes `json:"refs"`
+	}
+	data, err := json.Marshal(record.Value)
+	if err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal(data, &refs); err != nil {
+		return nil, err
+	}
+	if refs.DefaultBranch == "" || refs.Refs == nil {
+		return nil, fmt.Errorf("Git refs record omitted its default branch or refs bytes")
+	}
+	hash := ""
+	for _, line := range strings.Split(string(refs.Refs), "\n") {
+		oid, ref, found := strings.Cut(line, " ")
+		if found && ref == "refs/heads/"+refs.DefaultBranch {
+			hash = oid
+			break
+		}
+	}
+	return &DefaultBranch{Name: refs.DefaultBranch, Hash: hash}, nil
 }

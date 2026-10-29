@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strings"
 	"testing"
 
-	"github.com/alyraffauf/tg/internal/tangledlex"
 	"github.com/alyraffauf/tg/knot"
 	"github.com/alyraffauf/tg/spindle"
 	"github.com/alyraffauf/tg/tangled"
@@ -41,7 +41,7 @@ func TestListPipelinePagesReturnsClientError(t *testing.T) {
 func TestViewPipelineFetchesPipelineDirectly(t *testing.T) {
 	client := &testPipelineClient{pipeline: &spindle.Pipeline{ID: "second", Repo: "did:plc:repo"}}
 	service := testService(&testPDS{}, &testGit{}, &testKnot{})
-	service.appview = testAppview{repo: &tangled.Repo{Value: tangledlex.Repo{
+	service.appview = testAppview{repo: &tangled.Repo{Value: tangled.RepoMetadata{
 		Spindle: optionalString("spindle.example"), RepoDid: optionalString("did:plc:repo"),
 	}}}
 	service.spindle = testSpindleFactory{client: client}
@@ -61,7 +61,7 @@ func TestViewPipelineFetchesPipelineDirectly(t *testing.T) {
 func TestViewPipelineRejectsPipelineFromAnotherRepository(t *testing.T) {
 	client := &testPipelineClient{pipeline: &spindle.Pipeline{ID: "second", Repo: "did:plc:other"}}
 	service := testService(&testPDS{}, &testGit{}, &testKnot{})
-	service.appview = testAppview{repo: &tangled.Repo{Value: tangledlex.Repo{
+	service.appview = testAppview{repo: &tangled.Repo{Value: tangled.RepoMetadata{
 		Spindle: optionalString("spindle.example"), RepoDid: optionalString("did:plc:repo"),
 	}}}
 	service.spindle = testSpindleFactory{client: client}
@@ -113,7 +113,7 @@ func TestPipelineStatusReturnsLatestPipeline(t *testing.T) {
 		}},
 	}}}
 	service := testService(&testPDS{}, &testGit{}, &testKnot{defaultBranch: &knot.DefaultBranch{Name: "main", Hash: "abc"}})
-	service.appview = testAppview{repo: &tangled.Repo{Value: tangledlex.Repo{
+	service.appview = testAppview{repo: &tangled.Repo{Value: tangled.RepoMetadata{
 		Knot: "knot.example", Spindle: optionalString("spindle.example"), RepoDid: optionalString("did:plc:repo"),
 	}}}
 	service.spindle = testSpindleFactory{client: client}
@@ -133,7 +133,7 @@ func TestPipelineStatusFindsCommitOnLaterPage(t *testing.T) {
 		{Pipelines: []spindle.Pipeline{{ID: "latest", Commit: "abc"}}},
 	}}
 	service := testService(&testPDS{}, &testGit{}, &testKnot{defaultBranch: &knot.DefaultBranch{Name: "main", Hash: "abc"}})
-	service.appview = testAppview{repo: &tangled.Repo{Value: tangledlex.Repo{
+	service.appview = testAppview{repo: &tangled.Repo{Value: tangled.RepoMetadata{
 		Knot: "knot.example", Spindle: optionalString("spindle.example"), RepoDid: optionalString("did:plc:repo"),
 	}}}
 	service.spindle = testSpindleFactory{client: client}
@@ -159,7 +159,7 @@ func TestCancelPipelineRejectsExplicitFinishedWorkflowBeforeAuth(t *testing.T) {
 	client := &testPipelineClient{pipeline: &spindle.Pipeline{Repo: "did:plc:repo", Workflows: []spindle.Workflow{{Name: "done.yml", Status: "success"}}}}
 	pds := &testPDS{}
 	service := testService(pds, &testGit{}, &testKnot{})
-	service.appview = testAppview{repo: &tangled.Repo{Value: tangledlex.Repo{Spindle: optionalString("spindle.example"), RepoDid: optionalString("did:plc:repo")}}}
+	service.appview = testAppview{repo: &tangled.Repo{Value: tangled.RepoMetadata{Spindle: optionalString("spindle.example"), RepoDid: optionalString("did:plc:repo")}}}
 	service.spindle = testSpindleFactory{client: client}
 
 	_, err := service.CancelPipeline(context.Background(), Target{Handle: "owner.test", Repo: "example"}, "pipeline", []string{"done.yml"})
@@ -171,7 +171,7 @@ func TestCancelPipelineRejectsExplicitFinishedWorkflowBeforeAuth(t *testing.T) {
 func TestPipelineLogsRejectsForeignPipelineBeforeSubscription(t *testing.T) {
 	client := &testPipelineClient{pipeline: &spindle.Pipeline{Repo: "did:plc:foreign"}}
 	service := testService(&testPDS{}, &testGit{}, &testKnot{})
-	service.appview = testAppview{repo: &tangled.Repo{Value: tangledlex.Repo{Spindle: optionalString("spindle.example"), RepoDid: optionalString("did:plc:repo")}}}
+	service.appview = testAppview{repo: &tangled.Repo{Value: tangled.RepoMetadata{Spindle: optionalString("spindle.example"), RepoDid: optionalString("did:plc:repo")}}}
 	service.spindle = testSpindleFactory{client: client}
 
 	err := service.PipelineLogs(context.Background(), Target{Handle: "owner.test", Repo: "example"}, "pipeline", nil, func(PipelineLogEvent) error { return nil })
@@ -187,7 +187,7 @@ func TestCancelPipelineMintsSpindleToken(t *testing.T) {
 	}}}
 	pds := &testPDS{}
 	service := testService(pds, &testGit{}, &testKnot{})
-	service.appview = testAppview{repo: &tangled.Repo{Value: tangledlex.Repo{
+	service.appview = testAppview{repo: &tangled.Repo{Value: tangled.RepoMetadata{
 		Knot: "knot.example", Spindle: optionalString("spindle.example"), RepoDid: optionalString("did:plc:repo"),
 	}}}
 	service.spindle = testSpindleFactory{client: client}
@@ -199,7 +199,7 @@ func TestCancelPipelineMintsSpindleToken(t *testing.T) {
 	if result.Pipeline != "3mrvk5dbnep22" || len(result.Workflows) != 1 {
 		t.Fatalf("CancelPipeline() = %+v", result)
 	}
-	if pds.serviceAuthAudiences[0] != "did:web:spindle.example" || pds.serviceAuthLexiconMethods[0] != "sh.tangled.ci.cancelPipeline" {
+	if pds.serviceAuthAudiences[0] != "did:web:spindle.example" || pds.serviceAuthLexiconMethods[0] != "org.tangled.ci.cancelPipeline" {
 		t.Fatalf("service auth = audience %q, method %q", pds.serviceAuthAudiences[0], pds.serviceAuthLexiconMethods[0])
 	}
 	if client.cancelInput.Pipeline != "3mrvk5dbnep22" || client.cancelInput.Repo != "did:plc:repo" || !slices.Equal(client.cancelInput.Workflows, []string{"test.yml"}) {
@@ -209,10 +209,10 @@ func TestCancelPipelineMintsSpindleToken(t *testing.T) {
 
 func TestTriggerPipelineUsesFullSHAWithoutGitResolution(t *testing.T) {
 	commit := "0123456789abcdef0123456789abcdef01234567"
-	client := &testPipelineClient{triggerOutput: &spindle.TriggerPipelineOutput{Pipeline: "at://did:plc:spindle/sh.tangled.ci.pipeline/3mrvk5dbnep22"}}
+	client := &testPipelineClient{triggerOutput: &spindle.TriggerPipelineOutput{Pipelines: []string{"3mrvk5dbnep22", "3mrvk5dbnep23"}, Message: "Started verification"}}
 	pds := &testPDS{}
 	service := testService(pds, &testGit{}, &testKnot{})
-	service.appview = testAppview{repo: &tangled.Repo{Value: tangledlex.Repo{
+	service.appview = testAppview{repo: &tangled.Repo{Value: tangled.RepoMetadata{
 		Knot: "knot.example", Spindle: optionalString("spindle.example"), RepoDid: optionalString("did:plc:repo"),
 	}}}
 	service.spindle = testSpindleFactory{client: client}
@@ -221,13 +221,13 @@ func TestTriggerPipelineUsesFullSHAWithoutGitResolution(t *testing.T) {
 	if err != nil {
 		t.Fatalf("TriggerPipeline() error = %v", err)
 	}
-	if result.Pipeline != "3mrvk5dbnep22" || result.Commit != commit {
+	if result.Pipeline != "3mrvk5dbnep22" || !slices.Equal(result.Pipelines, client.triggerOutput.Pipelines) || result.Message != client.triggerOutput.Message || result.Commit != commit {
 		t.Fatalf("TriggerPipeline() = %+v", result)
 	}
-	if pds.serviceAuthLexiconMethods[0] != "sh.tangled.ci.triggerPipeline" {
+	if pds.serviceAuthLexiconMethods[0] != "org.tangled.event.notifyEvent" {
 		t.Fatalf("service auth method = %q", pds.serviceAuthLexiconMethods[0])
 	}
-	if client.triggerInput.Trigger.SHA != commit || client.triggerInput.Trigger.Ref != "" || client.triggerInput.Repo != "did:plc:repo" {
+	if client.triggerInput.Event.SHA != commit || client.triggerInput.Event.Ref != "" || !slices.Equal(client.triggerInput.Event.Workflows, []string{"test.yml"}) || client.triggerInput.Repo != "did:plc:repo" {
 		t.Fatalf("trigger input = %+v", client.triggerInput)
 	}
 }
@@ -241,6 +241,9 @@ type testPipelineClient struct {
 	pipelineID     string
 	triggerInput   spindle.TriggerPipelineInput
 	triggerOutput  *spindle.TriggerPipelineOutput
+	approveInput   spindle.ApprovePipelineInput
+	retryInput     spindle.RetryPipelineInput
+	retryOutput    *spindle.RetryPipelineOutput
 	logEvents      []spindle.PipelineLogEvent
 	cancelCalls    int
 	subscribeCalls int
@@ -250,7 +253,7 @@ func (c *testPipelineClient) QueryLatestPipeline(_ context.Context, _ string) (*
 	return c.responses[0], nil
 }
 
-func (c *testPipelineClient) GetPipeline(_ context.Context, pipelineID string) (*spindle.Pipeline, error) {
+func (c *testPipelineClient) GetPipeline(_ context.Context, pipelineID string, _ ...string) (*spindle.Pipeline, error) {
 	c.pipelineID = pipelineID
 	return c.pipeline, c.err
 }
@@ -288,7 +291,7 @@ func (c *testPipelineClient) QueryPipelines(_ context.Context, _ string, cursor 
 	return response, nil
 }
 
-func (c *testPipelineClient) SubscribePipelineLogs(_ context.Context, _ string, _ []string, onEvent func(spindle.PipelineLogEvent) error) error {
+func (c *testPipelineClient) SubscribePipelineLogs(_ context.Context, _ string, _ []string, onEvent func(spindle.PipelineLogEvent) error, _ ...string) error {
 	c.subscribeCalls++
 	for _, event := range c.logEvents {
 		if err := onEvent(event); err != nil {
@@ -296,4 +299,81 @@ func (c *testPipelineClient) SubscribePipelineLogs(_ context.Context, _ string, 
 		}
 	}
 	return nil
+}
+
+func (c *testPipelineClient) ApprovePipeline(_ context.Context, input spindle.ApprovePipelineInput) error {
+	c.approveInput = input
+	return c.err
+}
+func (c *testPipelineClient) RetryPipeline(_ context.Context, input spindle.RetryPipelineInput) (*spindle.RetryPipelineOutput, error) {
+	c.retryInput = input
+	return c.retryOutput, c.err
+}
+
+func TestPipelineApprovalAndRetryUseRepositoryAuth(t *testing.T) {
+	pds := &testPDS{}
+	client := &testPipelineClient{retryOutput: &spindle.RetryPipelineOutput{Pipeline: "rerun"}}
+	service := testService(pds, &testGit{}, &testKnot{capabilities: []string{"knot-repo-token-mint"}})
+	service.appview = testAppview{repo: &tangled.Repo{Value: tangled.RepoMetadata{Spindle: optionalString("spindle.example")}}}
+	service.spindle = testSpindleFactory{client: client}
+	target := Target{Handle: "owner.test", Repo: "example"}
+	approved, err := service.ApprovePipeline(context.Background(), target, "blocked-pipeline")
+	if err != nil || !approved.ApprovalRequested || client.approveInput.Repo != "did:plc:repo" {
+		t.Fatalf("approved=%+v err=%v input=%+v", approved, err, client.approveInput)
+	}
+	retry, err := service.RetryPipeline(context.Background(), target, "old-pipeline", []string{"test.yml"})
+	if err != nil || retry.OriginalPipeline != "old-pipeline" || retry.Pipeline != "rerun" || !slices.Equal(client.retryInput.Workflows, []string{"test.yml"}) {
+		t.Fatalf("retry=%+v err=%v input=%+v", retry, err, client.retryInput)
+	}
+	origin := service.knot.(*testKnotFactory).client.(*testKnot)
+	if origin.procedureInputs[0]["lxm"] != "org.tangled.ci.approvePipeline" || origin.procedureInputs[1]["lxm"] != "org.tangled.ci.retryPipeline" {
+		t.Fatalf("tokens=%+v", origin.procedureInputs)
+	}
+	client.err = errors.New("access denied")
+	if _, err := service.ApprovePipeline(context.Background(), target, "blocked-pipeline"); err == nil {
+		t.Fatal("approval denial hidden")
+	}
+	if _, err := service.RetryPipeline(context.Background(), target, "old-pipeline", nil); err == nil {
+		t.Fatal("retry denial hidden")
+	}
+}
+
+func TestBlockedWorkflowsCanBeCancelled(t *testing.T) {
+	workflows := []spindle.Workflow{{Name: "build.yml", Status: "blocked"}, {Name: "done.yml", Status: "success"}}
+	if err := validateSelectedWorkflows(workflows, []string{"build.yml"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := selectCancellableWorkflows(workflows, nil); !slices.Equal(got, []string{"build.yml"}) {
+		t.Fatalf("cancellable=%v", got)
+	}
+}
+
+func TestPipelineRevisionAcceptsBothObjectHashFormats(t *testing.T) {
+	service := testService(nil, &testGit{}, nil)
+	for _, commit := range []string{strings.Repeat("a", 40), strings.Repeat("b", 64)} {
+		resolved, ref, err := service.resolvePipelineRevision(context.Background(), commit)
+		if err != nil || ref != "" || resolved != commit {
+			t.Fatalf("commit=%s resolved=%s ref=%s err=%v", commit, resolved, ref, err)
+		}
+	}
+	for _, invalid := range []string{strings.Repeat("a", 41), strings.Repeat("z", 64)} {
+		if isFullCommitSHA(invalid) {
+			t.Fatalf("accepted invalid hash=%s", invalid)
+		}
+	}
+}
+
+func TestPipelineLogsPreserveStepOutcome(t *testing.T) {
+	client := &testPipelineClient{
+		pipeline:  &spindle.Pipeline{Repo: "did:plc:repo"},
+		logEvents: []spindle.PipelineLogEvent{{Type: "control", Control: &spindle.PipelineLogControl{Status: "end", Outcome: "failed", Workflow: "ci.yml"}}},
+	}
+	service := testService(&testPDS{}, &testGit{}, &testKnot{})
+	service.appview = testAppview{repo: &tangled.Repo{Value: tangled.RepoMetadata{Spindle: optionalString("spindle.example"), RepoDid: optionalString("did:plc:repo")}}}
+	service.spindle = testSpindleFactory{client: client}
+	var events []PipelineLogEvent
+	err := service.PipelineLogs(context.Background(), Target{Handle: "owner.test", Repo: "example"}, "pipeline", nil, func(event PipelineLogEvent) error { events = append(events, event); return nil })
+	if err != nil || len(events) != 1 || events[0].Control.Outcome != "failed" {
+		t.Fatalf("events=%+v err=%v", events, err)
+	}
 }

@@ -31,7 +31,7 @@ func (s *Service) SetRepoDefaultBranch(ctx context.Context, t Target, branch str
 }
 
 func (s *Service) setKnotDefaultBranch(ctx context.Context, atClient pdsClient, knotHost, repoDID, branch string) error {
-	token, err := atClient.GetServiceAuth(ctx, "did:web:"+knotHost, "sh.tangled.repo.setDefaultBranch")
+	token, err := atClient.GetServiceAuth(ctx, repoDID, "org.tangled.git.setDefaultBranch")
 	if err != nil {
 		return fmt.Errorf("get knot authorization: %w", err)
 	}

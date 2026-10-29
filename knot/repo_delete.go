@@ -7,17 +7,14 @@ import (
 	"github.com/bluesky-social/indigo/atproto/syntax"
 )
 
-// DeleteRepoInput is the argument to sh.tangled.repo.delete.
+// DeleteRepoInput is the argument to org.tangled.repo.deleteRepo.
 type DeleteRepoInput struct {
 	Repo string `json:"repo"` // repository DID
-	DID  string `json:"did"`
-	Name string `json:"name"`
-	Rkey string `json:"rkey"`
 }
 
 // DeleteRepo removes a repository from the knot.
 func (c *Client) DeleteRepo(ctx context.Context, input DeleteRepoInput) error {
-	if err := c.Post(ctx, syntax.NSID("sh.tangled.repo.delete"), input, nil); err != nil {
+	if err := c.Post(ctx, syntax.NSID("org.tangled.repo.deleteRepo"), input, nil); err != nil {
 		return fmt.Errorf("delete repo on knot: %w", err)
 	}
 	return nil

@@ -3,6 +3,9 @@ package app
 import (
 	"context"
 	"fmt"
+	"slices"
+	"strings"
+	"time"
 
 	"github.com/alyraffauf/tg/spindle"
 )
@@ -22,7 +25,7 @@ func (s *Service) pipelineClient(ctx context.Context, target Target) (pipelineCl
 }
 
 func fetchOwnedPipeline(ctx context.Context, client pipelineClient, target Target, repoDID, pipelineID string) (*spindle.Pipeline, error) {
-	pipeline, err := client.GetPipeline(ctx, pipelineID)
+	pipeline, err := client.GetPipeline(ctx, pipelineID, repoDID)
 	if err != nil {
 		return nil, err
 	}
@@ -41,6 +44,18 @@ func (s *Service) pipelineTarget(ctx context.Context, target Target) (string, st
 		return "", "", err
 	}
 	spindleHost := stringValue(repo.Value.Spindle)
+	if strings.HasPrefix(spindleHost, "did:") {
+		ident, err := s.resolver.ResolveDID(ctx, spindleHost)
+		if err != nil {
+			return "", "", fmt.Errorf("resolve spindle DID: %w", err)
+		}
+		service := ident.Services["tangled_spindle"]
+		if service.Type != "TangledSpindle" || service.URL == "" {
+			return "", "", fmt.Errorf("spindle DID has no TangledSpindle service")
+		}
+		spindleHost = service.URL
+	}
+
 	if spindleHost == "" {
 		return "", "", fmt.Errorf("pipelines are not configured for repository %q", target.String())
 	}
@@ -71,4 +86,39 @@ func pipelineItem(pipeline spindle.Pipeline) Pipeline {
 		ID: pipeline.ID, Commit: pipeline.Commit, CreatedAt: pipeline.CreatedAt,
 		Repo: pipeline.Repo, SourceRepo: pipeline.SourceRepo, Trigger: pipeline.Trigger, Workflows: workflows,
 	}
+}
+
+func (s *Service) spindleToken(ctx context.Context, target Target, pds pdsClient, host, repoDID, method string) (string, error) {
+	repo, err := s.resolveVerifiedRepo(ctx, target)
+	if err != nil {
+		return "", err
+	}
+	audience := stringValue(repo.Value.Spindle)
+	if !strings.HasPrefix(audience, "did:") {
+		audience, err = spindle.ServiceDID(host)
+		if err != nil {
+			return "", err
+		}
+	}
+	capabilities, err := s.knot.NewPublic(repo.Value.Knot).DescribeKnot(ctx)
+	if err != nil {
+		return "", err
+	}
+	if slices.Contains(capabilities.Capabilities, "knot-repo-token-mint") {
+		token, err := pds.GetServiceAuth(ctx, repoDID, "org.tangled.repo.mintToken")
+		if err != nil {
+			return "", err
+		}
+		var out struct {
+			Token string `json:"token"`
+		}
+		if err := s.knot.New(repo.Value.Knot, token).Procedure(ctx, "org.tangled.repo.mintToken", map[string]any{"repo": repoDID, "aud": audience, "lxm": method, "exp": time.Now().Unix() + 55}, &out); err != nil {
+			return "", err
+		}
+		if out.Token == "" {
+			return "", fmt.Errorf("knot returned an empty repository token")
+		}
+		return out.Token, nil
+	}
+	return pds.GetServiceAuth(ctx, audience, method)
 }

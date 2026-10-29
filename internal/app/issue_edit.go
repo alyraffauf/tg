@@ -2,12 +2,6 @@ package app
 
 import "context"
 
-// EditIssue patches an issue's title and/or body. A nil pointer leaves the
-// field untouched.
-func (s *Service) EditIssue(ctx context.Context, rkey string, title, body *string) error {
-	atClient, did, err := s.authenticatedPDS(ctx)
-	if err != nil {
-		return err
-	}
-	return editRecord(ctx, atClient, did, issueCollection, rkey, title, body)
+func (s *Service) EditIssue(ctx context.Context, t Target, rkey string, title, body *string, expectedCID ...string) (*UpdatedRecordResult, error) {
+	return s.editTicket(ctx, ticketEditInput{ExpectedCID: firstCID(expectedCID), Target: t, Rkey: rkey, Title: title, Body: body, Pull: false})
 }

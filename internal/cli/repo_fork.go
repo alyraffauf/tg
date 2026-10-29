@@ -29,6 +29,9 @@ func newRepoForkCommand(service *app.Service) *cobra.Command {
 			}
 			return output(cmd, result, func(fork *app.RepoForkResult) {
 				fmt.Fprintf(cmd.OutOrStdout(), "Forked %s as %s/%s\n", source, fork.Handle, fork.Name)
+				if fork.ImportStatus != "" {
+					fmt.Fprintf(cmd.OutOrStdout(), "Import: %s\n", fork.ImportStatus)
+				}
 			})
 		},
 	}

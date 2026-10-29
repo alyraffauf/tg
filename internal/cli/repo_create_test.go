@@ -15,10 +15,10 @@ func TestRenderRepoCreateReportsDefaultBranchAndWarnings(t *testing.T) {
 	command.SetOut(&stdout)
 	command.SetErr(&stderr)
 
-	renderRepoCreate(command, &app.RepoCreateResult{
+	_ = output(command, &app.RepoCreateResult{
 		Handle: "owner.test", Name: "example", Pushed: true, DefaultBranch: "main",
 		Warnings: []string{"could not set another setting"},
-	})
+	}, func(repo *app.RepoCreateResult) { renderRepoCreate(command, repo) })
 
 	if got := stdout.String(); !strings.Contains(got, "Pushed to example\n") {
 		t.Fatalf("stdout = %q", got)

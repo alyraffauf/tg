@@ -96,11 +96,24 @@ type PipelineCancelResult struct {
 	CancellationRequested bool     `json:"cancellationRequested"`
 }
 
-// PipelineTriggerResult describes a manually triggered pipeline.
+// PipelineTriggerResult describes the pipelines scheduled by a manual trigger.
 type PipelineTriggerResult struct {
 	Pipeline  string   `json:"pipeline"`
+	Pipelines []string `json:"pipelines,omitempty"`
+	Message   string   `json:"message,omitempty"`
 	Commit    string   `json:"commit"`
 	Workflows []string `json:"workflows,omitempty"`
+}
+
+type PipelineApproveResult struct {
+	Pipeline          string `json:"pipeline"`
+	ApprovalRequested bool   `json:"approvalRequested"`
+}
+
+type PipelineRetryResult struct {
+	Pipeline         string   `json:"pipeline"`
+	OriginalPipeline string   `json:"originalPipeline"`
+	Workflows        []string `json:"workflows,omitempty"`
 }
 
 // SSHKeyItem is one SSH public key in a listing.
@@ -134,6 +147,8 @@ type StringViewResult struct {
 // ViewResult is a single issue or pull request. SourceBranch and
 // TargetBranch are only populated (and only emitted as JSON) for pulls.
 type ViewResult struct {
+	CID          string `json:"cid,omitempty"`
+	URI          string `json:"uri,omitempty"`
 	Rkey         string `json:"rkey"`
 	Title        string `json:"title"`
 	State        string `json:"state"`
@@ -146,8 +161,10 @@ type ViewResult struct {
 
 // CreatedRecordResult is returned by any operation that creates a record.
 type CreatedRecordResult struct {
-	Rkey string `json:"rkey"`
-	URI  string `json:"uri"`
+	CID      string   `json:"cid,omitempty"`
+	Warnings []string `json:"warnings,omitempty"`
+	Rkey     string   `json:"rkey"`
+	URI      string   `json:"uri"`
 }
 
 // DeletedRecordResult is returned by any operation that deletes a record.
@@ -156,13 +173,19 @@ type DeletedRecordResult struct {
 }
 
 type UpdatedRecordResult struct {
-	Rkey string `json:"rkey"`
+	CID      string   `json:"cid,omitempty"`
+	URI      string   `json:"uri,omitempty"`
+	Warnings []string `json:"warnings,omitempty"`
+	Rkey     string   `json:"rkey"`
 }
 
 // StateResult is returned by issue/PR state changes (close and reopen).
 type StateResult struct {
-	Rkey  string `json:"rkey"`
-	State string `json:"state"`
+	CID      string   `json:"cid,omitempty"`
+	URI      string   `json:"uri,omitempty"`
+	Warnings []string `json:"warnings,omitempty"`
+	Rkey     string   `json:"rkey"`
+	State    string   `json:"state"`
 }
 
 // MergePullResult reports the two durable effects of merging a pull request.
@@ -198,8 +221,9 @@ type RepoCloneResult struct {
 
 // RepoEditResult is returned by repository edits.
 type RepoEditResult struct {
-	URI         string `json:"uri"`
-	Description string `json:"description"`
+	Warnings    []string `json:"warnings,omitempty"`
+	URI         string   `json:"uri"`
+	Description string   `json:"description"`
 }
 
 // RepoDeleteResult is returned by repository deletion.
@@ -209,24 +233,30 @@ type RepoDeleteResult struct {
 
 // RepoDefaultBranchResult is returned by setting a repo's default branch.
 type RepoDefaultBranchResult struct {
-	URI    string `json:"uri"`
-	Branch string `json:"branch"`
+	Warnings []string `json:"warnings,omitempty"`
+	URI      string   `json:"uri"`
+	Branch   string   `json:"branch"`
 }
 
 // RepoForkResult is returned by repository forking.
 type RepoForkResult struct {
-	Handle string `json:"handle"`
-	Name   string `json:"name"`
-	URI    string `json:"uri"`
-	Knot   string `json:"knot"`
+	ImportStatus string   `json:"importStatus,omitempty"`
+	ImportReason string   `json:"importReason,omitempty"`
+	Warnings     []string `json:"warnings,omitempty"`
+	Handle       string   `json:"handle"`
+	Name         string   `json:"name"`
+	URI          string   `json:"uri"`
+	Knot         string   `json:"knot"`
 }
 
 // PRCreateResult is returned by pull request creation.
 type PRCreateResult struct {
-	URI   string `json:"uri"`
-	Title string `json:"title"`
-	Base  string `json:"base"`
-	Head  string `json:"head"`
+	CID      string   `json:"cid,omitempty"`
+	Warnings []string `json:"warnings,omitempty"`
+	URI      string   `json:"uri"`
+	Title    string   `json:"title"`
+	Base     string   `json:"base"`
+	Head     string   `json:"head"`
 }
 
 // PRCheckoutResult is returned by pull request checkout.
@@ -280,6 +310,7 @@ type GitCredentialResult struct {
 
 // PipelineLogControl marks the start or end of a workflow step.
 type PipelineLogControl struct {
+	Outcome  string  `json:"outcome,omitempty"`
 	Kind     string  `json:"kind"`
 	Step     int64   `json:"step"`
 	Time     string  `json:"time"`
@@ -304,3 +335,23 @@ type PipelineLogEvent struct {
 	Control *PipelineLogControl `json:"control,omitempty"`
 	Data    *PipelineLogData    `json:"data,omitempty"`
 }
+
+func (r *CreatedRecordResult) MutationWarnings() []string { return r.Warnings }
+
+func (r *UpdatedRecordResult) MutationWarnings() []string { return r.Warnings }
+
+func (r *StateResult) MutationWarnings() []string { return r.Warnings }
+
+func (r *MergePullResult) MutationWarnings() []string { return r.Warnings }
+
+func (r *RepoCreateResult) MutationWarnings() []string { return r.Warnings }
+
+func (r *RepoCloneResult) MutationWarnings() []string { return r.Warnings }
+
+func (r *RepoEditResult) MutationWarnings() []string { return r.Warnings }
+
+func (r *RepoDefaultBranchResult) MutationWarnings() []string { return r.Warnings }
+
+func (r *RepoForkResult) MutationWarnings() []string { return r.Warnings }
+
+func (r *PRCreateResult) MutationWarnings() []string { return r.Warnings }

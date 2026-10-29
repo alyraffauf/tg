@@ -16,7 +16,7 @@ func newIssueReopenCommand(service *app.Service) *cobra.Command {
 }
 
 func newIssueEditCommand(service *app.Service) *cobra.Command {
-	var titleText, bodyText string
+	var titleText, bodyText, repository, expectedCID string
 
 	command := &cobra.Command{
 		Use:   "edit <record-key>",
@@ -33,19 +33,26 @@ func newIssueEditCommand(service *app.Service) *cobra.Command {
 			if title == nil && body == nil {
 				return fmt.Errorf("provide --title or --body")
 			}
-			if err := service.EditIssue(cmd.Context(), args[0], title, body); err != nil {
+			target, err := resolveTargetFlag(cmd.Context(), repository, service)
+			if err != nil {
 				return err
 			}
-			return outputRecordUpdate(cmd, args[0])
+			result, err := service.EditIssue(cmd.Context(), target, args[0], title, body, expectedCID)
+			if err != nil {
+				return err
+			}
+			return output(cmd, result, func(*app.UpdatedRecordResult) {})
 		},
 	}
+	command.Flags().StringVar(&expectedCID, "expected-cid", "", "Reject changes unless this record CID is current")
+	command.Flags().StringVarP(&repository, "repo", "R", "", "Target repository as handle/repo")
 	command.Flags().StringVarP(&titleText, "title", "t", "", "New title")
 	command.Flags().StringVarP(&bodyText, "body", "b", "", "New body")
 	return command
 }
 
 func newIssueStateCommand(service *app.Service, use, state string) *cobra.Command {
-	var repository string
+	var repository, expectedCID string
 
 	command := &cobra.Command{
 		Use:   use + " <record-key>",
@@ -57,7 +64,7 @@ func newIssueStateCommand(service *app.Service, use, state string) *cobra.Comman
 			if err != nil {
 				return err
 			}
-			result, err := service.SetIssueState(ctx, target, args[0], state)
+			result, err := service.SetIssueState(ctx, target, args[0], state, expectedCID)
 			if err != nil {
 				return fmt.Errorf("%s issue: %w", use, err)
 			}
@@ -66,6 +73,7 @@ func newIssueStateCommand(service *app.Service, use, state string) *cobra.Comman
 			})
 		},
 	}
+	command.Flags().StringVar(&expectedCID, "expected-cid", "", "Reject changes unless this record CID is current")
 	command.Flags().StringVarP(&repository, "repo", "R", "", "Target repository as handle/repo")
 	return command
 }

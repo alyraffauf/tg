@@ -62,6 +62,6 @@ Without a repository, tg uses the origin remote in the current directory.`,
 			})
 		},
 	}
-	flags.add(command, "open or closed")
+	flags.add(command, "open, closed or completed")
 	return command
 }

@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os/exec"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/alyraffauf/tg/knot"
@@ -158,15 +159,21 @@ func parseRepoCandidate(raw string) (*RepoContext, bool) {
 	if err != nil {
 		return nil, false
 	}
-	hosted := strings.EqualFold(u.Hostname(), HostedGitHost)
+	hosted := strings.EqualFold(u.Hostname(), HostedGitHost) && (u.Scheme != "https" || u.Port() == "" || u.Port() == "443")
 	if !hosted && u.Scheme != "ssh" && u.Scheme != "https" {
 		return nil, false
 	}
-	if u.Hostname() == "" || u.Fragment != "" || u.RawQuery != "" {
+	if u.Hostname() == "" || u.Fragment != "" || u.RawQuery != "" || u.ForceQuery {
 		return nil, false
 	}
-	if u.Scheme == "https" && (u.User != nil || u.Port() != "") {
+	if u.Scheme == "https" && u.User != nil {
 		return nil, false
+	}
+	if u.Scheme == "https" && u.Port() != "" {
+		port, err := strconv.Atoi(u.Port())
+		if err != nil || port < 1 || port > 65535 {
+			return nil, false
+		}
 	}
 	path := strings.Trim(strings.TrimPrefix(u.Path, "/"), "/")
 	candidate, ok := splitRepoPath(path)
@@ -175,6 +182,9 @@ func parseRepoCandidate(raw string) (*RepoContext, bool) {
 	}
 	if !hosted {
 		candidate.KnotHost = strings.ToLower(u.Hostname())
+		if u.Scheme == "https" && u.Port() != "" {
+			candidate.KnotHost = strings.ToLower(u.Host)
+		}
 	}
 	return candidate, true
 }

@@ -4,52 +4,75 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/alyraffauf/tg/knot"
+	"github.com/alyraffauf/tg/tangled"
 )
 
-// MergePull applies a pull request on its knot and records the merged status.
 func (s *Service) MergePull(ctx context.Context, t Target, rkey string) (*MergePullResult, error) {
-	atClient, did, err := s.authenticatedPDS(ctx)
+	repo, err := s.resolveVerifiedRepo(ctx, t)
 	if err != nil {
 		return nil, err
 	}
-	repo, err := s.resolveRepo(ctx, t)
+	if err := s.requireNative(ctx, repo); err != nil {
+		return nil, err
+	}
+	did := stringValue(repo.Value.RepoDid)
+	pulls, err := s.appview.ListPulls(ctx, did, tangled.ListOpts{Limit: 100})
 	if err != nil {
 		return nil, err
 	}
-	pull, err := s.pullPatch(ctx, repo, rkey)
+	item, err := findByRKey(pulls.Items, rkey, "pull request")
 	if err != nil {
 		return nil, err
 	}
-	repoDID := stringValue(repo.Value.RepoDid)
-	if repoDID == "" {
-		return nil, fmt.Errorf("repository %q has no repository DID", t.String())
-	}
-	repoName := stringValue(repo.Value.Name)
-	if repoName == "" {
-		repoName = t.Repo
-	}
-	knotHost := repo.Value.Knot
-	if knotHost == "" {
-		return nil, fmt.Errorf("repository %q has no knot", t.String())
-	}
-	token, err := atClient.GetServiceAuth(ctx, "did:web:"+knotHost, "sh.tangled.repo.merge")
+	ticket, err := decodePull(item.Value)
 	if err != nil {
 		return nil, err
 	}
-	commitMessage := pull.Title
-	commitBody := pull.Body
-	if err := s.knot.New(knotHost, token).Merge(ctx, knot.MergeInput{
-		DID: extractDID(repo.URI), Name: repoName, Repo: repoDID, Branch: pull.TargetBranch, Patch: string(pull.Patch),
-		CommitMessage: &commitMessage, CommitBody: optionalString(commitBody),
-	}); err != nil {
+	if item.State != "open" {
+		return nil, fmt.Errorf("only an open pull request can be merged")
+	}
+	patches, err := s.appview.ListPatches(ctx, item.URI)
+	if err != nil {
 		return nil, err
 	}
-	if err := putState(ctx, atClient, did, rkey, pullCollection, pull.URI, "merged"); err != nil {
-		return &MergePullResult{
-			Rkey: rkey, Merged: true,
-			Warnings: []string{fmt.Sprintf("could not record merged pull request status: %v", err)},
-		}, nil
+	if len(patches) == 0 {
+		return nil, fmt.Errorf("pull request has no patch")
 	}
-	return &MergePullResult{Rkey: rkey, Merged: true, StatusRecorded: true}, nil
+	patch := patches[len(patches)-1]
+	head := patch.Value.Head.OID
+	source := did
+	if patch.Value.Source != nil && patch.Value.Source.Repo != "" {
+		source = patch.Value.Source.Repo
+	}
+	targetHead, err := s.appview.GetRef(ctx, did, "refs/heads/"+ticket.TargetBranch)
+	if err != nil {
+		return nil, err
+	}
+	pds, _, err := s.authenticatedPDS(ctx)
+	if err != nil {
+		return nil, err
+	}
+	token, err := pds.GetServiceAuth(ctx, serviceDID(repo.Value.Knot), "org.tangled.git.receivePack")
+	if err != nil {
+		return nil, err
+	}
+	const method = "sh.tangled.git.mergeCommit"
+	input := map[string]any{"target": map[string]string{"$type": method + "#target", "repo": did, "branch": ticket.TargetBranch, "commit": targetHead}, "source": map[string]string{"$type": method + "#source", "repo": source, "commit": head}, "style": "rebase"}
+	if err := s.appview.Merge(ctx, token, input); err != nil {
+		return nil, fmt.Errorf("merge request failed; inspect the target branch before retrying: %w", explainMirrorError(err))
+	}
+	result := &MergePullResult{Rkey: rkey, Merged: true}
+	latest, err := s.appview.ListPatches(ctx, item.URI)
+	if err != nil || len(latest) == 0 || latest[len(latest)-1].CID != patch.CID || latest[len(latest)-1].Value.Head.OID != head {
+		result.Warnings = []string{"merged code, but the latest PR round changed or could not be confirmed; ticket completion was skipped"}
+		return result, nil
+	}
+	updated, err := s.editTicket(ctx, ticketEditInput{Target: t, Rkey: rkey, State: "completed", Pull: true, ExpectedCID: item.CID})
+	if err != nil {
+		result.Warnings = []string{fmt.Sprintf("merged code, but could not complete ticket: %v", err)}
+		return result, nil
+	}
+	result.StatusRecorded = true
+	result.Warnings = updated.Warnings
+	return result, nil
 }

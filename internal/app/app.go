@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/alyraffauf/tg/atproto"
@@ -17,15 +18,16 @@ import (
 )
 
 type Service struct {
-	resolver              identityResolver
-	appview               appviewClient
-	sessions              sessionProvider
-	auth                  *atproto.AuthManager
-	git                   gitClient
-	knot                  knotClientFactory
-	spindle               spindleClientFactory
-	knotOwnershipVerifier knotOwnershipVerifier
-	httpClient            *http.Client
+	fosterKnot           string
+	attestationDirectory string
+	resolver             identityResolver
+	appview              appviewClient
+	sessions             sessionProvider
+	auth                 *atproto.AuthManager
+	git                  gitClient
+	knot                 knotClientFactory
+	spindle              spindleClientFactory
+	httpClient           *http.Client
 }
 
 // DefaultKnot is used when repository creation does not specify a knot.
@@ -53,13 +55,12 @@ func NewWithStreams(appviewHost string, stdout, stderr io.Writer) *Service {
 			Client: &atclient.APIClient{Client: httpClient, Host: appviewHost},
 			Logger: slog.Default(),
 		},
-		sessions:              productionSessions{auth: auth, resolver: resolver, httpClient: httpClient},
-		auth:                  auth,
-		git:                   gitutil.NewClient(stdout, stderr),
-		knot:                  productionKnotFactory{httpClient: httpClient},
-		spindle:               productionSpindleFactory{httpClient: httpClient},
-		knotOwnershipVerifier: knot.NewOwnershipVerifier(httpClient),
-		httpClient:            httpClient,
+		sessions:   productionSessions{auth: auth, resolver: resolver, httpClient: httpClient},
+		auth:       auth,
+		git:        gitutil.NewClient(stdout, stderr),
+		knot:       productionKnotFactory{httpClient: httpClient},
+		spindle:    productionSpindleFactory{httpClient: httpClient},
+		httpClient: httpClient,
 	}
 }
 
@@ -73,4 +74,21 @@ func (s *Service) SetOAuthCallbackURL(callbackURL string) {
 // SetAccount selects the account used by subsequent service operations.
 func (s *Service) SetAccount(selector string) {
 	s.auth.SetAccount(selector)
+}
+
+// SetFosterKnot configures an explicit read-only migration host.
+func (s *Service) SetFosterKnot(raw string) error {
+	if raw == "" {
+		s.fosterKnot = ""
+		return nil
+	}
+	if !strings.HasPrefix(raw, "https://") {
+		raw = "https://" + raw
+	}
+	endpoint, err := parseKnotServiceEndpoint(raw)
+	if err != nil {
+		return err
+	}
+	s.fosterKnot = endpoint.Authority
+	return nil
 }

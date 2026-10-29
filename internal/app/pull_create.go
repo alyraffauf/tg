@@ -2,185 +2,118 @@ package app
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"time"
+	"strings"
 
-	"github.com/alyraffauf/tg/atproto"
 	"github.com/alyraffauf/tg/internal/gitutil"
-	"github.com/alyraffauf/tg/internal/tangledlex"
-	"github.com/bluesky-social/indigo/atproto/syntax"
-	lexutil "github.com/bluesky-social/indigo/lex/util"
+	"github.com/alyraffauf/tg/knot"
+	"github.com/alyraffauf/tg/tangled"
 )
 
-// CreatePullInput configures pull request creation.
 type CreatePullInput struct {
-	RepoDir string // local git repository (for branch detection + patch)
+	RepoDir string
 	Title   string
 	Body    string
-	Base    string // empty: use origin's default branch for a same-repo pull
-	Head    string // empty: current branch
+	Base    string
+	Head    string
 	Target  Target
-	Source  *Target // nil: same as Target
+	Source  *Target
 }
 
-var errForkPullBaseRequired = errors.New("fork pull requests require --base; pass the target's local remote branch, for example --base upstream/main")
+var errForkPullBaseRequired = errors.New("fork pull requests require --base; pass the target remote branch, for example --base upstream/main")
 
-// pullRecordInput is the write-side input to newPullRecord.
-type pullRecordInput struct {
-	Title         string
-	Body          string
-	TargetRepoDid string
-	SourceRepoDid string
-	Base          string
-	Head          string
-	Patch         *atproto.Blob
+type pullRange struct {
+	Base         string
+	Head         string
+	Branch       string
+	SourceBranch string
+	SourceRepo   string
 }
 
-// CreatePull generates a patch from the local repository, uploads it, and
-// writes a pull record.
-func (s *Service) CreatePull(ctx context.Context, in CreatePullInput) (*PRCreateResult, error) {
-	atClient, did, err := s.authenticatedPDS(ctx)
-	if err != nil {
-		return nil, err
+func (s *Service) resolvePullRange(ctx context.Context, in CreatePullInput, target *tangled.Repo) (pullRange, error) {
+	source := target
+	var err error
+	if in.Source != nil {
+		source, err = s.resolveRepo(ctx, *in.Source)
+		if err != nil {
+			return pullRange{}, err
+		}
 	}
-
 	head := in.Head
 	if head == "" {
 		head, err = s.git.CurrentBranch(ctx, in.RepoDir)
 		if err != nil {
-			return nil, fmt.Errorf("determine source branch: %w", err)
+			return pullRange{}, err
 		}
 	}
-
-	target, err := s.resolveRepo(ctx, in.Target)
+	headOID, err := s.git.ResolveCommit(ctx, in.RepoDir, head)
 	if err != nil {
-		return nil, err
+		return pullRange{}, err
 	}
-	if !atURIPrefix(target.URI) {
-		return nil, fmt.Errorf("target repository %q has no strong at:// URI", in.Target.Repo)
-	}
-	targetRepoDID := stringValue(target.Value.RepoDid)
-	if targetRepoDID == "" {
-		return nil, fmt.Errorf("target repository %q has no repository DID", in.Target.String())
-	}
-	source := target
-	if in.Source != nil {
-		source, err = s.resolveRepo(ctx, *in.Source)
-		if err != nil {
-			return nil, fmt.Errorf("resolve source repository: %w", err)
-		}
-	}
-	if stringValue(source.Value.RepoDid) == "" {
-		sourceTarget := in.Target
-		if in.Source != nil {
-			sourceTarget = *in.Source
-		}
-		return nil, fmt.Errorf("source repository %q has no repository DID", sourceTarget.String())
-	}
-	sourceRepoDID := stringValue(source.Value.RepoDid)
-
 	var base gitutil.PullBase
 	if in.Base != "" {
 		base, err = s.git.ResolvePullBase(ctx, in.RepoDir, in.Base)
-		if err != nil {
-			return nil, fmt.Errorf("resolve target branch: %w", err)
-		}
 	} else {
-		if sourceRepoDID != targetRepoDID {
-			return nil, errForkPullBaseRequired
+		if stringValue(source.Value.RepoDid) != stringValue(target.Value.RepoDid) {
+			return pullRange{}, errForkPullBaseRequired
 		}
 		base, err = s.git.DefaultPullBase(ctx, in.RepoDir)
-		if err != nil {
-			return nil, fmt.Errorf("determine target branch; set --base explicitly: %w", err)
+	}
+	if err != nil {
+		return pullRange{}, err
+	}
+	mergeBase, err := s.git.MergeBase(ctx, in.RepoDir, base.Revision, headOID)
+	if err != nil {
+		return pullRange{}, err
+	}
+	if mergeBase == headOID {
+		return pullRange{}, fmt.Errorf("no commits to propose")
+	}
+	sourceBranch := strings.TrimPrefix(head, "refs/heads/")
+	remoteHead, err := s.appview.GetRef(ctx, stringValue(source.Value.RepoDid), "refs/heads/"+sourceBranch)
+	if err != nil {
+		return pullRange{}, fmt.Errorf("confirm published source branch %s: %w; retry once the source repository is available in the Git mirror", sourceBranch, err)
+	}
+	if remoteHead != headOID {
+		return pullRange{}, fmt.Errorf("source commit %s is not the published tip of %s; push that branch to the source Tangled repository and wait for the Git mirror before submitting the PR", headOID, sourceBranch)
+	}
+	return pullRange{Base: mergeBase, Head: headOID, Branch: base.Branch, SourceBranch: sourceBranch, SourceRepo: stringValue(source.Value.RepoDid)}, nil
+}
+func (s *Service) submitPullPatch(ctx context.Context, repo *tangled.Repo, ticket string, change pullRange) (*knot.Receipt, []string, error) {
+	patch := map[string]any{"ticket": extractRKey(ticket), "base": map[string]string{"oid": change.Base}, "head": map[string]string{"oid": change.Head}, "sourceRepo": change.SourceRepo, "sourceBranch": change.SourceBranch}
+	receipt, warnings, err := s.socialProcedure(ctx, repo, "org.tangled.review.submitPatch", map[string]any{"patch": patch})
+	return receipt, warnings, err
+}
+func (s *Service) CreatePull(ctx context.Context, in CreatePullInput) (*PRCreateResult, error) {
+	if strings.TrimSpace(in.Title) == "" {
+		return nil, fmt.Errorf("title must not be empty")
+	}
+	repo, err := s.resolveRepo(ctx, in.Target)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.requireNative(ctx, repo); err != nil {
+		return nil, err
+	}
+	change, err := s.resolvePullRange(ctx, in, repo)
+	if err != nil {
+		return nil, err
+	}
+	receipt, warnings, err := s.socialProcedure(ctx, repo, "com.atproto.repo.createRecord", map[string]any{"collection": tangled.IssueCollection, "record": ticketRecord(in.Title, in.Body, change.Branch)})
+	if err != nil {
+		return nil, err
+	}
+	_, patchWarnings, err := s.submitPullPatch(ctx, repo, receipt.URI, change)
+	if err != nil {
+		// A transport failure may have saved the patch. Only erase after a definite rejection.
+		if isDefiniteRejection(err) {
+			if cleanupErr := s.eraseSocial(ctx, repo, *receipt); cleanupErr != nil {
+				return nil, fmt.Errorf("submit patch: %w; ticket %s could not be removed: %v", err, receipt.URI, cleanupErr)
+			}
 		}
+		return nil, fmt.Errorf("submit patch for %s: %w; inspect this ticket before retrying", receipt.URI, err)
 	}
-
-	patch, err := s.git.GeneratePatch(ctx, in.RepoDir, base.Revision, head)
-	if err != nil {
-		return nil, fmt.Errorf("generate pull request patch: %w", err)
-	}
-	blob, err := atClient.UploadBlob(ctx, patch, patchMimeType)
-	if err != nil {
-		return nil, err
-	}
-
-	uri, err := createPullRecord(ctx, atClient, did, pullRecordInput{
-		Title:         in.Title,
-		Body:          in.Body,
-		TargetRepoDid: targetRepoDID,
-		SourceRepoDid: sourceRepoDID,
-		Base:          base.Branch,
-		Head:          head,
-		Patch:         blob,
-	})
-	if err != nil {
-		return nil, err
-	}
-	return &PRCreateResult{URI: uri, Title: in.Title, Base: base.Branch, Head: head}, nil
+	return &PRCreateResult{URI: receipt.URI, CID: receipt.CID, Title: in.Title, Base: change.Branch, Head: change.SourceBranch, Warnings: append(warnings, patchWarnings...)}, nil
 }
-
-func atURIPrefix(uri string) bool { return len(uri) >= 5 && uri[:5] == "at://" }
-
-func createPullRecord(ctx context.Context, atClient pdsClient, did string, input pullRecordInput) (string, error) {
-	record, err := newPullRecord(input, time.Now().UTC())
-	if err != nil {
-		return "", err
-	}
-	uri, _, err := atClient.PutRecord(ctx, atproto.PutRecordInput{
-		Repo:       did,
-		Collection: pullCollection,
-		Rkey:       string(syntax.NewTIDNow(0)),
-		Record:     record,
-	})
-	if err != nil {
-		return "", fmt.Errorf("create pull request record: %w", err)
-	}
-	return uri, nil
-}
-
-func newPullRecord(input pullRecordInput, createdAt time.Time) (tangledlex.RepoPull, error) {
-	now := createdAt.Format(time.RFC3339)
-	patchBlob, err := patchBlob(input.Patch)
-	if err != nil {
-		return tangledlex.RepoPull{}, err
-	}
-	var sourceRepo *string
-	if input.SourceRepoDid != input.TargetRepoDid {
-		sourceRepo = optionalString(input.SourceRepoDid)
-	}
-	return tangledlex.RepoPull{
-		LexiconTypeID: pullCollection,
-		Title:         input.Title,
-		Body:          optionalString(input.Body),
-		CreatedAt:     now,
-		Target: &tangledlex.RepoPull_Target{
-			Repo:   input.TargetRepoDid,
-			Branch: input.Base,
-		},
-		Source: &tangledlex.RepoPull_Source{
-			Repo:   sourceRepo,
-			Branch: input.Head,
-		},
-		Rounds: []*tangledlex.RepoPull_Round{{
-			CreatedAt: now,
-			PatchBlob: &patchBlob,
-		}},
-	}, nil
-}
-
-func patchBlob(blob *atproto.Blob) (lexutil.LexBlob, error) {
-	if blob == nil || blob.Ref == nil {
-		return lexutil.LexBlob{}, nil
-	}
-	data, err := json.Marshal(blob)
-	if err != nil {
-		return lexutil.LexBlob{}, fmt.Errorf("encode pull patch blob: %w", err)
-	}
-	var result lexutil.LexBlob
-	if err := json.Unmarshal(data, &result); err != nil {
-		return lexutil.LexBlob{}, fmt.Errorf("decode pull patch blob: %w", err)
-	}
-	return result, nil
-}
+func atURIPrefix(uri string) bool { return strings.HasPrefix(uri, "at://") }

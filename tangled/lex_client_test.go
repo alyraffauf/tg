@@ -11,7 +11,7 @@ import (
 
 func TestListIssuesRejectsUnexpectedRecordType(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
-		if request.URL.Path != "/xrpc/sh.tangled.repo.listIssues" {
+		if request.URL.Path != "/xrpc/org.tangled.repo.listIssues" {
 			t.Fatalf("unexpected request path %q", request.URL.Path)
 		}
 		w.Header().Set("Content-Type", "application/json")

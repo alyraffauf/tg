@@ -1,7 +1,7 @@
 # Tangled lexicons
 
 This package contains the generated Go representations of the Tangled record
-and Bobbin query lexicons that `tg` consumes. It is deliberately internal:
+lexicons that `tg` consumes. It is deliberately internal:
 `tangled/` remains the handwritten Bobbin client and turns these generated
 types into the CLI's stable application types.
 
@@ -25,6 +25,6 @@ Review the resulting schema and generated-code diff, then run `nix fmt` and
 `nix build path:.#tg` from the repository root.
 
 To add support for a new lexicon, add its path (relative to Tangled Core's
-`lexicons/`) to `schemas.txt`. If it defines a record type, also add that
-type to the CBOR generator's list in `cborgen/main.go`; then run the update
+`lexicons/`) to `schemas.txt`. Add any new map types used by generated unions
+to the CBOR generator's list in `cborgen/main.go`; then run the update
 script.

@@ -151,10 +151,10 @@ func TestFetchAllPages(t *testing.T) {
 			return []string{"a"}, strptr("next"), nil
 		})
 		if err == nil {
-			t.Fatal("expected an error after exceeding the page limit")
+			t.Fatal("expected an error after the cursor repeats")
 		}
-		if calls != maxPaginationPages {
-			t.Fatalf("calls = %d, want %d", calls, maxPaginationPages)
+		if calls != 2 {
+			t.Fatalf("calls = %d, want 2", calls)
 		}
 	})
 

@@ -7,11 +7,11 @@ import (
 
 func TestDefaultScopesIncludeFeedComment(t *testing.T) {
 	for _, scope := range DefaultScopes {
-		if scope == "repo:sh.tangled.feed.comment" {
+		if scope == "rpc:com.atproto.repo.createRecord?aud=*" {
 			return
 		}
 	}
-	t.Fatal("DefaultScopes does not include repo:sh.tangled.feed.comment")
+	t.Fatal("DefaultScopes does not include rpc:com.atproto.repo.createRecord?aud=*")
 }
 
 func TestDefaultScopesExcludeDeprecatedCommentCollections(t *testing.T) {
@@ -42,5 +42,22 @@ func TestAuthManagerOAuthSessionHasScope(t *testing.T) {
 	}
 	if !isOAuth || !hasScope {
 		t.Fatalf("OAuthSessionHasScope() = (%t, %t), want (true, true)", hasScope, isOAuth)
+	}
+}
+
+func TestDefaultScopesCoverCurrentCIMutations(t *testing.T) {
+	for _, method := range []string{"org.tangled.event.notifyEvent", "org.tangled.ci.approvePipeline", "org.tangled.ci.retryPipeline", "org.tangled.ci.cancelPipeline"} {
+		found := false
+		for _, scope := range DefaultScopes {
+			found = found || scope == "rpc:"+method+"?aud=*"
+		}
+		if !found {
+			t.Errorf("missing scope for %s", method)
+		}
+	}
+	for _, scope := range DefaultScopes {
+		if scope == "rpc:org.tangled.ci.triggerPipeline?aud=*" {
+			t.Fatal("requested obsolete trigger scope")
+		}
 	}
 }

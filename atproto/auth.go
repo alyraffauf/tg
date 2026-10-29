@@ -26,58 +26,15 @@ const (
 
 // DefaultScopes are requested for a CLI session. The rpc scopes are needed for
 // the PDS to mint service-auth JWTs for knot procedures. The blob scope is
-// required for uploading PR patch blobs to the PDS.
+// required for uploading strings and attachments.
 var DefaultScopes = []string{
-	"atproto",
-
-	// Record collections.
-	"repo:sh.tangled.actor.profile",
-	"repo:sh.tangled.feed.comment",
-	"repo:sh.tangled.feed.reaction",
-	"repo:sh.tangled.feed.star",
-	"repo:sh.tangled.graph.follow",
-	"repo:sh.tangled.graph.vouch",
-	"repo:sh.tangled.knot",
-	"repo:sh.tangled.knot.member",
-	"repo:sh.tangled.label.definition",
-	"repo:sh.tangled.label.op",
-	"repo:sh.tangled.publicKey",
-	"repo:sh.tangled.repo",
-	"repo:sh.tangled.repo.artifact",
-	"repo:sh.tangled.repo.collaborator",
-	"repo:sh.tangled.repo.issue",
-	"repo:sh.tangled.repo.issue.state",
-	"repo:sh.tangled.repo.pull",
-	"repo:sh.tangled.repo.pull.status",
-	"repo:sh.tangled.spindle",
-	"repo:sh.tangled.spindle.member",
-	"repo:sh.tangled.string",
-
-	// Blob uploads: gzipped git patches plus image/video media.
-	"blob:application/gzip",
-	"blob:image/*",
-	"blob:video/*",
-
-	// RPC procedures, addressed to any service ("aud=*").
-	"rpc:sh.tangled.ci.cancelPipeline?aud=*",
-	"rpc:sh.tangled.ci.triggerPipeline?aud=*",
-	"rpc:sh.tangled.knot.addMember?aud=*",
-	"rpc:sh.tangled.knot.removeMember?aud=*",
-	"rpc:sh.tangled.repo.addCollaborator?aud=*",
-	"rpc:sh.tangled.repo.addSecret?aud=*",
-	"rpc:sh.tangled.repo.create?aud=*",
-	"rpc:sh.tangled.repo.delete?aud=*",
-	"rpc:sh.tangled.repo.deleteBranch?aud=*",
-	"rpc:sh.tangled.repo.forkStatus?aud=*",
-	"rpc:sh.tangled.repo.forkSync?aud=*",
-	"rpc:sh.tangled.repo.hiddenRef?aud=*",
-	"rpc:sh.tangled.repo.listSecrets?aud=*",
-	"rpc:sh.tangled.repo.merge?aud=*",
-	"rpc:sh.tangled.repo.mergeCheck?aud=*",
-	"rpc:sh.tangled.repo.push?aud=*",
-	"rpc:sh.tangled.repo.removeCollaborator?aud=*",
-	"rpc:sh.tangled.repo.removeSecret?aud=*",
-	"rpc:sh.tangled.repo.setDefaultBranch?aud=*",
+	"atproto", "blob:text/plain", "blob:image/*", "blob:video/*",
+	"repo:org.tangled.repo.declaration", "repo:org.tangled.graph.attestation", "repo:org.tangled.key.sshKey", "repo:org.tangled.snippet.string",
+	"rpc:com.atproto.repo.createRecord?aud=*", "rpc:com.atproto.repo.putRecord?aud=*", "rpc:com.atproto.repo.deleteRecord?aud=*", "rpc:com.atproto.repo.uploadBlob?aud=*",
+	"rpc:org.tangled.repo.createRepo?aud=*", "rpc:org.tangled.repo.deleteRepo?aud=*", "rpc:org.tangled.repo.mintToken?aud=*",
+	"rpc:org.tangled.review.submitPatch?aud=*", "rpc:org.tangled.git.receivePack?aud=*", "rpc:org.tangled.git.setDefaultBranch?aud=*",
+	"rpc:org.tangled.event.notifyEvent?aud=*", "rpc:org.tangled.ci.cancelPipeline?aud=*",
+	"rpc:org.tangled.ci.approvePipeline?aud=*", "rpc:org.tangled.ci.retryPipeline?aud=*",
 }
 
 type AuthManager struct {

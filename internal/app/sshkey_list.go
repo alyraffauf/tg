@@ -6,7 +6,7 @@ import (
 	"fmt"
 
 	"github.com/alyraffauf/tg/atproto"
-	"github.com/alyraffauf/tg/internal/tangledlex"
+	currentlex "github.com/alyraffauf/tg/internal/tangledlex"
 )
 
 // ListSSHKeys lists every public key owned by handle.
@@ -27,7 +27,7 @@ func buildSSHKeyItems(records []atproto.RecordItem) ([]SSHKeyItem, []RecordWarni
 	items := make([]SSHKeyItem, 0, len(records))
 	var warnings []RecordWarning
 	for _, rec := range records {
-		var key tangledlex.PublicKey
+		var key currentlex.KeySshKey
 		data, err := json.Marshal(rec.Value)
 		if err != nil {
 			warnings = append(warnings, RecordWarning{URI: rec.URI, Error: fmt.Sprintf("encode SSH key record: %v", err)})
@@ -39,7 +39,7 @@ func buildSSHKeyItems(records []atproto.RecordItem) ([]SSHKeyItem, []RecordWarni
 		}
 		items = append(items, SSHKeyItem{
 			Name:      key.Name,
-			Key:       key.Key,
+			Key:       key.PublicKey,
 			CreatedAt: key.CreatedAt,
 			URI:       rec.URI,
 		})

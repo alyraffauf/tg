@@ -14,7 +14,7 @@ func (s *Service) ViewRepo(ctx context.Context, t Target) (*RepoItem, error) {
 	}
 	return &RepoItem{
 		Name:        name,
-		Author:      t.Handle,
+		Author:      s.ownerHandle(ctx, tangledRepo.OwnerDID),
 		URI:         tangledRepo.URI,
 		Knot:        tangledRepo.Value.Knot,
 		Description: stringValue(tangledRepo.Value.Description),

@@ -6,11 +6,11 @@ import (
 	"time"
 
 	"github.com/alyraffauf/tg/atproto"
-	"github.com/alyraffauf/tg/internal/tangledlex"
+	currentlex "github.com/alyraffauf/tg/internal/tangledlex"
 	"github.com/bluesky-social/indigo/atproto/syntax"
 )
 
-// AddSSHKey writes a new sh.tangled.publicKey record.
+// AddSSHKey writes a new org.tangled.key.sshKey record.
 func (s *Service) AddSSHKey(ctx context.Context, name, key string) (*SSHKeyAddResult, error) {
 	atClient, did, err := s.authenticatedPDS(ctx)
 	if err != nil {
@@ -20,9 +20,9 @@ func (s *Service) AddSSHKey(ctx context.Context, name, key string) (*SSHKeyAddRe
 		Repo:       did,
 		Collection: sshKeyCollection,
 		Rkey:       string(syntax.NewTIDNow(0)),
-		Record: tangledlex.PublicKey{
+		Record: currentlex.KeySshKey{
 			LexiconTypeID: sshKeyCollection,
-			Key:           key,
+			PublicKey:     key,
 			Name:          name,
 			CreatedAt:     time.Now().UTC().Format(time.RFC3339),
 		},

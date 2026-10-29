@@ -19,20 +19,23 @@ const (
 // config resolves values with the following precedence (highest to lowest):
 // command-line flags, environment variables prefixed TG_, config file, defaults.
 type settings struct {
-	Appview  string
-	Account  string
-	Knot     string
-	SSHPort  string
-	Protocol string
+	FosterKnot string
+	Appview    string
+	Account    string
+	Knot       string
+	SSHPort    string
+	Protocol   string
 }
 
 type flagSettings struct {
-	ConfigPath string
-	Appview    string
-	Account    string
-	ConfigSet  bool
-	AppviewSet bool
-	AccountSet bool
+	FosterKnot    string
+	FosterKnotSet bool
+	ConfigPath    string
+	Appview       string
+	Account       string
+	ConfigSet     bool
+	AppviewSet    bool
+	AccountSet    bool
 }
 
 func loadConfig(flags flagSettings) (settings, error) {
@@ -58,6 +61,7 @@ func loadConfig(flags flagSettings) (settings, error) {
 	config.SetEnvKeyReplacer(strings.NewReplacer(".", "_", "-", "_"))
 	config.AutomaticEnv()
 	config.SetDefault("appview", defaultAppview)
+	config.SetDefault("foster-knot", "")
 	config.SetDefault("account", "")
 	config.SetDefault("knot", "")
 	config.SetDefault("ssh-port", "22")
@@ -69,26 +73,31 @@ func loadConfig(flags flagSettings) (settings, error) {
 				return settings{}, fmt.Errorf("read config %q: %w", configPath, err)
 			}
 			return applyFlagSettings(settings{
-				Appview:  config.GetString("appview"),
-				Account:  config.GetString("account"),
-				Knot:     config.GetString("knot"),
-				SSHPort:  config.GetString("ssh-port"),
-				Protocol: config.GetString("protocol"),
+				Appview:    config.GetString("appview"),
+				FosterKnot: config.GetString("foster-knot"),
+				Account:    config.GetString("account"),
+				Knot:       config.GetString("knot"),
+				SSHPort:    config.GetString("ssh-port"),
+				Protocol:   config.GetString("protocol"),
 			}, flags), nil
 		}
 		return settings{}, fmt.Errorf("read config: %w", err)
 	}
 	resolved := settings{
-		Appview:  config.GetString("appview"),
-		Account:  config.GetString("account"),
-		Knot:     config.GetString("knot"),
-		SSHPort:  config.GetString("ssh-port"),
-		Protocol: config.GetString("protocol"),
+		Appview:    config.GetString("appview"),
+		FosterKnot: config.GetString("foster-knot"),
+		Account:    config.GetString("account"),
+		Knot:       config.GetString("knot"),
+		SSHPort:    config.GetString("ssh-port"),
+		Protocol:   config.GetString("protocol"),
 	}
 	return applyFlagSettings(resolved, flags), nil
 }
 
 func applyFlagSettings(resolved settings, flags flagSettings) settings {
+	if flags.FosterKnotSet {
+		resolved.FosterKnot = flags.FosterKnot
+	}
 	if flags.AppviewSet {
 		resolved.Appview = flags.Appview
 	}

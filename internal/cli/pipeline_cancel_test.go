@@ -23,7 +23,7 @@ func TestRenderPipelineCancellationForUncancellableSelection(t *testing.T) {
 	var output bytes.Buffer
 	renderPipelineCancellation(&output, &app.PipelineCancelResult{Pipeline: "pipeline-123"}, true)
 
-	const want = "None of the selected workflows are pending or running.\n"
+	const want = "None of the selected workflows are blocked, pending or running.\n"
 	if output.String() != want {
 		t.Fatalf("renderPipelineCancellation() = %q, want %q", output.String(), want)
 	}

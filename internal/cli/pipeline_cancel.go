@@ -16,7 +16,7 @@ func newPipelineCancelCommand(service *app.Service) *cobra.Command {
 	command := &cobra.Command{
 		Use:   "cancel <id>",
 		Short: "Cancel pipeline workflows",
-		Long: `Cancel all pending and running workflows in a pipeline.
+		Long: `Cancel all blocked, pending and running workflows in a pipeline.
 
 Use --workflow to select workflows. Without --repo, tg uses the origin remote
 in the current directory.`,
@@ -43,10 +43,10 @@ in the current directory.`,
 func renderPipelineCancellation(writer io.Writer, result *app.PipelineCancelResult, selectedWorkflows bool) {
 	if !result.CancellationRequested {
 		if selectedWorkflows {
-			fmt.Fprintln(writer, "None of the selected workflows are pending or running.")
+			fmt.Fprintln(writer, "None of the selected workflows are blocked, pending or running.")
 			return
 		}
-		fmt.Fprintf(writer, "Pipeline %s has no pending or running workflows.\n", result.Pipeline)
+		fmt.Fprintf(writer, "Pipeline %s has no blocked, pending or running workflows.\n", result.Pipeline)
 		return
 	}
 	if !selectedWorkflows {

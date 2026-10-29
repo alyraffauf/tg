@@ -7,7 +7,7 @@
   },
   {
     "package": "tangledlex",
-    "prefix": "sh.tangled",
+    "prefix": "org.tangled",
     "outdir": ".",
     "import": "github.com/alyraffauf/tg/internal/tangledlex"
   }

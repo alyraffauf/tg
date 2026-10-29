@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/alyraffauf/tg/internal/tangledlex"
+	"github.com/bluesky-social/indigo/atproto/syntax"
 )
 
 type RepoList struct {
@@ -14,45 +14,33 @@ type RepoList struct {
 	Warnings []RecordWarning `json:"warnings,omitempty"`
 }
 
-// ListRepos fetches every repo owned by ownerDid, following pagination
-// cursors until the listing is exhausted.
-func (t *Tangled) ListRepos(ctx context.Context, ownerDid string) (*RepoList, error) {
+func (t *Tangled) ListRepos(ctx context.Context, owner string) (*RepoList, error) {
 	var warnings []RecordWarning
 	items, err := fetchAllPages(ctx, 0, func(ctx context.Context, cursor string) ([]Repo, *string, error) {
-		page, err := tangledlex.RepoListRepos(ctx, t.lexClient(), cursor, 100, "", ownerDid)
-		if err != nil {
+		var page struct {
+			Items  []json.RawMessage `json:"items"`
+			Cursor *string           `json:"cursor"`
+		}
+		params := map[string]any{"subject": owner, "limit": 100}
+		if cursor != "" {
+			params["cursor"] = cursor
+		}
+		if err := t.Client.Get(ctx, syntax.NSID("org.tangled.repo.listRepos"), params, &page); err != nil {
 			return nil, nil, err
 		}
-		items, itemWarnings := repoListItems(page.Items)
-		warnings = append(warnings, itemWarnings...)
-		return items, page.Cursor, nil
+		var decoded []Repo
+		for _, raw := range page.Items {
+			var repo Repo
+			if err := json.Unmarshal(raw, &repo); err != nil {
+				warnings = append(warnings, RecordWarning{Error: err.Error()})
+				continue
+			}
+			decoded = append(decoded, repo)
+		}
+		return decoded, page.Cursor, nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("list tangled repos for %q: %w", ownerDid, err)
+		return nil, fmt.Errorf("list repositories: %w", err)
 	}
-
 	return &RepoList{Items: items, Warnings: warnings}, nil
-}
-
-func repoListItems(items []*tangledlex.RepoListRepos_ListItem) ([]Repo, []RecordWarning) {
-	decoded := make([]Repo, 0, len(items))
-	var warnings []RecordWarning
-	for _, item := range items {
-		if item == nil {
-			warnings = append(warnings, RecordWarning{Error: "repository list contained a null item"})
-			continue
-		}
-		value, err := recordJSON(item.Value, &tangledlex.Repo{})
-		if err != nil {
-			warnings = append(warnings, RecordWarning{URI: item.Uri, Error: err.Error()})
-			continue
-		}
-		var record tangledlex.Repo
-		if err := json.Unmarshal(value, &record); err != nil {
-			warnings = append(warnings, RecordWarning{URI: item.Uri, Error: fmt.Sprintf("decode repository record: %v", err)})
-			continue
-		}
-		decoded = append(decoded, Repo{URI: item.Uri, CID: dereference(item.Cid), Value: record})
-	}
-	return decoded, warnings
 }

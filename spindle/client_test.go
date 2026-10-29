@@ -3,21 +3,23 @@ package spindle
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"testing"
 )
 
 func TestQueryPipelinesUsesSpindleEndpoint(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		if request.URL.Path != "/xrpc/sh.tangled.ci.queryPipelines" {
+		if request.URL.Path != "/xrpc/org.tangled.ci.queryPipelines" {
 			t.Fatalf("path = %q", request.URL.Path)
 		}
 		if request.URL.Query().Get("repo") != "did:plc:repo" || request.URL.Query().Get("limit") != "250" {
 			t.Fatalf("query = %q", request.URL.RawQuery)
 		}
 		writer.Header().Set("Content-Type", "application/json")
-		_, _ = writer.Write([]byte(`{"pipelines":[{"id":"pipeline-1","commit":"abc","trigger":{"$type":"sh.tangled.ci.trigger#push"},"workflows":[{"id":"test","name":"test","status":"success"}]}],"total":1}`))
+		_, _ = writer.Write([]byte(`{"pipelines":[{"id":"pipeline-1","commit":"abc","trigger":{"$type":"org.tangled.ci.trigger#push"},"workflows":[{"id":"test","name":"test","status":"success"}]}],"total":1}`))
 	}))
 	defer server.Close()
 
@@ -36,7 +38,7 @@ func TestQueryPipelinesUsesSpindleEndpoint(t *testing.T) {
 
 func TestCancelPipelineAuthenticatesAndPostsInput(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		if request.URL.Path != "/xrpc/sh.tangled.ci.cancelPipeline" || request.Method != http.MethodPost {
+		if request.URL.Path != "/xrpc/org.tangled.ci.cancelPipeline" || request.Method != http.MethodPost {
 			t.Fatalf("request = %s %s", request.Method, request.URL.Path)
 		}
 		if request.Header.Get("Authorization") != "Bearer token" {
@@ -66,21 +68,29 @@ func TestCancelPipelineAuthenticatesAndPostsInput(t *testing.T) {
 
 func TestTriggerPipelineAuthenticatesAndReturnsPipeline(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		if request.URL.Path != "/xrpc/sh.tangled.ci.triggerPipeline" || request.Method != http.MethodPost {
+		if request.URL.Path != "/xrpc/org.tangled.event.notifyEvent" || request.Method != http.MethodPost {
 			t.Fatalf("request = %s %s", request.Method, request.URL.Path)
 		}
 		if request.Header.Get("Authorization") != "Bearer token" {
 			t.Fatalf("authorization = %q", request.Header.Get("Authorization"))
 		}
-		var input TriggerPipelineInput
+		var input map[string]any
 		if err := json.NewDecoder(request.Body).Decode(&input); err != nil {
 			t.Fatalf("decode input: %v", err)
 		}
-		if input.Trigger.SHA != "0123456789abcdef0123456789abcdef01234567" || input.Trigger.Ref != "refs/heads/feature" {
-			t.Fatalf("input = %+v", input)
+		event, ok := input["event"].(map[string]any)
+		if !ok || len(input) != 2 || input["repo"] != "did:plc:repo" {
+			t.Fatalf("notifyEvent body = %+v", input)
+		}
+		if event["$type"] != "org.tangled.ci.trigger.manual" || event["repo"] != input["repo"] || event["commit"] != "0123456789abcdef0123456789abcdef01234567" || event["ref"] != "refs/heads/feature" {
+			t.Fatalf("manual event = %+v", event)
+		}
+		workflows, ok := event["workflows"].([]any)
+		if !ok || len(workflows) != 1 || workflows[0] != "test.yml" {
+			t.Fatalf("workflow selection = %+v", event["workflows"])
 		}
 		writer.Header().Set("Content-Type", "application/json")
-		_, _ = writer.Write([]byte(`{"pipeline":"at://did:plc:spindle/sh.tangled.ci.pipeline/3mrvk5dbnep22"}`))
+		_, _ = writer.Write([]byte(`{"ci":{"pipelines":["3mrvk5dbnep22","3mrvk5dbnep23"],"message":"Started verification"}}`))
 	}))
 	defer server.Close()
 
@@ -89,13 +99,13 @@ func TestTriggerPipelineAuthenticatesAndReturnsPipeline(t *testing.T) {
 		t.Fatalf("NewWithToken() error = %v", err)
 	}
 	output, err := client.TriggerPipeline(context.Background(), TriggerPipelineInput{
-		Repo:    "did:plc:repo",
-		Trigger: ManualTrigger{LexiconTypeID: "sh.tangled.ci.trigger#manual", SHA: "0123456789abcdef0123456789abcdef01234567", Ref: "refs/heads/feature"},
+		Repo:  "did:plc:repo",
+		Event: ManualTrigger{LexiconTypeID: "org.tangled.ci.trigger.manual", Repo: "did:plc:repo", SHA: "0123456789abcdef0123456789abcdef01234567", Ref: "refs/heads/feature", Workflows: []string{"test.yml"}},
 	})
 	if err != nil {
 		t.Fatalf("TriggerPipeline() error = %v", err)
 	}
-	if output.Pipeline != "at://did:plc:spindle/sh.tangled.ci.pipeline/3mrvk5dbnep22" {
+	if !slices.Equal(output.Pipelines, []string{"3mrvk5dbnep22", "3mrvk5dbnep23"}) || output.Message != "Started verification" {
 		t.Fatalf("output = %+v", output)
 	}
 }
@@ -131,7 +141,7 @@ func TestGetPipelineQueriesAndDecodes(t *testing.T) {
 			t.Fatalf("pipeline query = %q", request.URL.Query().Get("pipeline"))
 		}
 		writer.Header().Set("Content-Type", "application/json")
-		_, _ = writer.Write([]byte(`{"id":"3mrvk5dbnep22","commit":"abc","trigger":{"$type":"sh.tangled.ci.trigger#push"},"workflows":[{"id":"test","name":"test","status":"success"}]}`))
+		_, _ = writer.Write([]byte(`{"id":"3mrvk5dbnep22","commit":"abc","trigger":{"$type":"org.tangled.ci.trigger#push"},"workflows":[{"id":"test","name":"test","status":"success"}]}`))
 	}))
 	defer server.Close()
 
@@ -157,5 +167,106 @@ func TestServiceDID(t *testing.T) {
 	}
 	if _, err := ServiceDID(""); err == nil {
 		t.Fatal("ServiceDID(empty) error = nil")
+	}
+}
+
+func TestPipelineApprovalAndRetryContracts(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.Header.Get("Authorization") != "Bearer token" {
+			t.Errorf("request=%s %s", r.Method, r.URL)
+		}
+		var input map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+			t.Error(err)
+		}
+		if input["repo"] != "did:plc:repo" || input["pipeline"] != "opaque-pipeline" {
+			t.Errorf("body=%+v", input)
+		}
+		switch r.URL.Path {
+		case "/xrpc/org.tangled.ci.approvePipeline":
+			if len(input) != 2 {
+				t.Errorf("approval=%+v", input)
+			}
+		case "/xrpc/org.tangled.ci.retryPipeline":
+			workflows, ok := input["workflows"].([]any)
+			if !ok || len(workflows) != 1 || workflows[0] != "build.yml" {
+				t.Errorf("retry=%+v", input)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"pipeline":"new-pipeline"}`)
+		default:
+			t.Errorf("unexpected route=%s", r.URL)
+		}
+	}))
+	defer server.Close()
+	client, err := NewWithToken(server.URL, "token", server.Client())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := client.ApprovePipeline(context.Background(), ApprovePipelineInput{Repo: "did:plc:repo", Pipeline: "opaque-pipeline"}); err != nil {
+		t.Fatal(err)
+	}
+	retry, err := client.RetryPipeline(context.Background(), RetryPipelineInput{Repo: "did:plc:repo", Pipeline: "opaque-pipeline", Workflows: []string{"build.yml"}})
+	if err != nil || retry.Pipeline != "new-pipeline" {
+		t.Fatalf("retry=%+v err=%v", retry, err)
+	}
+}
+
+func TestPipelineMutationsPreserveDenialsAndRejectMissingReceipts(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		status int
+		body   string
+	}{
+		{"denied", 403, `{"error":"AccessControl","message":"permission denied"}`},
+		{"not retryable", 400, `{"error":"PipelineNotRetryable"}`},
+		{"missing receipt", 200, `{}`},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(test.status)
+				fmt.Fprint(w, test.body)
+			}))
+			defer server.Close()
+			client, _ := NewWithToken(server.URL, "token", server.Client())
+			if _, err := client.RetryPipeline(context.Background(), RetryPipelineInput{Repo: "did:plc:repo", Pipeline: "pipeline"}); err == nil {
+				t.Fatal("retry accepted failed request")
+			}
+			if _, err := client.TriggerPipeline(context.Background(), TriggerPipelineInput{Repo: "did:plc:repo"}); test.status != http.StatusOK && err == nil {
+				t.Fatal("trigger accepted failed request")
+			}
+		})
+	}
+}
+
+func TestTriggerPipelineNotificationResponses(t *testing.T) {
+	for _, test := range []struct {
+		name      string
+		body      string
+		pipelines []string
+		message   string
+	}{
+		{name: "no CI", body: `{}`},
+		{name: "empty CI", body: `{"ci":{}}`},
+		{name: "message only", body: `{"ci":{"message":"No matching workflows"}}`, message: "No matching workflows"},
+		{name: "legacy", body: `{"pipeline":"old-pipeline","message":"Old spindle"}`, pipelines: []string{"old-pipeline"}, message: "Old spindle"},
+		{name: "CI takes precedence", body: `{"ci":{"pipelines":[]},"pipeline":"obsolete"}`},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				fmt.Fprint(w, test.body)
+			}))
+			defer server.Close()
+			client, err := NewWithToken(server.URL, "token", server.Client())
+			if err != nil {
+				t.Fatal(err)
+			}
+			result, err := client.TriggerPipeline(context.Background(), TriggerPipelineInput{Repo: "did:plc:repo"})
+			if err != nil || !slices.Equal(result.Pipelines, test.pipelines) || result.Message != test.message {
+				t.Fatalf("notification=%+v err=%v", result, err)
+			}
+		})
 	}
 }

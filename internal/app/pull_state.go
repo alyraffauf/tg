@@ -5,22 +5,13 @@ import (
 	"fmt"
 )
 
-// SetPullState closes or reopens a pull request. status is the bare verb
-// ("open" or "closed").
-func (s *Service) SetPullState(ctx context.Context, t Target, rkey, status string) (*StateResult, error) {
-	if status != "open" && status != "closed" {
-		return nil, fmt.Errorf("unsupported pull request status %q", status)
+func (s *Service) SetPullState(ctx context.Context, t Target, rkey, state string, expectedCID ...string) (*StateResult, error) {
+	if state != "open" && state != "closed" {
+		return nil, fmt.Errorf("unsupported state %q", state)
 	}
-	atClient, did, err := s.authenticatedPDS(ctx)
+	result, err := s.editTicket(ctx, ticketEditInput{ExpectedCID: firstCID(expectedCID), Target: t, Rkey: rkey, State: state, Pull: true})
 	if err != nil {
 		return nil, err
 	}
-	target, _, err := s.targetRecord(ctx, t, pullCollection, rkey)
-	if err != nil {
-		return nil, err
-	}
-	if err := putState(ctx, atClient, did, rkey, pullCollection, target, status); err != nil {
-		return nil, err
-	}
-	return &StateResult{Rkey: rkey, State: status}, nil
+	return &StateResult{Rkey: rkey, State: state, URI: result.URI, CID: result.CID, Warnings: result.Warnings}, nil
 }

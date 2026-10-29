@@ -12,6 +12,7 @@ const maxPaginationPages = 1000
 
 // ListItem is one item in an issue or pull-request listing.
 type ListItem struct {
+	Author         string          `json:"author,omitempty"`
 	URI            string          `json:"uri"`
 	CID            string          `json:"cid,omitempty"`
 	Value          json.RawMessage `json:"value"`
@@ -76,6 +77,7 @@ func (o ListOpts) params(subject, cursor string) map[string]any {
 func fetchAllPages[T any](ctx context.Context, maximumItems int64, fetch func(ctx context.Context, cursor string) (items []T, nextCursor *string, err error)) ([]T, error) {
 	var all []T
 	cursor := ""
+	seen := make(map[string]bool)
 
 	for page := 0; page < maxPaginationPages; page++ {
 		items, nextCursor, err := fetch(ctx, cursor)
@@ -94,6 +96,10 @@ func fetchAllPages[T any](ctx context.Context, maximumItems int64, fetch func(ct
 		if nextCursor == nil || *nextCursor == "" {
 			return all, nil
 		}
+		if seen[*nextCursor] {
+			return nil, fmt.Errorf("pagination repeated cursor %q", *nextCursor)
+		}
+		seen[*nextCursor] = true
 		cursor = *nextCursor
 	}
 

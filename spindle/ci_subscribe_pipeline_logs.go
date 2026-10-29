@@ -14,7 +14,7 @@ const maxPipelineLogMessageBytes = 8 << 20
 
 // SubscribePipelineLogs streams log events from a pipeline over WebSocket.
 // The spindle closes the connection when logs are fully delivered.
-func (c *Client) SubscribePipelineLogs(ctx context.Context, pipelineID string, workflows []string, onEvent func(PipelineLogEvent) error) error {
+func (c *Client) SubscribePipelineLogs(ctx context.Context, pipelineID string, workflows []string, onEvent func(PipelineLogEvent) error, repo ...string) error {
 	u, err := url.Parse(c.Host)
 	if err != nil {
 		return fmt.Errorf("parse spindle host: %w", err)
@@ -29,6 +29,9 @@ func (c *Client) SubscribePipelineLogs(ctx context.Context, pipelineID string, w
 	}
 	u.Path = "/xrpc/" + nsidSubscribeLogs.String()
 	query := url.Values{"pipeline": []string{pipelineID}}
+	if len(repo) > 0 {
+		query.Set("repo", repo[0])
+	}
 	if len(workflows) > 0 {
 		query["workflows"] = workflows
 	}
@@ -62,7 +65,7 @@ func (c *Client) SubscribePipelineLogs(ctx context.Context, pipelineID string, w
 			if websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
 				return nil
 			}
-			return fmt.Errorf("pipeline log stream ended before a normal close: %w", err)
+			return fmt.Errorf("pipeline log stream ended unexpectedly; received logs may be incomplete: %w", err)
 		}
 		event, err := decodeLogEvent(data)
 		if err != nil {
@@ -93,6 +96,7 @@ func decodeLogEvent(data []byte) (*PipelineLogEvent, error) {
 		return &PipelineLogEvent{
 			Type: "control",
 			Control: &PipelineLogControl{
+				Outcome:  mapString(body, "outcome"),
 				Kind:     mapString(body, "kind"),
 				Step:     mapInt(body, "step"),
 				Time:     mapString(body, "time"),

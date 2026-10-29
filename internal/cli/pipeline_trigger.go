@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"io"
 
 	"github.com/alyraffauf/tg/internal/app"
 	"github.com/spf13/cobra"
@@ -29,11 +30,23 @@ the current checkout. Without --repo, tg uses the origin remote.`,
 				return err
 			}
 			return output(cmd, result, func(result *app.PipelineTriggerResult) {
-				fmt.Fprintf(cmd.OutOrStdout(), "Triggered pipeline %s.\n", result.Pipeline)
+				renderPipelineTrigger(cmd.OutOrStdout(), result)
 			})
 		},
 	}
 	command.Flags().StringVarP(&repository, "repo", "R", "", "Target repository as handle/repo")
 	command.Flags().StringSliceVarP(&workflows, "workflow", "w", nil, "Workflow to trigger (repeatable)")
 	return command
+}
+
+func renderPipelineTrigger(writer io.Writer, result *app.PipelineTriggerResult) {
+	if len(result.Pipelines) == 0 {
+		fmt.Fprintln(writer, "No pipelines were scheduled.")
+	}
+	for _, pipeline := range result.Pipelines {
+		fmt.Fprintf(writer, "Triggered pipeline %s.\n", pipeline)
+	}
+	if result.Message != "" {
+		fmt.Fprintln(writer, result.Message)
+	}
 }

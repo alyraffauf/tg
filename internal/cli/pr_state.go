@@ -8,27 +8,45 @@ import (
 )
 
 func newPRUpdateCommand(service *app.Service) *cobra.Command {
-	var base string
+	var base, head, repository, sourceRepository string
 
 	command := &cobra.Command{
 		Use:   "update <record-key>",
 		Short: "Submit a new round for a pull request",
+		Long:  "Submit a new immutable patch round from published source commits. Push the source branch first; tg does not push it automatically.",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			repoDir, err := getwd()
 			if err != nil {
 				return err
 			}
-			if err := service.UpdatePullRound(cmd.Context(), app.UpdatePullRoundInput{
+			target, err := resolveTargetFlag(cmd.Context(), repository, service)
+			if err != nil {
+				return err
+			}
+			var source *app.Target
+			if sourceRepository != "" {
+				parsed, err := app.ParseTarget(sourceRepository)
+				if err != nil {
+					return err
+				}
+				source = &parsed
+			}
+			result, err := service.UpdatePullRound(cmd.Context(), app.UpdatePullRoundInput{
+				Target: target, Source: source, Head: head,
 				RepoDir: repoDir,
 				Rkey:    args[0],
 				Base:    base,
-			}); err != nil {
+			})
+			if err != nil {
 				return err
 			}
-			return outputRecordUpdate(cmd, args[0])
+			return output(cmd, result, func(*app.UpdatedRecordResult) {})
 		},
 	}
+	command.Flags().StringVarP(&repository, "repo", "R", "", "Target repository as handle/repo")
+	command.Flags().StringVar(&sourceRepository, "source-repo", "", "Source repository as handle/repo")
+	command.Flags().StringVarP(&head, "head", "H", "", "Published source branch")
 	command.Flags().StringVarP(&base, "base", "B", "", "Target branch or local remote-tracking branch. Required for forks.")
 	return command
 }
@@ -42,7 +60,7 @@ func newPRReopenCommand(service *app.Service) *cobra.Command {
 }
 
 func newPREditCommand(service *app.Service) *cobra.Command {
-	var titleText, bodyText string
+	var titleText, bodyText, repository, expectedCID string
 
 	command := &cobra.Command{
 		Use:   "edit <record-key>",
@@ -59,12 +77,19 @@ func newPREditCommand(service *app.Service) *cobra.Command {
 			if title == nil && body == nil {
 				return fmt.Errorf("provide --title or --body")
 			}
-			if err := service.EditPull(cmd.Context(), args[0], title, body); err != nil {
+			target, err := resolveTargetFlag(cmd.Context(), repository, service)
+			if err != nil {
 				return err
 			}
-			return outputRecordUpdate(cmd, args[0])
+			result, err := service.EditPull(cmd.Context(), target, args[0], title, body, expectedCID)
+			if err != nil {
+				return err
+			}
+			return output(cmd, result, func(*app.UpdatedRecordResult) {})
 		},
 	}
+	command.Flags().StringVar(&expectedCID, "expected-cid", "", "Reject changes unless this record CID is current")
+	command.Flags().StringVarP(&repository, "repo", "R", "", "Target repository as handle/repo")
 	command.Flags().StringVarP(&titleText, "title", "t", "", "New title")
 	command.Flags().StringVarP(&bodyText, "body", "b", "", "New body")
 	return command
@@ -89,9 +114,6 @@ func newPRMergeCommand(service *app.Service) *cobra.Command {
 			}
 			return output(cmd, result, func(result *app.MergePullResult) {
 				fmt.Fprintf(cmd.OutOrStdout(), "Pull request %s merged\n", result.Rkey)
-				for _, warning := range result.Warnings {
-					fmt.Fprintf(cmd.ErrOrStderr(), "warning: %s\n", warning)
-				}
 			})
 		},
 	}
@@ -100,7 +122,7 @@ func newPRMergeCommand(service *app.Service) *cobra.Command {
 }
 
 func newPRStateCommand(service *app.Service, use, status string) *cobra.Command {
-	var repository string
+	var repository, expectedCID string
 
 	command := &cobra.Command{
 		Use:   use + " <record-key>",
@@ -112,7 +134,7 @@ func newPRStateCommand(service *app.Service, use, status string) *cobra.Command 
 			if err != nil {
 				return err
 			}
-			result, err := service.SetPullState(ctx, target, args[0], status)
+			result, err := service.SetPullState(ctx, target, args[0], status, expectedCID)
 			if err != nil {
 				return fmt.Errorf("%s pull request: %w", use, err)
 			}
@@ -121,6 +143,7 @@ func newPRStateCommand(service *app.Service, use, status string) *cobra.Command 
 			})
 		},
 	}
+	command.Flags().StringVar(&expectedCID, "expected-cid", "", "Reject changes unless this record CID is current")
 	command.Flags().StringVarP(&repository, "repo", "R", "", "Target repository as handle/repo")
 	return command
 }

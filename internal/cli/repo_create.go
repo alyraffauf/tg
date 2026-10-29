@@ -9,7 +9,7 @@ import (
 )
 
 func newRepoCreateCommand(service *app.Service, defaultKnot, defaultSSHPort, defaultProtocol string) *cobra.Command {
-	var description, knotHost, pushPath, remote, sshPort string
+	var description, knotHost, pushPath, remote, sshPort, policy string
 	var clone bool
 
 	command := &cobra.Command{
@@ -17,8 +17,7 @@ func newRepoCreateCommand(service *app.Service, defaultKnot, defaultSSHPort, def
 		Short: "Create a repository",
 		Long: `Create a repository on Tangled.
 
-By default, tg selects a Knot registered to your account. If your account has no
-Knot registrations, tg uses ` + app.DefaultKnot + `. Use --knot to choose a Knot.
+By default, tg uses ` + app.DefaultKnot + `. Use --knot to choose a Knot.
 
 Use --clone to clone the new repository. Use --push=<path> to push an existing
 local repository and set its current branch as the default branch.
@@ -32,7 +31,7 @@ Run "tg auth login" first.`,
 				return err
 			}
 			result, err := service.CreateRepo(ctx, app.CreateRepoInput{
-				KnotHost: knotHost, SSHPort: parsedSSHPort, Name: args[0], Description: description,
+				ContributionPolicy: policy, KnotHost: knotHost, SSHPort: parsedSSHPort, Name: args[0], Description: description,
 				Clone: clone, CloneProtocol: defaultProtocol, PushPath: pushPath, RemoteName: remote,
 			})
 			if err != nil {
@@ -41,6 +40,7 @@ Run "tg auth login" first.`,
 			return output(cmd, result, func(repo *app.RepoCreateResult) { renderRepoCreate(cmd, repo) })
 		},
 	}
+	command.Flags().StringVar(&policy, "contribution-policy", "", "Who may contribute: anyone, members or collaborators (default: knot policy)")
 	command.Flags().StringVar(&description, "description", "", "Repository description")
 	command.Flags().StringVar(&knotHost, "knot", defaultKnot, "Knot host")
 	command.Flags().StringVar(&sshPort, "ssh-port", defaultSSHPort, "SSH port for an explicitly selected Knot")
@@ -72,8 +72,5 @@ func renderRepoCreate(cmd *cobra.Command, repo *app.RepoCreateResult) {
 	}
 	if repo.DefaultBranch != "" {
 		fmt.Fprintf(cmd.ErrOrStderr(), "Set default branch to %s\n", repo.DefaultBranch)
-	}
-	for _, warning := range repo.Warnings {
-		fmt.Fprintf(cmd.ErrOrStderr(), "warning: %s\n", warning)
 	}
 }

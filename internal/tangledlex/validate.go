@@ -1,388 +1,215 @@
 package tangledlex
 
 import (
+	"embed"
 	"encoding/json"
 	"fmt"
-	"mime"
 	"net/url"
 	"strings"
-	"time"
+	"unicode/utf8"
 
-	comatproto "github.com/bluesky-social/indigo/api/atproto"
 	"github.com/bluesky-social/indigo/atproto/syntax"
-	lexutil "github.com/bluesky-social/indigo/lex/util"
 	"github.com/rivo/uniseg"
 )
 
-// ValidateRecord validates a Tangled record immediately before it is written
-// to a PDS. Generated types supply the wire shape; this checks constraints
-// that Go's type system cannot express.
+//go:embed schemas/org
+var schemaFiles embed.FS
+
+// ValidateRecord checks outbound records against the pinned upstream lexicons.
 func ValidateRecord(collection string, record any) error {
-	switch value := record.(type) {
-	case Repo:
-		return validateRepo(collection, value)
-	case RepoIssue:
-		return validateIssue(collection, value)
-	case FeedComment:
-		return validateFeedComment(collection, value)
-	case RepoIssueState:
-		return validateIssueState(collection, value)
-	case RepoPull:
-		return validatePull(collection, value)
-	case RepoPullStatus:
-		return validatePullStatus(collection, value)
-	case PublicKey:
-		return validatePublicKey(collection, value)
-	case String:
-		return validateString(collection, value)
-	case map[string]any:
-		if collection != "sh.tangled.repo" {
-			return fmt.Errorf("%s record has unsupported generated type %T", collection, record)
-		}
-		data, err := json.Marshal(value)
-		if err != nil {
-			return fmt.Errorf("encode %s record for validation: %w", collection, err)
-		}
-		var repo Repo
-		if err := json.Unmarshal(data, &repo); err != nil {
-			return fmt.Errorf("decode %s record for validation: %w", collection, err)
-		}
-		return validateRepo(collection, repo)
-	default:
-		return fmt.Errorf("%s record has unsupported generated type %T", collection, record)
+	data, err := json.Marshal(record)
+	if err != nil {
+		return err
 	}
+	var value any
+	if err := json.Unmarshal(data, &value); err != nil {
+		return err
+	}
+	object, ok := value.(map[string]any)
+	if !ok || object["$type"] != collection {
+		return fmt.Errorf("$type must be %q", collection)
+	}
+	return validateRef(collection, "", value, 0)
 }
 
-func validateRepo(collection string, record Repo) error {
-	if err := validateType(collection, record.LexiconTypeID, "sh.tangled.repo"); err != nil {
-		return err
+func loadDefinition(nsid, definition string) (map[string]any, error) {
+	data, err := schemaFiles.ReadFile("schemas/" + strings.ReplaceAll(nsid, ".", "/") + ".json")
+	if err != nil {
+		return nil, fmt.Errorf("no pinned schema for %s: %w", nsid, err)
 	}
-	if err := required("knot", record.Knot); err != nil {
-		return err
+	var schema struct {
+		Defs map[string]map[string]any `json:"defs"`
 	}
-	if err := datetime(record.CreatedAt); err != nil {
-		return fieldError("createdAt", err)
+	if err := json.Unmarshal(data, &schema); err != nil {
+		return nil, err
 	}
-	if record.Description != nil && !graphemesBetween(*record.Description, 1, 140) {
-		return fmt.Errorf("description must contain 1 to 140 characters")
+	if definition == "" {
+		definition = "main"
 	}
-	if record.RepoDid != nil {
-		if err := did(*record.RepoDid); err != nil {
-			return fieldError("repoDid", err)
-		}
+	found := schema.Defs[definition]
+	if found == nil {
+		return nil, fmt.Errorf("missing definition %s#%s", nsid, definition)
 	}
-	for name, value := range map[string]*string{"source": record.Source, "website": record.Website} {
-		if value != nil {
-			if err := uri(*value); err != nil {
-				return fieldError(name, err)
-			}
-		}
-	}
-	for _, label := range record.Labels {
-		if err := atURI(label); err != nil {
-			return fieldError("labels", err)
-		}
-	}
-	if len(record.Topics) > 50 {
-		return fmt.Errorf("topics must not contain more than 50 items")
-	}
-	for _, topic := range record.Topics {
-		if len([]byte(topic)) < 1 || len([]byte(topic)) > 50 {
-			return fmt.Errorf("topics must contain 1 to 50 UTF-8 bytes per item")
-		}
-	}
-	return nil
+	return found, nil
 }
-
-func validateIssue(collection string, record RepoIssue) error {
-	if err := validateType(collection, record.LexiconTypeID, "sh.tangled.repo.issue"); err != nil {
-		return err
+func validateRef(reference, base string, value any, depth int) error {
+	nsid, definition, _ := strings.Cut(reference, "#")
+	if nsid == "" {
+		nsid = base
 	}
-	if err := did(record.Repo); err != nil {
-		return fieldError("repo", err)
-	}
-	if err := required("title", record.Title); err != nil {
-		return err
-	}
-	if err := validateMentions(record.Mentions); err != nil {
-		return err
-	}
-	if err := validateReferences(record.References); err != nil {
-		return err
-	}
-	if err := validateImageBlobs("blobs", record.Blobs); err != nil {
-		return err
-	}
-	return datetimeField(record.CreatedAt)
-}
-
-func validateFeedComment(collection string, record FeedComment) error {
-	if err := validateType(collection, record.LexiconTypeID, "sh.tangled.feed.comment"); err != nil {
-		return err
-	}
-	if err := validateStrongRef("subject", record.Subject); err != nil {
-		return err
-	}
-	if record.Body == nil || record.Body.MarkupMarkdown == nil {
-		return fmt.Errorf("body is required")
-	}
-	if err := required("body.text", record.Body.MarkupMarkdown.Text); err != nil {
-		return err
-	}
-	if err := validateImageBlobs("body.blobs", record.Body.MarkupMarkdown.Blobs); err != nil {
-		return err
-	}
-	if record.ReplyTo != nil {
-		if err := validateStrongRef("replyTo", record.ReplyTo); err != nil {
+	if nsid == "com.atproto.repo.strongRef" {
+		object, ok := value.(map[string]any)
+		if !ok {
+			return fmt.Errorf("strong reference must be an object")
+		}
+		uri, _ := object["uri"].(string)
+		cid, _ := object["cid"].(string)
+		if _, err := syntax.ParseATURI(uri); err != nil {
 			return err
 		}
+		_, err := syntax.ParseCID(cid)
+		return err
 	}
-	if record.Subject != nil {
-		subject, err := syntax.ParseATURI(record.Subject.Uri)
-		if err != nil {
-			return fieldError("subject", fmt.Errorf("must be an at:// URI: %w", err))
+	if nsid == "com.atproto.label.defs" {
+		return nil
+	}
+	schema, err := loadDefinition(nsid, definition)
+	if err != nil {
+		return err
+	}
+	return validateValue(schema, nsid, value, depth+1)
+}
+func validateValue(schema map[string]any, nsid string, value any, depth int) error {
+	if depth > 64 {
+		return fmt.Errorf("record nesting exceeds 64 levels")
+	}
+	kind, _ := schema["type"].(string)
+	switch kind {
+	case "record":
+		return validateValue(schema["record"].(map[string]any), nsid, value, depth+1)
+	case "object":
+		object, ok := value.(map[string]any)
+		if !ok {
+			return fmt.Errorf("expected object")
 		}
-		if subject.Collection().String() == "sh.tangled.repo.pull" {
-			if record.PullRoundIdx == nil {
-				return fmt.Errorf("pullRoundIdx is required for pull subjects")
+		required, _ := schema["required"].([]any)
+		for _, field := range required {
+			if object[field.(string)] == nil {
+				return fmt.Errorf("%s is required", field)
 			}
 		}
-	}
-	if record.PullRoundIdx != nil && *record.PullRoundIdx < 0 {
-		return fmt.Errorf("pullRoundIdx must be non-negative")
-	}
-	return datetimeField(record.CreatedAt)
-}
-
-func validateStrongRef(name string, ref *comatproto.RepoStrongRef) error {
-	if ref == nil {
-		return fmt.Errorf("%s is required", name)
-	}
-	if err := atURI(ref.Uri); err != nil {
-		return fieldError(name+".uri", err)
-	}
-	if _, err := syntax.ParseCID(ref.Cid); err != nil {
-		return fieldError(name+".cid", fmt.Errorf("must be a CID: %w", err))
-	}
-	return nil
-}
-
-func validateIssueState(collection string, record RepoIssueState) error {
-	if err := validateType(collection, record.LexiconTypeID, "sh.tangled.repo.issue.state"); err != nil {
-		return err
-	}
-	if err := atURI(record.Issue); err != nil {
-		return fieldError("issue", err)
-	}
-	if err := required("state", record.State); err != nil {
-		return err
-	}
-	return datetimeField(record.CreatedAt)
-}
-
-func validatePull(collection string, record RepoPull) error {
-	if err := validateType(collection, record.LexiconTypeID, "sh.tangled.repo.pull"); err != nil {
-		return err
-	}
-	if err := required("title", record.Title); err != nil {
-		return err
-	}
-	if record.Target == nil {
-		return fmt.Errorf("target is required")
-	}
-	if err := did(record.Target.Repo); err != nil {
-		return fieldError("target.repo", err)
-	}
-	if err := required("target.branch", record.Target.Branch); err != nil {
-		return err
-	}
-	if len(record.Rounds) == 0 {
-		return fmt.Errorf("rounds is required")
-	}
-	for _, round := range record.Rounds {
-		if round == nil || round.PatchBlob == nil {
-			return fmt.Errorf("rounds must contain a patch blob")
+		properties, _ := schema["properties"].(map[string]any)
+		for key, child := range properties {
+			if member, ok := object[key]; ok && member != nil {
+				if err := validateValue(child.(map[string]any), nsid, member, depth+1); err != nil {
+					return fmt.Errorf("%s: %w", key, err)
+				}
+			}
 		}
-		if !round.PatchBlob.Ref.Defined() {
-			return fmt.Errorf("rounds.patchBlob must reference a blob")
+	case "ref":
+		return validateRef(schema["ref"].(string), nsid, value, depth+1)
+	case "union":
+		object, ok := value.(map[string]any)
+		if !ok {
+			return fmt.Errorf("expected tagged object")
 		}
-		if err := datetime(round.CreatedAt); err != nil {
-			return fieldError("rounds.createdAt", err)
+		tag, _ := object["$type"].(string)
+		refs, _ := schema["refs"].([]any)
+		for _, reference := range refs {
+			ref := reference.(string)
+			if strings.HasPrefix(ref, "#") {
+				ref = nsid + ref
+			}
+			if tag == ref || strings.TrimSuffix(tag, "#main") == ref {
+				return validateRef(ref, nsid, value, depth+1)
+			}
 		}
-		if round.PatchBlob.MimeType != "application/gzip" {
-			return fmt.Errorf("rounds.patchBlob must have MIME type application/gzip")
+		return fmt.Errorf("unexpected union type %q", tag)
+	case "string":
+		text, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("expected string")
 		}
-	}
-	if record.Source != nil {
-		if err := required("source.branch", record.Source.Branch); err != nil {
+		if !utf8.ValidString(text) {
+			return fmt.Errorf("invalid UTF-8")
+		}
+		length := float64(len(text))
+		graphemes := float64(uniseg.GraphemeClusterCount(text))
+		for key, actual := range map[string]float64{"minLength": length, "maxLength": length, "minGraphemes": graphemes, "maxGraphemes": graphemes} {
+			if bound, ok := schema[key].(float64); ok && ((strings.HasPrefix(key, "min") && actual < bound) || (strings.HasPrefix(key, "max") && actual > bound)) {
+				return fmt.Errorf("does not satisfy %s %g", key, bound)
+			}
+		}
+		format, _ := schema["format"].(string)
+		var err error
+		switch format {
+		case "did":
+			_, err = syntax.ParseDID(text)
+		case "at-uri":
+			_, err = syntax.ParseATURI(text)
+		case "cid":
+			_, err = syntax.ParseCID(text)
+		case "record-key":
+			_, err = syntax.ParseRecordKey(text)
+		case "datetime":
+			_, err = syntax.ParseDatetime(text)
+		case "uri":
+			var u *url.URL
+			u, err = url.Parse(text)
+			if err == nil && u.Scheme == "" {
+				err = fmt.Errorf("expected absolute URI")
+			}
+		}
+		if err != nil {
 			return err
 		}
-		if record.Source.Repo != nil {
-			if err := did(*record.Source.Repo); err != nil {
-				return fieldError("source.repo", err)
+	case "array":
+		values, ok := value.([]any)
+		if !ok {
+			return fmt.Errorf("expected array")
+		}
+		if max, ok := schema["maxLength"].(float64); ok && float64(len(values)) > max {
+			return fmt.Errorf("too many items")
+		}
+		if min, ok := schema["minLength"].(float64); ok && float64(len(values)) < min {
+			return fmt.Errorf("too few items")
+		}
+		item, _ := schema["items"].(map[string]any)
+		for _, member := range values {
+			if err := validateValue(item, nsid, member, depth+1); err != nil {
+				return err
 			}
 		}
-	}
-	if record.DependentOn != nil {
-		if err := atURI(*record.DependentOn); err != nil {
-			return fieldError("dependentOn", err)
+	case "blob":
+		object, ok := value.(map[string]any)
+		if !ok {
+			return fmt.Errorf("expected blob")
 		}
-	}
-	if err := validateMentions(record.Mentions); err != nil {
-		return err
-	}
-	if err := validateReferences(record.References); err != nil {
-		return err
-	}
-	if err := validateImageBlobs("blobs", record.Blobs); err != nil {
-		return err
-	}
-	return datetimeField(record.CreatedAt)
-}
-
-func validatePullStatus(collection string, record RepoPullStatus) error {
-	if err := validateType(collection, record.LexiconTypeID, "sh.tangled.repo.pull.status"); err != nil {
-		return err
-	}
-	if err := atURI(record.Pull); err != nil {
-		return fieldError("pull", err)
-	}
-	if err := required("status", record.Status); err != nil {
-		return err
-	}
-	return datetimeField(record.CreatedAt)
-}
-
-func validatePublicKey(collection string, record PublicKey) error {
-	if err := validateType(collection, record.LexiconTypeID, "sh.tangled.publicKey"); err != nil {
-		return err
-	}
-	if err := required("key", record.Key); err != nil {
-		return err
-	}
-	if len([]byte(record.Key)) > 4096 {
-		return fmt.Errorf("key must not exceed 4096 UTF-8 bytes")
-	}
-	if err := required("name", record.Name); err != nil {
-		return err
-	}
-	return datetimeField(record.CreatedAt)
-}
-
-func validateString(collection string, record String) error {
-	if err := validateType(collection, record.LexiconTypeID, "sh.tangled.string"); err != nil {
-		return err
-	}
-	if !graphemesBetween(record.Filename, 1, 140) {
-		return fmt.Errorf("filename must contain 1 to 140 characters")
-	}
-	if uniseg.GraphemeClusterCount(record.Description) > 280 {
-		return fmt.Errorf("description must not exceed 280 characters")
-	}
-	if err := required("contents", record.Contents); err != nil {
-		return err
-	}
-	return datetimeField(record.CreatedAt)
-}
-
-func validateType(collection, actual, expected string) error {
-	if collection != expected {
-		return fmt.Errorf("record type %q does not match collection %q", expected, collection)
-	}
-	if actual != expected {
-		return fmt.Errorf("$type must be %q", expected)
-	}
-	return nil
-}
-
-func datetimeField(value string) error {
-	if err := datetime(value); err != nil {
-		return fieldError("createdAt", err)
-	}
-	return nil
-}
-
-func required(name, value string) error {
-	if value == "" {
-		return fmt.Errorf("%s is required", name)
-	}
-	return nil
-}
-
-func graphemesBetween(value string, minimum, maximum int) bool {
-	length := uniseg.GraphemeClusterCount(value)
-	return length >= minimum && length <= maximum
-}
-
-func validateImageBlobs(field string, blobs []*lexutil.LexBlob) error {
-	for index, blob := range blobs {
-		if blob == nil || !blob.Ref.Defined() {
-			return fmt.Errorf("%s[%d] must reference a blob", field, index)
+		ref, _ := object["ref"].(map[string]any)
+		cid, _ := ref["$link"].(string)
+		if _, err := syntax.ParseCID(cid); err != nil {
+			return err
 		}
-		mediaType, _, err := mime.ParseMediaType(blob.MimeType)
-		if err != nil || !strings.HasPrefix(mediaType, "image/") || len(mediaType) == len("image/") {
-			return fmt.Errorf("%s[%d] must have an image MIME type", field, index)
+		size, ok := object["size"].(float64)
+		if !ok || size < 0 {
+			return fmt.Errorf("invalid blob size")
 		}
-		if blob.Size < 0 {
-			return fmt.Errorf("%s[%d] size must be non-negative", field, index)
+		if max, ok := schema["maxSize"].(float64); ok && size > max {
+			return fmt.Errorf("blob exceeds %g bytes", max)
 		}
-		if blob.Size > 1_000_000 {
-			return fmt.Errorf("%s[%d] must not exceed 1000000 bytes", field, index)
+		mime, _ := object["mimeType"].(string)
+		if accepted, ok := schema["accept"].([]any); ok {
+			allowed := false
+			for _, pattern := range accepted {
+				candidate := pattern.(string)
+				if candidate == mime || candidate == "*/*" || (strings.HasSuffix(candidate, "/*") && strings.HasPrefix(mime, strings.TrimSuffix(candidate, "*"))) {
+					allowed = true
+				}
+			}
+			if !allowed {
+				return fmt.Errorf("unsupported blob media type %q", mime)
+			}
 		}
-	}
-	return nil
-}
-
-func validateMentions(mentions []string) error {
-	for _, mention := range mentions {
-		if err := did(mention); err != nil {
-			return fieldError("mentions", err)
-		}
-	}
-	return nil
-}
-
-func validateReferences(references []string) error {
-	for _, reference := range references {
-		if err := atURI(reference); err != nil {
-			return fieldError("references", err)
-		}
-	}
-	return nil
-}
-
-func datetime(value string) error {
-	if value == "" {
-		return fmt.Errorf("is required")
-	}
-	if _, err := time.Parse(time.RFC3339, value); err != nil {
-		return fmt.Errorf("must be RFC 3339: %w", err)
-	}
-	return nil
-}
-
-func did(value string) error {
-	if _, err := syntax.ParseDID(value); err != nil {
-		return fmt.Errorf("must be a DID: %w", err)
-	}
-	return nil
-}
-
-func atURI(value string) error {
-	if _, err := syntax.ParseATURI(value); err != nil {
-		return fmt.Errorf("must be an at:// URI: %w", err)
-	}
-	return nil
-}
-
-func fieldError(name string, err error) error {
-	return fmt.Errorf("%s %w", name, err)
-}
-
-func uri(value string) error {
-	parsed, err := url.ParseRequestURI(value)
-	if err != nil || parsed.Scheme == "" {
-		return fmt.Errorf("must be a URI")
 	}
 	return nil
 }

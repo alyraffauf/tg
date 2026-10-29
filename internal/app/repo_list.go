@@ -18,7 +18,17 @@ func (s *Service) ListRepos(ctx context.Context, handle string) (*RepoListResult
 	if err != nil {
 		return nil, fmt.Errorf("list repos for %q: %w", handle, err)
 	}
-	return &RepoListResult{Items: buildRepoItems(repos.Items, handle), Warnings: recordWarnings(repos.Warnings)}, nil
+	warnings := recordWarnings(repos.Warnings)
+	for index := range repos.Items {
+		repo := &repos.Items[index]
+		host, err := s.repositoryHost(ctx, stringValue(repo.Value.RepoDid))
+		if err != nil {
+			warnings = append(warnings, RecordWarning{URI: repo.URI, Error: err.Error()})
+		} else {
+			repo.Value.Knot = host
+		}
+	}
+	return &RepoListResult{Items: buildRepoItems(repos.Items, handle), Warnings: warnings}, nil
 }
 
 func buildRepoItems(items []tangled.Repo, author string) []RepoItem {
@@ -72,5 +82,5 @@ func canonicalRepoItems(items []tangled.Repo) []tangled.Repo {
 
 func isCanonicalRepoRecord(repo tangled.Repo) bool {
 	name := stringValue(repo.Value.Name)
-	return name != "" && extractRKey(repo.URI) == name
+	return name != "" && extractRKey(repo.URI) == "self"
 }

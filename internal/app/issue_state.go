@@ -5,22 +5,13 @@ import (
 	"fmt"
 )
 
-// SetIssueState closes or reopens an issue. state is the bare verb
-// ("open" or "closed").
-func (s *Service) SetIssueState(ctx context.Context, t Target, rkey, state string) (*StateResult, error) {
+func (s *Service) SetIssueState(ctx context.Context, t Target, rkey, state string, expectedCID ...string) (*StateResult, error) {
 	if state != "open" && state != "closed" {
-		return nil, fmt.Errorf("unsupported issue state %q", state)
+		return nil, fmt.Errorf("unsupported state %q", state)
 	}
-	atClient, did, err := s.authenticatedPDS(ctx)
+	result, err := s.editTicket(ctx, ticketEditInput{ExpectedCID: firstCID(expectedCID), Target: t, Rkey: rkey, State: state, Pull: false})
 	if err != nil {
 		return nil, err
 	}
-	target, _, err := s.targetRecord(ctx, t, issueCollection, rkey)
-	if err != nil {
-		return nil, err
-	}
-	if err := putState(ctx, atClient, did, rkey, issueCollection, target, state); err != nil {
-		return nil, err
-	}
-	return &StateResult{Rkey: rkey, State: state}, nil
+	return &StateResult{Rkey: rkey, State: state, URI: result.URI, CID: result.CID, Warnings: result.Warnings}, nil
 }

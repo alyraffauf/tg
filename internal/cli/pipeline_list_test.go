@@ -16,7 +16,7 @@ func TestRenderPipelineList(t *testing.T) {
 		Commit:    "0123456789abcdef",
 		CreatedAt: "2026-07-30T12:00:00Z",
 		Trigger: map[string]any{
-			"$type": "sh.tangled.ci.trigger#push",
+			"$type": "org.tangled.event.push",
 			"ref":   "refs/heads/main",
 		},
 		Workflows: []app.PipelineWorkflow{
@@ -56,11 +56,23 @@ func TestPipelineStatusSummary(t *testing.T) {
 
 func TestPipelineTrigger(t *testing.T) {
 	trigger := map[string]any{
-		"$type":        "sh.tangled.ci.trigger#pullRequest",
+		"$type":        "org.tangled.event.pullRequest",
 		"sourceBranch": "feature",
 		"targetBranch": "main",
 	}
 	if got := pipelineTrigger(trigger); got != "pull request feature → main" {
 		t.Fatalf("pipelineTrigger() = %q", got)
+	}
+}
+
+func TestPipelineScheduleAndApprovalDisplay(t *testing.T) {
+	if got := pipelineTrigger(map[string]any{"$type": "org.tangled.ci.trigger.schedule", "ref": "refs/heads/main"}); got != "schedule refs/heads/main" {
+		t.Fatalf("trigger=%s", got)
+	}
+	if got := pipelineStatusSummary(&bytes.Buffer{}, []app.PipelineWorkflow{{Status: "blocked"}}); got != "○ 1 awaiting approval" {
+		t.Fatalf("status=%s", got)
+	}
+	if got := workflowStatusLabel("blocked"); got != "○ awaiting approval" {
+		t.Fatalf("label=%s", got)
 	}
 }

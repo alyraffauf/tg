@@ -27,7 +27,7 @@ func (s *Service) PipelineLogs(ctx context.Context, target Target, pipelineID st
 			Control: convertControl(event.Control),
 			Data:    convertData(event.Data),
 		})
-	})
+	}, repoDID)
 }
 
 func convertControl(c *spindle.PipelineLogControl) *PipelineLogControl {
@@ -35,7 +35,8 @@ func convertControl(c *spindle.PipelineLogControl) *PipelineLogControl {
 		return nil
 	}
 	return &PipelineLogControl{
-		Kind: c.Kind, Step: c.Step, Time: c.Time, Status: c.Status,
+		Outcome: c.Outcome,
+		Kind:    c.Kind, Step: c.Step, Time: c.Time, Status: c.Status,
 		Content: c.Content, Workflow: c.Workflow, Command: c.Command,
 	}
 }

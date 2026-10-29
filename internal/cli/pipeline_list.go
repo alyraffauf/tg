@@ -59,23 +59,28 @@ func pipelineTrigger(trigger map[string]any) string {
 	triggerType, _ := trigger["$type"].(string)
 	ref, _ := trigger["ref"].(string)
 	switch triggerType {
-	case "sh.tangled.ci.trigger#push":
+	case "org.tangled.event.push":
 		if ref == "" {
 			return "push"
 		}
 		return "push " + ref
-	case "sh.tangled.ci.trigger#pullRequest":
+	case "org.tangled.event.pullRequest":
 		sourceBranch, _ := trigger["sourceBranch"].(string)
 		targetBranch, _ := trigger["targetBranch"].(string)
 		if sourceBranch != "" && targetBranch != "" {
 			return "pull request " + sourceBranch + " → " + targetBranch
 		}
 		return "pull request"
-	case "sh.tangled.ci.trigger#manual":
+	case "org.tangled.ci.trigger.manual":
 		if ref == "" {
 			return "manual"
 		}
 		return "manual " + ref
+	case "org.tangled.ci.trigger.schedule":
+		if ref == "" {
+			return "schedule"
+		}
+		return "schedule " + ref
 	default:
 		return "unknown"
 	}
@@ -95,6 +100,7 @@ func pipelineStatusSummary(writer io.Writer, workflows []app.PipelineWorkflow) s
 		{"timeout", "✗", "timed out"},
 		{"running", "●", "running"},
 		{"pending", "○", "pending"},
+		{"blocked", "○", "awaiting approval"},
 		{"cancelled", "⊘", "cancelled"},
 		{"success", "✓", "passed"},
 	}

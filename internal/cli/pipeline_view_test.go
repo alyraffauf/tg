@@ -13,7 +13,7 @@ func TestRenderPipelineDetail(t *testing.T) {
 		ID:        "pipeline-123",
 		Commit:    "0123456789abcdef",
 		CreatedAt: "2026-07-30T12:00:00Z",
-		Trigger:   map[string]any{"$type": "sh.tangled.ci.trigger#manual", "ref": "main"},
+		Trigger:   map[string]any{"$type": "org.tangled.ci.trigger.manual", "ref": "main"},
 		Workflows: []app.PipelineWorkflow{{
 			Name: "test", Status: "failed", StartedAt: "2026-07-30T12:01:00Z",
 			FinishedAt: "2026-07-30T12:02:00Z", Error: "exit status 1",

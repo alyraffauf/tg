@@ -7,7 +7,7 @@ import (
 	"github.com/bluesky-social/indigo/atproto/syntax"
 )
 
-// SearchHit is one record returned by sh.tangled.search.query.
+// SearchHit is one record returned by org.tangled.search.query.
 type SearchHit struct {
 	URI   string         `json:"uri"`
 	CID   string         `json:"cid"`
@@ -22,15 +22,28 @@ type SearchResult struct {
 	Cursor string      `json:"cursor,omitempty"`
 }
 
-// Search queries Bobbin's indexed records.
+// Search queries repository manifests, applying the type filter before the result limit.
 func (t *Tangled) Search(ctx context.Context, query string, limit int64) (*SearchResult, error) {
-	params := map[string]any{"q": query}
-	if limit > 0 {
-		params["limit"] = limit
+	if limit < 0 {
+		return nil, fmt.Errorf("search limit cannot be negative")
 	}
-	var result SearchResult
-	if err := t.Client.Get(ctx, syntax.NSID("sh.tangled.search.query"), params, &result); err != nil {
+	pageLimit := int64(100)
+	if limit > 0 && limit < pageLimit {
+		pageLimit = limit
+	}
+	hits, err := fetchAllPages(ctx, limit, func(ctx context.Context, cursor string) ([]SearchHit, *string, error) {
+		params := map[string]any{"q": query, "nsid": RepoCollection, "limit": pageLimit}
+		if cursor != "" {
+			params["cursor"] = cursor
+		}
+		var page SearchResult
+		if err := t.Client.Get(ctx, syntax.NSID("org.tangled.search.query"), params, &page); err != nil {
+			return nil, nil, err
+		}
+		return page.Hits, &page.Cursor, nil
+	})
+	if err != nil {
 		return nil, fmt.Errorf("search for %q: %w", query, err)
 	}
-	return &result, nil
+	return &SearchResult{Hits: hits}, nil
 }

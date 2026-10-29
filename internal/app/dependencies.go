@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/alyraffauf/tg/atproto"
 	"github.com/alyraffauf/tg/internal/gitutil"
@@ -22,6 +23,12 @@ type identityResolver interface {
 }
 
 type appviewClient interface {
+	GetTicket(context.Context, string) (*tangled.ListItem, error)
+	AwaitRecord(context.Context, string, string) error
+	ListPatches(context.Context, string) ([]tangled.Patch, error)
+	FormatPatch(context.Context, string, string, string) ([]byte, error)
+	GetRef(context.Context, string, string) (string, error)
+	Merge(context.Context, string, any) error
 	GetRepo(context.Context, string) (*tangled.Repo, error)
 	GetRepoByDID(context.Context, string) (*tangled.Repo, error)
 	ListRepos(context.Context, string) (*tangled.RepoList, error)
@@ -32,6 +39,7 @@ type appviewClient interface {
 }
 
 type pdsClient interface {
+	CreateRecord(context.Context, atproto.PutRecordInput) (string, string, error)
 	PutRecord(context.Context, atproto.PutRecordInput) (string, string, error)
 	DeleteRecord(context.Context, atproto.DeleteRecordInput) error
 	UploadBlob(context.Context, []byte, string) (*atproto.Blob, error)
@@ -42,6 +50,7 @@ type pdsClient interface {
 }
 
 type sessionProvider interface {
+	CurrentDID(context.Context) (string, error)
 	AuthenticatedPDS(context.Context) (pdsClient, string, error)
 	PublicPDS(context.Context, string) (pdsClient, string, error)
 	APIClient(context.Context) (*atclient.APIClient, error)
@@ -49,6 +58,7 @@ type sessionProvider interface {
 }
 
 type gitClient interface {
+	MergeBase(context.Context, string, string, string) (string, error)
 	CloneRepo(context.Context, gitutil.CloneRepoParams) error
 	PushNewRepo(context.Context, gitutil.PushNewRepoParams) error
 	CheckoutPatch(context.Context, gitutil.CheckoutPatchParams) error
@@ -61,12 +71,14 @@ type gitClient interface {
 }
 
 type knotClient interface {
+	DescribeKnot(context.Context) (*knot.Description, error)
+	GetImportStatus(context.Context, string) (*knot.ImportStatus, error)
+	Procedure(context.Context, string, any, any) error
+	GetRecord(context.Context, string, string, string) (*atproto.GetRecordOutput, error)
 	CreateRepo(context.Context, knot.CreateRepoInput) (string, error)
 	DeleteRepo(context.Context, knot.DeleteRepoInput) error
-	DescribeRepo(context.Context, string) (*knot.RepoDescription, error)
 	SetDefaultBranch(context.Context, knot.SetDefaultBranchInput) error
 	GetDefaultBranch(context.Context, string) (*knot.DefaultBranch, error)
-	Merge(context.Context, knot.MergeInput) error
 }
 
 type knotClientFactory interface {
@@ -77,19 +89,17 @@ type knotClientFactory interface {
 type pipelineClient interface {
 	QueryPipelines(context.Context, string, string) (*spindle.QueryPipelinesOutput, error)
 	QueryLatestPipeline(context.Context, string) (*spindle.QueryPipelinesOutput, error)
-	GetPipeline(context.Context, string) (*spindle.Pipeline, error)
+	GetPipeline(context.Context, string, ...string) (*spindle.Pipeline, error)
 	CancelPipeline(context.Context, spindle.CancelPipelineInput) error
 	TriggerPipeline(context.Context, spindle.TriggerPipelineInput) (*spindle.TriggerPipelineOutput, error)
-	SubscribePipelineLogs(context.Context, string, []string, func(spindle.PipelineLogEvent) error) error
+	ApprovePipeline(context.Context, spindle.ApprovePipelineInput) error
+	RetryPipeline(context.Context, spindle.RetryPipelineInput) (*spindle.RetryPipelineOutput, error)
+	SubscribePipelineLogs(context.Context, string, []string, func(spindle.PipelineLogEvent) error, ...string) error
 }
 
 type spindleClientFactory interface {
 	New(string) (pipelineClient, error)
 	NewWithToken(string, string) (pipelineClient, error)
-}
-
-type knotOwnershipVerifier interface {
-	Verify(ctx context.Context, host, expectedOwnerDID string) error
 }
 
 type productionSessions struct {
@@ -110,7 +120,13 @@ func (s productionSessions) AuthenticatedPDS(ctx context.Context) (pdsClient, st
 }
 
 func (s productionSessions) PublicPDS(ctx context.Context, handle string) (pdsClient, string, error) {
-	ident, err := s.resolver.ResolveHandle(ctx, handle)
+	var ident *identity.Identity
+	var err error
+	if strings.HasPrefix(handle, "did:") {
+		ident, err = s.resolver.ResolveDID(ctx, handle)
+	} else {
+		ident, err = s.resolver.ResolveHandle(ctx, handle)
+	}
 	if err != nil {
 		return nil, "", fmt.Errorf("resolve handle %q: %w", handle, err)
 	}
@@ -172,3 +188,14 @@ var (
 	_ knotClient       = (*knot.Client)(nil)
 	_ pipelineClient   = (*spindle.Client)(nil)
 )
+
+func (s productionSessions) CurrentDID(ctx context.Context) (string, error) {
+	did, err := s.auth.CurrentDID(ctx)
+	if err != nil {
+		if isNotAuthenticated(err) {
+			return "", ErrNotAuthenticated
+		}
+		return "", err
+	}
+	return did.String(), nil
+}

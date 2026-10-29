@@ -59,7 +59,7 @@ func stateColor(state string) color.Color {
 		return lipgloss.Green
 	case "closed":
 		return lipgloss.Red
-	case "merged":
+	case "merged", "completed":
 		return lipgloss.Magenta
 	case "draft":
 		return lipgloss.Yellow

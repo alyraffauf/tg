@@ -15,15 +15,22 @@ func (s *Service) GitPushToken(ctx context.Context, requestedHost string) (*GitC
 	if err != nil {
 		return nil, err
 	}
-	host, err := parseKnotHostname(repo.Value.Knot)
+	if err := s.verifyRepositoryClaim(ctx, repo); err != nil {
+		return nil, err
+	}
+	host, err := knotAuthorityFromHost(repo.Value.Knot)
 	if err != nil {
 		return nil, err
 	}
 	requestedHost = strings.TrimSpace(requestedHost)
-	if !strings.EqualFold(requestedHost, gitutil.HostedGitHost) && !strings.EqualFold(requestedHost, host) {
+	requestedAuthority, err := knotAuthorityFromHost(requestedHost)
+	if err != nil {
 		return &GitCredentialResult{}, nil
 	}
-	hasPushScope, isOAuth, err := s.sessions.OAuthSessionHasScope(ctx, "rpc:sh.tangled.repo.push?aud=*")
+	if requestedAuthority != gitutil.HostedGitHost && requestedAuthority != host {
+		return &GitCredentialResult{}, nil
+	}
+	hasPushScope, isOAuth, err := s.sessions.OAuthSessionHasScope(ctx, "rpc:org.tangled.git.receivePack?aud=*")
 	if err != nil {
 		return nil, fmt.Errorf("check OAuth push permission: %w", err)
 	}
@@ -34,7 +41,7 @@ func (s *Service) GitPushToken(ctx context.Context, requestedHost string) (*GitC
 	if err != nil {
 		return nil, err
 	}
-	token, err := atClient.GetServiceAuth(ctx, "did:web:"+host, "sh.tangled.repo.push")
+	token, err := atClient.GetServiceAuth(ctx, serviceDID(host), "org.tangled.git.receivePack")
 	if err != nil {
 		return nil, fmt.Errorf("mint push token for %q: %w", host, err)
 	}
