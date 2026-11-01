@@ -31,6 +31,7 @@ type appviewClient interface {
 	Merge(context.Context, string, any) error
 	GetRepo(context.Context, string) (*tangled.Repo, error)
 	GetRepoByDID(context.Context, string) (*tangled.Repo, error)
+	GetBlob(context.Context, string, string) ([]byte, error)
 	ListRepos(context.Context, string) (*tangled.RepoList, error)
 	ListIssues(context.Context, string, tangled.ListOpts) (*tangled.List, error)
 	ListPulls(context.Context, string, tangled.ListOpts) (*tangled.List, error)
