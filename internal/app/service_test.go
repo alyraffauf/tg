@@ -398,6 +398,9 @@ type testAppview struct {
 	pulls            *tangled.List
 	search           *tangled.SearchResult
 	stars            int64
+	blob             []byte
+	blobErr          error
+	blobHook         func(repoDid, path string) ([]byte, error)
 }
 
 func (a testAppview) GetRepo(_ context.Context, uri string) (*tangled.Repo, error) {
@@ -417,6 +420,15 @@ func (a testAppview) GetRepoByDID(_ context.Context, repoDID string) (*tangled.R
 		return normalizedTestRepo(a.repoByDID), a.repoByDIDErr
 	}
 	return normalizedTestRepo(a.repo), a.repoErr
+}
+func (a testAppview) GetBlob(_ context.Context, repoDID, path string) ([]byte, error) {
+	if a.blobHook != nil {
+		return a.blobHook(repoDID, path)
+	}
+	if a.blobErr != nil {
+		return nil, a.blobErr
+	}
+	return a.blob, nil
 }
 func (testAppview) ListRepos(context.Context, string) (*tangled.RepoList, error) {
 	return nil, errors.New("not implemented")
