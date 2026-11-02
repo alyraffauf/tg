@@ -3,7 +3,6 @@ package cli
 import (
 	"fmt"
 
-	"charm.land/glamour/v2"
 	"github.com/alyraffauf/tg/internal/app"
 	"github.com/spf13/cobra"
 )
@@ -44,12 +43,10 @@ func newRepoViewCommand(service *app.Service) *cobra.Command {
 					fields = append(fields, detailField{"Pipeline", pipelineStatusSummary(cmd.OutOrStdout(), item.Pipeline.Workflows)})
 				}
 				readme, err := service.RepoReadme(ctx, target)
-				renderDetail(cmd.OutOrStdout(), fields, "")
 				if err != nil {
 					fmt.Fprintf(cmd.ErrOrStderr(), "warning: readme unavailable: %v\n", err)
 				}
-				r, _ := glamour.Render(readme, "dark")
-				fmt.Fprintln(cmd.OutOrStdout(), r)
+				renderDetail(cmd.OutOrStdout(), fields, readme)
 			})
 		},
 	}
