@@ -222,7 +222,13 @@ func TestCommandValuesDoNotChangeGlobalSettings(t *testing.T) {
 	}
 }
 
-
+func TestInvalidFosterKnotReportsDiagnostic(t *testing.T) {
+	var stderr bytes.Buffer
+	err := ExecuteWith([]string{"--foster-knot=https://example.com/path", "--version"}, nil, &bytes.Buffer{}, &stderr)
+	if err == nil || stderr.Len() == 0 {
+		t.Fatalf("error=%v diagnostic=%q", err, stderr.String())
+	}
+}
 
 func TestHelpAndCompletionRequestsExecute(t *testing.T) {
 	for _, test := range []struct {

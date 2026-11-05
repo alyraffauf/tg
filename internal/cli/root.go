@@ -86,6 +86,7 @@ func ExecuteWith(arguments []string, input io.Reader, output, errorOutput io.Wri
 	service := app.NewWithStreams(settings.Appview, output, errorOutput)
 	service.SetAccount(settings.Account)
 	if err := service.SetFosterKnot(settings.FosterKnot); err != nil {
+		renderError(errorOutput, err)
 		return err
 	}
 	root := newRoot(service, settings.Knot, settings.SSHPort, settings.Protocol)
