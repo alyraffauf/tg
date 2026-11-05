@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 
@@ -8,7 +9,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func newRepoCreateCommand(service *app.Service, defaultKnot, defaultSSHPort, defaultProtocol string) *cobra.Command {
+func newRepoCreateCommand(createRepo func(context.Context, app.CreateRepoInput) (*app.RepoCreateResult, error), defaultKnot, defaultSSHPort, defaultProtocol string) *cobra.Command {
 	var description, knotHost, pushPath, remote, sshPort, policy string
 	var clone bool
 
@@ -30,14 +31,16 @@ Run "tg auth login" first.`,
 			if err != nil {
 				return err
 			}
-			result, err := service.CreateRepo(ctx, app.CreateRepoInput{
+			result, err := createRepo(ctx, app.CreateRepoInput{
 				ContributionPolicy: policy, KnotHost: knotHost, SSHPort: parsedSSHPort, Name: args[0], Description: description,
 				Clone: clone, CloneProtocol: defaultProtocol, PushPath: pushPath, RemoteName: remote,
 			})
-			if err != nil {
-				return err
+			if result != nil {
+				if outputErr := output(cmd, result, func(repo *app.RepoCreateResult) { renderRepoCreate(cmd, repo) }); outputErr != nil {
+					return outputErr
+				}
 			}
-			return output(cmd, result, func(repo *app.RepoCreateResult) { renderRepoCreate(cmd, repo) })
+			return err
 		},
 	}
 	command.Flags().StringVar(&policy, "contribution-policy", "", "Who may contribute: anyone, members or collaborators (default: knot policy)")
@@ -64,6 +67,9 @@ func parseRepoCreateSSHPort(sshPort, knotHost, cloneProtocol string, clone bool,
 
 func renderRepoCreate(cmd *cobra.Command, repo *app.RepoCreateResult) {
 	fmt.Fprintf(cmd.OutOrStdout(), "Created repository %s/%s\n", repo.Handle, repo.Name)
+	if !repo.Declared && repo.RepoDID != "" {
+		fmt.Fprintf(cmd.ErrOrStderr(), "Repository %s has no confirmed owner declaration; inspect it before retrying\n", repo.RepoDID)
+	}
 	if repo.Cloned {
 		fmt.Fprintf(cmd.OutOrStdout(), "Cloned into %s\n", repo.Name)
 	}

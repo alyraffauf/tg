@@ -114,7 +114,7 @@ func TestRepoCreateSSHPortHelp(t *testing.T) {
 }
 
 func TestRepoCreateRejectsMalformedSSHPortForExplicitKnot(t *testing.T) {
-	command := newRepoCreateCommand(&app.Service{}, "configured.example", "not-a-port", "ssh")
+	command := newRepoCreateCommand((&app.Service{}).CreateRepo, "configured.example", "not-a-port", "ssh")
 	if err := command.Flags().Set("clone", "true"); err != nil {
 		t.Fatalf("set clone flag: %v", err)
 	}

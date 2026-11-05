@@ -218,6 +218,8 @@ type testGit struct {
 	patchHead      string
 	pullBases      map[string]gitutil.PullBase
 	pullBaseInputs []string
+	cloneErr       error
+	pushErr        error
 	clones         []gitutil.CloneRepoParams
 	pushes         []gitutil.PushNewRepoParams
 	repoCandidates []gitutil.RepoContext
@@ -226,12 +228,12 @@ type testGit struct {
 
 func (g *testGit) CloneRepo(_ context.Context, input gitutil.CloneRepoParams) error {
 	g.clones = append(g.clones, input)
-	return nil
+	return g.cloneErr
 }
 
 func (g *testGit) PushNewRepo(_ context.Context, input gitutil.PushNewRepoParams) error {
 	g.pushes = append(g.pushes, input)
-	return nil
+	return g.pushErr
 }
 func (g *testGit) CheckoutPatch(context.Context, gitutil.CheckoutPatchParams) error { return nil }
 func (g *testGit) GeneratePatch(_ context.Context, _, base, head string) ([]byte, error) {

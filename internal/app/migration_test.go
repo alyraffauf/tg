@@ -253,17 +253,26 @@ func TestRepositoryCreationUsesDeclarationAndSourceDID(t *testing.T) {
 }
 func TestRepositoryCreationCleansUpOnlyDefiniteDeclarationRejection(t *testing.T) {
 	for _, test := range []struct {
-		name    string
-		failure error
-		cleanup int
-	}{{"rejected", &atclient.APIError{StatusCode: 400, Name: "InvalidRequest"}, 1}, {"ambiguous", errors.New("connection lost"), 0}} {
+		name       string
+		failure    error
+		cleanupErr error
+		deletes    int
+		partial    bool
+	}{
+		{"rejected", &atclient.APIError{StatusCode: 400, Name: "InvalidRequest"}, nil, 1, false},
+		{"cleanup failed", &atclient.APIError{StatusCode: 400, Name: "InvalidRequest"}, errors.New("cleanup unavailable"), 1, true},
+		{"ambiguous", errors.New("connection lost"), nil, 0, true},
+	} {
 		t.Run(test.name, func(t *testing.T) {
 			service, pds, origin := migrationService(t)
 			pds.getErr = &atclient.APIError{StatusCode: 404, Name: "RecordNotFound"}
-			pds.putErr = test.failure
-			_, err := service.CreateRepo(context.Background(), CreateRepoInput{Name: "Example"})
-			if err == nil || origin.deleteCalls != test.cleanup {
-				t.Fatalf("err=%v cleanup=%d", err, origin.deleteCalls)
+			pds.putErr, origin.deleteErr = test.failure, test.cleanupErr
+			result, err := service.CreateRepo(context.Background(), CreateRepoInput{Name: "Example"})
+			if !errors.Is(err, test.failure) || origin.deleteCalls != test.deletes || len(pds.puts) != 1 || (result != nil) != test.partial {
+				t.Fatalf("result=%+v err=%v cleanup=%d writes=%d", result, err, origin.deleteCalls, len(pds.puts))
+			}
+			if result != nil && (result.RepoDID == "" || result.URI == "" || result.Declared) {
+				t.Fatalf("invalid recovery receipt: %+v", result)
 			}
 		})
 	}
@@ -593,5 +602,61 @@ func TestMirrorLagPreservesErrorsAndDoesNotCompletePull(t *testing.T) {
 	}
 	if len(origin.procedureMethods) != 0 {
 		t.Fatalf("completed unmerged ticket: %v", origin.procedureMethods)
+	}
+}
+
+func TestCreateRepoReportsDurableCreationAfterLocalFailure(t *testing.T) {
+	for _, clone := range []bool{true, false} {
+		t.Run(fmt.Sprintf("clone=%t", clone), func(t *testing.T) {
+			service, pds, origin := migrationService(t)
+			pds.getErr = &atclient.APIError{StatusCode: 404, Name: "RecordNotFound"}
+			view := service.appview.(testAppview)
+			view.awaitErr = errors.New("index unavailable")
+			service.appview = view
+			failure := errors.New("git unavailable")
+			git := service.git.(*testGit)
+			input := CreateRepoInput{Name: "Example", Clone: clone, CloneProtocol: "https"}
+			if clone {
+				git.cloneErr = failure
+			} else {
+				git.pushErr = failure
+				input.PushPath = t.TempDir()
+			}
+			result, err := service.CreateRepo(context.Background(), input)
+			if !errors.Is(err, failure) || result == nil || result.URI == "" || !result.Declared || len(result.Warnings) != 1 {
+				t.Fatalf("result=%+v err=%v", result, err)
+			}
+			if result.Cloned || result.Pushed || origin.createCalls != 1 || len(pds.puts) != 1 {
+				t.Fatalf("result=%+v creates=%d writes=%d", result, origin.createCalls, len(pds.puts))
+			}
+		})
+	}
+}
+
+func TestCreateRepoPolicyFailuresPreserveRecoveryState(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		failure error
+		cleanup error
+		deletes int
+		partial bool
+	}{
+		{"rejected", &atclient.APIError{StatusCode: 403, Name: "AccessDenied"}, nil, 1, false},
+		{"cleanup failed", &atclient.APIError{StatusCode: 403, Name: "AccessDenied"}, errors.New("cleanup offline"), 1, true},
+		{"uncertain write", errors.New("response lost"), nil, 0, true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			service, pds, origin := migrationService(t)
+			pds.getErr = &atclient.APIError{StatusCode: 404, Name: "RecordNotFound"}
+			origin.records = map[string]*atproto.GetRecordOutput{tangled.RepoCollection + "/self": {CID: cidPointer(), Value: manifestValue()}}
+			origin.procedureErr, origin.deleteErr = test.failure, test.cleanup
+			result, err := service.CreateRepo(context.Background(), CreateRepoInput{Name: "Example", ContributionPolicy: "members"})
+			if !errors.Is(err, test.failure) || (result != nil) != test.partial || origin.deleteCalls != test.deletes || len(pds.puts) != 0 {
+				t.Fatalf("result=%+v err=%v deletes=%d writes=%d", result, err, origin.deleteCalls, len(pds.puts))
+			}
+			if result != nil && (result.RepoDID == "" || result.Declared || result.URI == "") {
+				t.Fatalf("missing partial receipt: %+v", result)
+			}
+		})
 	}
 }

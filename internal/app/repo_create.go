@@ -27,6 +27,7 @@ type provisionedRepo struct {
 	Handle   string
 	KnotHost string
 	Warnings []string
+	Declared bool
 }
 
 // CreateRepoInput configures provisioning and optional local setup.
@@ -68,12 +69,16 @@ func (s *Service) CreateRepo(ctx context.Context, in CreateRepoInput) (*RepoCrea
 	provisioned, err := s.provisionRepo(ctx, provisionRepoInput{
 		KnotHost: in.KnotHost, Name: in.Name, Description: in.Description, ContributionPolicy: in.ContributionPolicy,
 	})
-	if err != nil {
+	if provisioned == nil {
 		return nil, err
 	}
 	result := &RepoCreateResult{
+		RepoDID: provisioned.RepoDID, Declared: provisioned.Declared,
 		Handle: provisioned.Handle, Name: in.Name, URI: provisioned.URI,
 		Knot: provisioned.KnotHost, Warnings: provisioned.Warnings,
+	}
+	if err != nil {
+		return result, err
 	}
 	remoteKnotHost := ""
 	remoteSSHPort := 22
@@ -86,7 +91,7 @@ func (s *Service) CreateRepo(ctx context.Context, in CreateRepoInput) (*RepoCrea
 			KnotHost: remoteKnotHost, SSHPort: remoteSSHPort,
 			Protocol: in.CloneProtocol, Handle: provisioned.Handle, Repo: in.Name, RepoDID: provisioned.RepoDID, Destination: in.Name,
 		}); err != nil {
-			return nil, fmt.Errorf("clone new repository: %w", err)
+			return result, fmt.Errorf("repository %s was created, but cloning failed: %w", result.URI, err)
 		}
 		result.Cloned = true
 	}
@@ -102,7 +107,7 @@ func (s *Service) CreateRepo(ctx context.Context, in CreateRepoInput) (*RepoCrea
 		result.Warnings = append(result.Warnings, fmt.Sprintf("could not set default branch: %v", pushResult.defaultBranchWarning))
 	}
 	if err != nil {
-		return nil, err
+		return result, fmt.Errorf("repository %s was created, but pushing failed: %w", result.URI, err)
 	}
 	result.Pushed = true
 	result.DefaultBranch = pushResult.defaultBranch
@@ -135,14 +140,20 @@ func (s *Service) provisionRepo(ctx context.Context, in provisionRepoInput) (*pr
 	if err != nil {
 		return nil, err
 	}
-	var warnings []string
+	provisioned := &provisionedRepo{URI: "at://" + did + "/" + tangled.RepoCollection + "/self", RepoDID: did, Handle: s.ownerHandle(ctx, actor), KnotHost: host}
 	if in.ContributionPolicy != "" {
 		repo := &tangled.Repo{Value: tangled.RepoMetadata{Knot: host, RepoDid: &did, Name: &in.Name}}
 		policyWarnings, err := s.editManifest(ctx, repo, func(record map[string]any) error { record["contributionPolicy"] = in.ContributionPolicy; return nil })
 		if err != nil {
-			return nil, fmt.Errorf("repository %s was created but its policy could not be set: %w", did, err)
+			if isDefiniteRejection(err) {
+				if cleanup := s.deleteProvisionedRepo(ctx, pds, host, knot.DeleteRepoInput{Repo: did}); cleanup != nil {
+					return provisioned, fmt.Errorf("repository %s policy was rejected: %w; cleanup failed: %v", did, err, cleanup)
+				}
+				return nil, fmt.Errorf("repository %s policy was rejected and the repository was deleted: %w", did, err)
+			}
+			return provisioned, fmt.Errorf("repository %s was created without a declaration; policy setup could not be confirmed: %w; inspect it before retrying", did, err)
 		}
-		warnings = append(warnings, policyWarnings...)
+		provisioned.Warnings = append(provisioned.Warnings, policyWarnings...)
 	}
 	record := map[string]any{"$type": tangled.DeclarationCollection, "repo": did, "createdAt": nowString()}
 	uri, cid, err := pds.CreateRecord(ctx, atproto.PutRecordInput{Repo: actor, Collection: tangled.DeclarationCollection, Rkey: key, Record: record})
@@ -150,17 +161,19 @@ func (s *Service) provisionRepo(ctx context.Context, in provisionRepoInput) (*pr
 		if isDefiniteRejection(err) {
 			cleanup := s.deleteProvisionedRepo(ctx, pds, host, knot.DeleteRepoInput{Repo: did})
 			if cleanup != nil {
-				return nil, fmt.Errorf("write declaration: %w; repository %s cleanup failed: %v", err, did, cleanup)
+				return provisioned, fmt.Errorf("write declaration: %w; repository %s cleanup failed: %v; inspect it before retrying", err, did, cleanup)
 			}
+			return nil, fmt.Errorf("write declaration: %w; repository %s was deleted", err, did)
 		}
-		return nil, fmt.Errorf("write declaration for repository %s: %w; inspect it before retrying", did, err)
+		return provisioned, fmt.Errorf("write declaration for repository %s: %w; inspect it before retrying", did, err)
 	}
+	provisioned.Declared = true
 	indexCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	if err := s.appview.AwaitRecord(indexCtx, uri, cid); err != nil {
-		warnings = append(warnings, fmt.Sprintf("repository saved, but indexing is pending: %v", err))
+		provisioned.Warnings = append(provisioned.Warnings, fmt.Sprintf("repository saved, but indexing is pending: %v", err))
 	}
-	return &provisionedRepo{URI: "at://" + did + "/" + tangled.RepoCollection + "/self", RepoDID: did, Handle: s.ownerHandle(ctx, actor), KnotHost: host, Warnings: warnings}, nil
+	return provisioned, nil
 }
 func (s *Service) deleteProvisionedRepo(ctx context.Context, pds pdsClient, host string, in knot.DeleteRepoInput) error {
 	token, err := pds.GetServiceAuth(ctx, serviceDID(host), "org.tangled.repo.deleteRepo")

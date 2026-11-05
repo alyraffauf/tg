@@ -200,6 +200,8 @@ type MergePullResult struct {
 
 // RepoCreateResult is returned by repository creation.
 type RepoCreateResult struct {
+	RepoDID       string   `json:"repoDid"`
+	Declared      bool     `json:"declared"`
 	Handle        string   `json:"handle"`
 	Name          string   `json:"name"`
 	URI           string   `json:"uri"`

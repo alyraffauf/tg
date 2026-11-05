@@ -200,6 +200,8 @@ class MergePullResult(TGOutput):
 
 
 class RepoCreateResult(TGOutput):
+    repo_did: str = ""
+    declared: bool = False
     handle: str
     name: str
     uri: str
