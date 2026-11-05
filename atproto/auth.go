@@ -71,7 +71,8 @@ func (m *AuthManager) Accounts() ([]Account, string, error) {
 	}
 	if hasFileAccount {
 		accounts = append(accounts, fileAccount)
-		if activeDID == "" {
+		fileActiveDID := m.insecureStore.activeDID()
+		if activeDID == "" || fileActiveDID != "" {
 			activeDID = fileAccount.DID
 		}
 	}
@@ -84,6 +85,12 @@ func (m *AuthManager) Accounts() ([]Account, string, error) {
 func (m *AuthManager) SelectAccount(selector string) (Account, error) {
 	account, err := m.store.SelectAccount(selector)
 	if err == nil {
+		if m.insecureStore != nil {
+			if err := m.insecureStore.setActive(false); err != nil {
+				return Account{}, err
+			}
+		}
+		m.selector = account.DID
 		return account, nil
 	}
 	fileAccount, hasFileAccount, fileErr := m.findInsecureFileAccount()
@@ -91,15 +98,22 @@ func (m *AuthManager) SelectAccount(selector string) (Account, error) {
 		return Account{}, fileErr
 	}
 	if hasFileAccount && selectorMatches(selector, fileAccount) {
-		m.selector = selector
+		if err := m.insecureStore.setActive(true); err != nil {
+			return Account{}, err
+		}
+		m.selector = fileAccount.DID
 		return fileAccount, nil
 	}
 	return Account{}, err
 }
 
 func (m *AuthManager) activeAccount() (Account, sessionSource, error) {
-	// Prefer the keyring when an account exists in both stores.
-	account, err := m.store.Account(m.selector)
+	selector := m.selector
+	if selector == "" && m.insecureStore != nil {
+		selector = m.insecureStore.activeDID()
+	}
+	// Prefer the keyring when the selected account exists in both stores.
+	account, err := m.store.Account(selector)
 	if err == nil {
 		return account, sessionSourceKeyring, nil
 	}
@@ -107,7 +121,7 @@ func (m *AuthManager) activeAccount() (Account, sessionSource, error) {
 	if fileErr != nil {
 		return Account{}, sessionSourceKeyring, fileErr
 	}
-	if hasFileAccount && selectorMatches(m.selector, fileAccount) {
+	if hasFileAccount && selectorMatches(selector, fileAccount) {
 		return fileAccount, sessionSourceInsecureFile, nil
 	}
 	if !errors.Is(err, keyring.ErrNotFound) {
@@ -197,8 +211,8 @@ func (m *AuthManager) LoginWithPassword(ctx context.Context, identifier, passwor
 		if err := savePasswordSession(passwordAuth.Session); err != nil {
 			return err
 		}
-		m.selector = passwordAuth.Session.AccountDID.String()
-		return nil
+		_, err := m.SelectAccount(passwordAuth.Session.AccountDID.String())
+		return err
 	}
 	if err := savePasswordSession(passwordAuth.Session); err != nil {
 		return err
@@ -207,7 +221,7 @@ func (m *AuthManager) LoginWithPassword(ctx context.Context, identifier, passwor
 	if err := m.store.SetAccountHandle(did, identifier); err != nil {
 		return err
 	}
-	_, err = m.store.SelectAccount(did)
+	_, err = m.SelectAccount(did)
 	return err
 }
 
@@ -239,7 +253,7 @@ func (m *AuthManager) FinishLogin(ctx context.Context, query url.Values) error {
 	if err := m.store.SetAccountOAuthClient(did, m.app.Config.CallbackURL, m.app.Config.ClientID); err != nil {
 		return err
 	}
-	_, err = m.store.SelectAccount(did)
+	_, err = m.SelectAccount(did)
 	return err
 }
 

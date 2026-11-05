@@ -3,8 +3,10 @@ package atproto
 import (
 	"context"
 	"errors"
+	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/bluesky-social/indigo/atproto/syntax"
@@ -360,5 +362,139 @@ func TestAuthManager_LogoutAllWithoutAnySession(t *testing.T) {
 	err := manager.LogoutAll(context.Background())
 	if !errors.Is(err, ErrNotAuthenticated) {
 		t.Fatalf("expected ErrNotAuthenticated, got %v", err)
+	}
+}
+
+func TestAccountSelectionPersistsAcrossStoresAndRestart(t *testing.T) {
+	manager := newAuthManagerWithFileStore(t, "http://127.0.0.1:8095/callback")
+	fileDID := mustDID(t, "did:plc:aaaabbbbccccddddeeeeffff")
+	keyringDID := mustDID(t, "did:plc:111111111111111111111111")
+	saveFileSession(t, manager, fileDID)
+	if err := manager.store.SavePasswordSession(context.Background(), samplePasswordSession(keyringDID, "https://pds.example")); err != nil {
+		t.Fatal(err)
+	}
+	for _, did := range []syntax.DID{fileDID, keyringDID, fileDID} {
+		if _, err := manager.SelectAccount(did.String()); err != nil {
+			t.Fatal(err)
+		}
+		restored := newAuthManagerForTest("", manager.store)
+		restored.insecureStore = &insecureFileStore{path: manager.insecureStore.path}
+		got, err := restored.CurrentDID(context.Background())
+		if err != nil || got != did {
+			t.Fatalf("selected %s, restored %s: %v", did, got, err)
+		}
+		_, active, err := restored.Accounts()
+		if err != nil || active != did.String() {
+			t.Fatalf("active=%s err=%v", active, err)
+		}
+		// Session refresh must not reset the selected store.
+		session, handle, err := restored.insecureStore.GetPasswordSession()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := restored.insecureStore.SavePasswordSession(handle, *session); err != nil {
+			t.Fatal(err)
+		}
+		got, err = restored.CurrentDID(context.Background())
+		if err != nil || got != did {
+			t.Fatalf("refresh changed selected account from %s to %s: %v", did, got, err)
+		}
+		manager = restored
+	}
+}
+
+func TestCorruptOptionalCredentialsDoNotBlockKeyringRecovery(t *testing.T) {
+	manager := newAuthManagerWithFileStore(t, "")
+	did := mustDID(t, "did:plc:aaaabbbbccccddddeeeeffff")
+	if err := manager.store.SavePasswordSession(context.Background(), samplePasswordSession(did, "https://pds.example")); err != nil {
+		t.Fatal(err)
+	}
+	damaged := []byte("{")
+	if err := os.WriteFile(manager.insecureStore.path, damaged, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got, err := manager.CurrentDID(context.Background())
+	if err != nil || got != did {
+		t.Fatalf("implicit account=%s err=%v", got, err)
+	}
+	if _, err := manager.SelectAccount(did.String()); err != nil {
+		t.Fatal(err)
+	}
+	restored := newAuthManagerForTest("", manager.store)
+	restored.insecureStore = &insecureFileStore{path: manager.insecureStore.path}
+	got, err = restored.CurrentDID(context.Background())
+	if err != nil || got != did {
+		t.Fatalf("restored account=%s err=%v", got, err)
+	}
+	if _, err := restored.SelectAccount("did:plc:111111111111111111111111"); err == nil || !strings.Contains(err.Error(), manager.insecureStore.path) {
+		t.Fatalf("missing credential-file diagnostic: %v", err)
+	}
+	restored.client = &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusOK, Body: http.NoBody, Header: make(http.Header)}, nil
+	})}
+	if err := restored.Logout(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := restored.CurrentDID(context.Background()); err == nil {
+		t.Fatal("corrupt file was accepted as a session")
+	}
+	unchanged, err := os.ReadFile(manager.insecureStore.path)
+	if err != nil || string(unchanged) != string(damaged) {
+		t.Fatalf("optional credentials modified: %q err=%v", unchanged, err)
+	}
+}
+
+func TestFreshCredentialsReplaceCorruptFileAndCanBeSelected(t *testing.T) {
+	manager := newAuthManagerWithFileStore(t, "")
+	keyringDID := mustDID(t, "did:plc:aaaabbbbccccddddeeeeffff")
+	fileDID := mustDID(t, "did:plc:111111111111111111111111")
+	if err := manager.store.SavePasswordSession(context.Background(), samplePasswordSession(keyringDID, "https://pds.example")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(manager.insecureStore.path, []byte("{not json"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.insecureStore.SavePasswordSession("file.example", samplePasswordSession(fileDID, "https://pds.example")); err != nil {
+		t.Fatal(err)
+	}
+	session, _, err := manager.insecureStore.GetPasswordSession()
+	if err != nil || session.AccountDID != fileDID {
+		t.Fatalf("session=%+v err=%v", session, err)
+	}
+	got, err := manager.CurrentDID(context.Background())
+	if err != nil || got != keyringDID {
+		t.Fatalf("saving credentials changed selection: %s err=%v", got, err)
+	}
+	if _, err := manager.SelectAccount(fileDID.String()); err != nil {
+		t.Fatal(err)
+	}
+	restored := newAuthManagerForTest("", manager.store)
+	restored.insecureStore = &insecureFileStore{path: manager.insecureStore.path}
+	got, err = restored.CurrentDID(context.Background())
+	if err != nil || got != fileDID {
+		t.Fatalf("selected replacement not restored: %s err=%v", got, err)
+	}
+}
+
+func TestFreshCredentialsPreservePermissionErrors(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root bypasses file read permissions")
+	}
+	store := newTestInsecureFileStore(t)
+	did := mustDID(t, "did:plc:aaaabbbbccccddddeeeeffff")
+	if err := os.WriteFile(store.path, []byte("protected"), 0o000); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chmod(store.path, 0o600)
+	err := store.SavePasswordSession("file.example", samplePasswordSession(did, "https://pds.example"))
+	if !errors.Is(err, os.ErrPermission) {
+		t.Fatalf("err=%v", err)
+	}
+	if err := os.Chmod(store.path, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	contents, err := os.ReadFile(store.path)
+	if err != nil || string(contents) != "protected" {
+		t.Fatalf("protected file replaced: %q err=%v", contents, err)
 	}
 }

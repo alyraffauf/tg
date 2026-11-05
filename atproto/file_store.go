@@ -12,6 +12,8 @@ import (
 	"github.com/zalando/go-keyring"
 )
 
+var errCredentialsCorrupt = errors.New("corrupt credentials")
+
 const (
 	credentialsDirectoryMode = 0o700
 	credentialsFileMode      = 0o600
@@ -30,6 +32,7 @@ type insecureFileStore struct {
 // credentialRecord is the on-disk JSON shape: the account handle alongside the
 // session, so the active account can be reported without resolving the DID.
 type credentialRecord struct {
+	Active  bool                         `json:"active,omitempty"`
 	Handle  string                       `json:"handle"`
 	Session atclient.PasswordSessionData `json:"session"`
 }
@@ -69,24 +72,26 @@ func insecureCredentialsDir() (string, error) {
 func (s *insecureFileStore) load() (*credentialRecord, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.loadLocked()
+}
+
+func (s *insecureFileStore) loadLocked() (*credentialRecord, error) {
 	data, err := os.ReadFile(s.path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil, keyring.ErrNotFound
 		}
-		return nil, fmt.Errorf("read credentials file: %w", err)
+		return nil, fmt.Errorf("read credentials file %q: %w", s.path, err)
 	}
 	var record credentialRecord
 	if err := json.Unmarshal(data, &record); err != nil {
-		return nil, fmt.Errorf("parse credentials file: %w", err)
+		return nil, fmt.Errorf("parse credentials file %q: %w: %w", s.path, errCredentialsCorrupt, err)
 	}
 	return &record, nil
 }
 
-// save writes the record atomically with restrictive permissions.
-func (s *insecureFileStore) save(record credentialRecord) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+// saveLocked writes the record atomically with restrictive permissions.
+func (s *insecureFileStore) saveLocked(record credentialRecord) error {
 	data, err := json.Marshal(record)
 	if err != nil {
 		return fmt.Errorf("marshal credentials: %w", err)
@@ -157,7 +162,14 @@ func (s *insecureFileStore) FindAccount() (Account, bool, error) {
 // SavePasswordSession writes the session for the given handle, overwriting any
 // existing entry.
 func (s *insecureFileStore) SavePasswordSession(handle string, session atclient.PasswordSessionData) error {
-	return s.save(credentialRecord{Handle: handle, Session: session})
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	record, err := s.loadLocked()
+	if err != nil && !errors.Is(err, keyring.ErrNotFound) && !errors.Is(err, errCredentialsCorrupt) {
+		return err
+	}
+	active := record != nil && record.Active && record.Session.AccountDID == session.AccountDID
+	return s.saveLocked(credentialRecord{Handle: handle, Session: session, Active: active})
 }
 
 // DeletePasswordSession removes the credential file. A missing file is not an
@@ -170,4 +182,34 @@ func (s *insecureFileStore) DeletePasswordSession() error {
 		return fmt.Errorf("delete credentials file: %w", err)
 	}
 	return nil
+}
+
+// setActive makes the file account take precedence over the keyring active
+// account; selecting a keyring account clears this marker.
+func (s *insecureFileStore) setActive(active bool) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	record, err := s.loadLocked()
+	// An unreadable file has no usable session or active marker. Clearing
+	// its selection must not prevent selecting a healthy keyring account.
+	if err != nil && !active {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	record.Active = active
+	return s.saveLocked(*record)
+}
+
+func (s *insecureFileStore) activeDID() string {
+	record, err := s.load()
+	// Marker lookup is best-effort; session reads still report file errors.
+	if err != nil {
+		return ""
+	}
+	if record.Active {
+		return record.Session.AccountDID.String()
+	}
+	return ""
 }
