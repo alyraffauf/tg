@@ -17,8 +17,9 @@ func newAuthTokenCommand(service *app.Service) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintln(cmd.OutOrStdout(), token)
-			return nil
+			return output(cmd, app.AccessTokenResult{Token: token}, func(result app.AccessTokenResult) {
+				fmt.Fprintln(cmd.OutOrStdout(), result.Token)
+			})
 		},
 	}
 }

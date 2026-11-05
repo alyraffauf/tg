@@ -198,6 +198,10 @@ type MergePullResult struct {
 	Warnings       []string `json:"warnings,omitempty"`
 }
 
+type AccessTokenResult struct {
+	Token string `json:"token"`
+}
+
 // RepoCreateResult is returned by repository creation.
 type RepoCreateResult struct {
 	RepoDID       string   `json:"repoDid"`
