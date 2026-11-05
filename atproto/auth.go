@@ -432,14 +432,15 @@ func (m *AuthManager) SessionStatus(ctx context.Context) (string, syntax.DID, er
 	if errors.As(err, &apiError) && apiError.StatusCode == http.StatusUnauthorized {
 		return SessionStatusExpired, did, nil
 	}
-	// OAuth wraps refresh failures in fmt.Errorf, not APIError. A failed
-	// refresh usually means the refresh token is dead. Client-metadata
-	// mismatches are a local config bug, not an expired session.
+	// Indigo does not expose typed refresh failures. Only a credential
+	// rejection establishes expiry; transport, server and decode failures do not.
 	if strings.Contains(err.Error(), "failed to refresh OAuth tokens") {
 		if strings.Contains(err.Error(), "invalid_client_metadata") {
 			return "", did, fmt.Errorf("OAuth client identity does not match the stored session; run \"tg auth login\" once to persist it: %w", err)
 		}
-		return SessionStatusExpired, did, nil
+		if strings.Contains(err.Error(), "token refresh failed (HTTP 401):") || strings.Contains(err.Error(), "invalid_grant") {
+			return SessionStatusExpired, did, nil
+		}
 	}
 	return SessionStatusUnknown, did, nil
 }
