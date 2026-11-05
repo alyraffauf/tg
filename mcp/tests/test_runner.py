@@ -94,3 +94,50 @@ async def test_cancellation_stops_process_tree(fake_tg: FakeTG) -> None:
     finally:
         task.cancel()
         await asyncio.gather(task, return_exceptions=True)
+
+
+async def test_output_limit_stops_process_tree(fake_tg: FakeTG) -> None:
+    fake_tg.configure(stdout="x" * (2 << 20), spawn_child=True, stall=True)
+    with pytest.raises(TGError, match="operation may have succeeded"):
+        await asyncio.wait_for(
+            fake_tg.runner(max_output_bytes=4096).run_json([], UpdatedRecordResult), 5
+        )
+    await fake_tg.assert_stopped()
+
+
+async def test_output_at_byte_limit_succeeds(fake_tg: FakeTG) -> None:
+    payload = '{"rkey":"café"}'
+    fake_tg.configure(stdout=payload)
+    result = await fake_tg.runner(max_output_bytes=len(payload.encode())).run_json(
+        [], UpdatedRecordResult
+    )
+    assert result.rkey == "café"
+
+
+async def test_verbose_stderr_does_not_abort_success(fake_tg: FakeTG) -> None:
+    fake_tg.configure(stderr="x" * (2 << 20))
+    result = await fake_tg.runner().run_json([], UpdatedRecordResult)
+    assert result.rkey == "key"
+
+
+async def test_large_failure_diagnostics_are_truncated(fake_tg: FakeTG) -> None:
+    fake_tg.configure(stderr="x" * (2 << 20), stdout="", exit_code=1)
+    with pytest.raises(TGError) as caught:
+        await fake_tg.runner().run_json([], UpdatedRecordResult)
+    assert "truncated" in str(caught.value)
+    assert len(str(caught.value)) < (64 << 10) + 200
+
+
+async def test_failure_preserves_partial_creation_receipt(fake_tg: FakeTG) -> None:
+    fake_tg.configure(
+        stdout='{"repoDid":"did:plc:repo","uri":"at://did:plc:repo/org.tangled.repo.manifest/self","declared":false}',
+        stderr="policy setup could not be confirmed",
+        exit_code=1,
+    )
+    with pytest.raises(TGError) as caught:
+        await fake_tg.runner().run_json(["repo", "create"], UpdatedRecordResult)
+    message = str(caught.value)
+    assert "did:plc:repo" in message
+    assert '"declared":false' in message
+    assert "policy setup" in message
+    assert "may have succeeded" in message

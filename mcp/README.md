@@ -23,12 +23,13 @@ Point your MCP client at the checkout:
 
 ## Configuration
 
-| Variable                | Purpose                                 |
-| ----------------------- | --------------------------------------- |
-| `TGMCP_EXECUTABLE`      | Override the `tg` executable            |
-| `TGMCP_ACCOUNT`         | Override tg's active account            |
-| `TGMCP_CONFIG`          | Override tg's config path               |
-| `TGMCP_TIMEOUT_SECONDS` | Command timeout, defaults to 30 seconds |
+| Variable                 | Purpose                                                                                      |
+| ------------------------ | -------------------------------------------------------------------------------------------- |
+| `TGMCP_EXECUTABLE`       | Override the `tg` executable                                                                 |
+| `TGMCP_ACCOUNT`          | Override tg's active account                                                                 |
+| `TGMCP_CONFIG`           | Override tg's config path                                                                    |
+| `TGMCP_TIMEOUT_SECONDS`  | Command timeout, defaults to 30 seconds                                                      |
+| `TGMCP_MAX_OUTPUT_BYTES` | Maximum stdout per command, defaults to 128 MiB. Stderr diagnostics are truncated at 64 KiB. |
 
 The server inherits tg's environment and credentials. Local Git tools need
 absolute paths on the server's filesystem.

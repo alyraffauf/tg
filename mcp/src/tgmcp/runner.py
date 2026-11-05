@@ -22,8 +22,11 @@ class TGConfig:
     account: str | None = None
     config_path: str | None = None
     timeout_seconds: float = 30.0
+    max_output_bytes: int = 128 << 20
 
     def __post_init__(self) -> None:
+        if self.max_output_bytes <= 0:
+            raise ValueError("TGMCP_MAX_OUTPUT_BYTES must be positive")
         if not self.executable:
             raise ValueError("TGMCP_EXECUTABLE must not be empty")
         if not math.isfinite(self.timeout_seconds) or self.timeout_seconds <= 0:
@@ -36,6 +39,9 @@ class TGConfig:
             account=os.environ.get("TGMCP_ACCOUNT") or None,
             config_path=os.environ.get("TGMCP_CONFIG") or None,
             timeout_seconds=float(os.environ.get("TGMCP_TIMEOUT_SECONDS", "30")),
+            max_output_bytes=int(
+                os.environ.get("TGMCP_MAX_OUTPUT_BYTES", str(128 << 20))
+            ),
         )
 
 
@@ -121,7 +127,15 @@ class TGRunner:
                 process.kill()
         except ProcessLookupError:
             pass
-        await process.communicate()
+
+        async def discard(stream: asyncio.StreamReader | None) -> None:
+            if stream is not None:
+                while await stream.read(65536):
+                    pass
+
+        await asyncio.gather(
+            discard(process.stdout), discard(process.stderr), process.wait()
+        )
 
     async def _run(
         self,
@@ -134,11 +148,56 @@ class TGRunner:
         process = await self._start(
             arguments, working_directory=working_directory, input_data=input_data
         )
+
+        async def read_bounded(
+            stream: asyncio.StreamReader | None, limit: int, *, truncate: bool = False
+        ) -> bytes:
+            assert stream is not None
+            captured = bytearray()
+            truncated = False
+            while chunk := await stream.read(65536):
+                remaining = limit - len(captured)
+                captured.extend(chunk[:remaining])
+                if len(chunk) > remaining:
+                    if truncate:
+                        truncated = True
+                        continue
+                    raise TGError(
+                        "tg output exceeded the byte limit. Narrow the request or "
+                        "increase TGMCP_MAX_OUTPUT_BYTES for large stdout results. "
+                        "Inspect current state before repeating a write. "
+                        "The operation may have succeeded."
+                    )
+            if truncated:
+                captured.extend(b" [truncated]")
+            return bytes(captured)
+
+        async def write_input() -> None:
+            if process.stdin is not None:
+                try:
+                    process.stdin.write(input_data or b"")
+                    await process.stdin.drain()
+                except (BrokenPipeError, ConnectionResetError):
+                    pass
+                finally:
+                    process.stdin.close()
+
+        stdout_task = asyncio.create_task(
+            read_bounded(process.stdout, self.config.max_output_bytes)
+        )
+        stderr_task = asyncio.create_task(
+            read_bounded(process.stderr, 65536, truncate=True)
+        )
+        input_task = asyncio.create_task(write_input())
+        tasks = [stdout_task, stderr_task, input_task]
+        completed = False
         try:
             async with asyncio.timeout(self.config.timeout_seconds):
-                stdout, stderr = await process.communicate(input_data)
+                await asyncio.gather(*tasks)
+                await process.wait()
+                stdout, stderr = stdout_task.result(), stderr_task.result()
+                completed = True
         except (TimeoutError, asyncio.CancelledError) as error:
-            await self._stop(process)
             if isinstance(error, asyncio.CancelledError):
                 raise
             raise TGError(
@@ -146,13 +205,26 @@ class TGRunner:
                 "Inspect current state before repeating a write. For slow reads, "
                 "narrow the request or increase TGMCP_TIMEOUT_SECONDS."
             ) from error
+        finally:
+            for task in tasks:
+                task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+            if not completed:
+                await self._stop(process)
 
         if process.returncode != 0:
             message = stderr.decode("utf-8", errors="replace").strip()
             if (process.returncode, message) != expected_failure:
-                raise TGError(
-                    self._command_error(arguments, process.returncode, message)
-                )
+                message = self._command_error(arguments, process.returncode, message)
+                if stdout:
+                    partial = stdout[:65536].decode("utf-8", errors="replace").strip()
+                    if len(stdout) > 65536:
+                        partial += " [truncated]"
+                    message += (
+                        "\nPartial tg output. The operation may have succeeded:\n"
+                        + partial
+                    )
+                raise TGError(message)
 
         return stdout
 
@@ -237,5 +309,6 @@ class TGRunner:
             events_task.cancel()
             errors_task.cancel()
             await asyncio.gather(events_task, errors_task, return_exceptions=True)
-            await self._stop(process)
+            if result.stop_reason != "complete" or process.returncode is None:
+                await self._stop(process)
         return result
