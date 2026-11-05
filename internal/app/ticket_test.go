@@ -86,7 +86,7 @@ func TestTicketOperationsUseDirectLookupAndRejectUnexpectedRecords(t *testing.T)
 				merged := false
 				view.mergeHook = func(string, any) { merged = true }
 				service.appview = view
-				origin.records = map[string]*atproto.GetRecordOutput{tangled.IssueCollection + "/" + key: {CID: cidPointer(), Value: ticketRecord("PR", "", "main")}}
+				origin.records = map[string]*atproto.GetRecordOutput{tangled.IssueCollection + "/" + key: {URI: item.URI, CID: cidPointer(), Value: ticketRecord("PR", "", "main")}}
 				err := operation.run(context.Background(), service)
 				if (err == nil) != (response == "valid") || lookups != 1 {
 					t.Fatalf("err=%v lookups=%d", err, lookups)
@@ -183,6 +183,31 @@ func TestTicketListsWarnOnWrongResourceKind(t *testing.T) {
 			}
 			if err != nil || len(result.Items) != 0 || len(result.Warnings) != 1 {
 				t.Fatalf("result=%+v err=%v", result, err)
+			}
+		})
+	}
+}
+
+func TestMergeRejectsStaleOrClosedAuthoritativeTicket(t *testing.T) {
+	for _, state := range []string{"open", "closed"} {
+		t.Run(state, func(t *testing.T) {
+			service, _, origin := migrationService(t)
+			item := ticketList(true).Items[0]
+			view := service.appview.(testAppview)
+			view.ticket = &item
+			view.mergeHook = func(string, any) { t.Fatal("merged a stale or closed ticket") }
+			service.appview = view
+			record := ticketRecord("PR", "", "main")
+			record.State = state
+			origin.records = map[string]*atproto.GetRecordOutput{tangled.IssueCollection + "/" + extractRKey(item.URI): {URI: item.URI, CID: cidPointer(), Value: record}}
+			if state == "open" {
+				item.CID = "bafyreihdwdcefgh4dqkjv67uzcmw7ojee6xedzdetojuzjevtenxquvyku"
+			}
+			if _, err := service.MergePull(context.Background(), migrationTarget(), extractRKey(item.URI)); err == nil {
+				t.Fatal("accepted stale or closed ticket")
+			}
+			if len(origin.procedureMethods) != 0 {
+				t.Fatal("modified ticket after rejected merge")
 			}
 		})
 	}

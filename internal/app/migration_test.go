@@ -195,6 +195,7 @@ func TestCreateAndUpdatePullUsePublishedCommitRanges(t *testing.T) {
 	}
 	view := service.appview.(testAppview)
 	view.ticket = &ticketList(true).Items[0]
+	origin.records = map[string]*atproto.GetRecordOutput{tangled.IssueCollection + "/3m2zq4c6pmk2a": {URI: view.ticket.URI, CID: cidPointer(), Value: ticketRecord("PR", "", "main")}}
 	service.appview = view
 	if _, err := service.UpdatePullRound(context.Background(), UpdatePullRoundInput{Target: migrationTarget(), Rkey: "3m2zq4c6pmk2a"}); err != nil {
 		t.Fatal(err)
@@ -220,6 +221,7 @@ func TestMergeReportsGitSuccessWhenTicketCompletionFails(t *testing.T) {
 	service, _, origin := migrationService(t)
 	view := service.appview.(testAppview)
 	view.ticket = &ticketList(true).Items[0]
+	origin.records = map[string]*atproto.GetRecordOutput{tangled.IssueCollection + "/3m2zq4c6pmk2a": {URI: view.ticket.URI, CID: cidPointer(), Value: ticketRecord("PR", "", "main")}}
 	merged := false
 	view.mergeHook = func(token string, input any) {
 		merged = true
@@ -266,6 +268,7 @@ func TestRepositoryCreationCleansUpOnlyDefiniteDeclarationRejection(t *testing.T
 		})
 	}
 }
+
 func TestRepositoryDeletionRestoresDeclarationOnRejection(t *testing.T) {
 	service, pds, origin := migrationService(t)
 	origin.deleteErr = &atclient.APIError{StatusCode: 403, Name: "AccessDenied"}
@@ -459,8 +462,9 @@ func TestMergeCompletesTicketWithCAS(t *testing.T) {
 	service, _, origin := migrationService(t)
 	view := service.appview.(testAppview)
 	view.ticket = &ticketList(true).Items[0]
+	origin.records = map[string]*atproto.GetRecordOutput{tangled.IssueCollection + "/3m2zq4c6pmk2a": {URI: view.ticket.URI, CID: cidPointer(), Value: ticketRecord("PR", "", "main")}}
 	service.appview = view
-	origin.records = map[string]*atproto.GetRecordOutput{tangled.IssueCollection + "/3m2zq4c6pmk2a": {CID: cidPointer(), Value: ticketRecord("PR", "", "main")}}
+	origin.records = map[string]*atproto.GetRecordOutput{tangled.IssueCollection + "/3m2zq4c6pmk2a": {URI: "at://did:plc:repo/" + tangled.IssueCollection + "/3m2zq4c6pmk2a", CID: cidPointer(), Value: ticketRecord("PR", "", "main")}}
 	result, err := service.MergePull(context.Background(), migrationTarget(), "3m2zq4c6pmk2a")
 	if err != nil || !result.Merged || !result.StatusRecorded {
 		t.Fatalf("result=%+v err=%v", result, err)
@@ -544,6 +548,7 @@ func TestForkPullReadsAndMergesFromSourceRepository(t *testing.T) {
 	service, _, origin := migrationService(t)
 	view := service.appview.(testAppview)
 	view.ticket = &ticketList(true).Items[0]
+	origin.records = map[string]*atproto.GetRecordOutput{tangled.IssueCollection + "/3m2zq4c6pmk2a": {URI: view.ticket.URI, CID: cidPointer(), Value: ticketRecord("PR", "", "main")}}
 	var patch tangled.Patch
 	if err := json.Unmarshal([]byte(`{"uri":"at://did:plc:repo/org.tangled.review.patch/patch","cid":"`+testCID+`","value":{"base":{"oid":"base"},"head":{"oid":"head"},"source":{"repo":"did:plc:fork","branch":"feature"}}}`), &patch); err != nil {
 		t.Fatal(err)
@@ -564,7 +569,7 @@ func TestForkPullReadsAndMergesFromSourceRepository(t *testing.T) {
 	if _, err := service.PullPatch(context.Background(), migrationTarget(), "3m2zq4c6pmk2a"); err != nil {
 		t.Fatal(err)
 	}
-	origin.records = map[string]*atproto.GetRecordOutput{tangled.IssueCollection + "/3m2zq4c6pmk2a": {CID: cidPointer(), Value: ticketRecord("PR", "", "main")}}
+	origin.records = map[string]*atproto.GetRecordOutput{tangled.IssueCollection + "/3m2zq4c6pmk2a": {URI: "at://did:plc:repo/" + tangled.IssueCollection + "/3m2zq4c6pmk2a", CID: cidPointer(), Value: ticketRecord("PR", "", "main")}}
 	result, err := service.MergePull(context.Background(), migrationTarget(), "3m2zq4c6pmk2a")
 	if err != nil || !result.Merged || !result.StatusRecorded {
 		t.Fatalf("result=%+v err=%v", result, err)
@@ -575,6 +580,7 @@ func TestMirrorLagPreservesErrorsAndDoesNotCompletePull(t *testing.T) {
 	service, _, origin := migrationService(t)
 	view := service.appview.(testAppview)
 	view.ticket = &ticketList(true).Items[0]
+	origin.records = map[string]*atproto.GetRecordOutput{tangled.IssueCollection + "/3m2zq4c6pmk2a": {URI: view.ticket.URI, CID: cidPointer(), Value: ticketRecord("PR", "", "main")}}
 	failure := &atclient.APIError{StatusCode: 404, Name: "RevisionNotFound"}
 	view.formatErr, view.mergeErr = failure, failure
 	service.appview = view

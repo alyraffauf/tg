@@ -2,8 +2,10 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
+	"github.com/alyraffauf/tg/tangled"
 	"github.com/bluesky-social/indigo/atproto/syntax"
 )
 
@@ -24,6 +26,24 @@ func (s *Service) MergePull(ctx context.Context, t Target, rkey string) (*MergeP
 		return nil, fmt.Errorf("ticket has no valid CID: %w", err)
 	}
 	if item.State != "open" {
+		return nil, fmt.Errorf("only an open pull request can be merged")
+	}
+	found, err := s.knot.NewPublic(repo.Value.Knot).GetRecord(ctx, did, tangled.IssueCollection, rkey)
+	if err != nil {
+		return nil, err
+	}
+	if found.URI != item.URI || found.CID == nil || found.CID.String() != item.CID {
+		return nil, fmt.Errorf("ticket changed or its authoritative version could not be confirmed; read it before merging")
+	}
+	raw, err := json.Marshal(found.Value)
+	if err != nil {
+		return nil, err
+	}
+	authoritative, err := decodeTicket(raw, true)
+	if err != nil {
+		return nil, err
+	}
+	if authoritative.State != "open" {
 		return nil, fmt.Errorf("only an open pull request can be merged")
 	}
 	patches, err := s.appview.ListPatches(ctx, item.URI)
