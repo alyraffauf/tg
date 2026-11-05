@@ -3,6 +3,8 @@ package atproto
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -105,5 +107,38 @@ func TestRecordUpdateRoundTripsFetchedCIDAsSwapRecord(t *testing.T) {
 	}
 	if swapRecord != "bafyreifetched" {
 		t.Fatalf("PutRecord() swapRecord = %q, want bafyreifetched", swapRecord)
+	}
+}
+
+type diagnosticBody struct {
+	read   int
+	closed bool
+}
+
+func (body *diagnosticBody) Read(data []byte) (int, error) {
+	if body.read >= 1<<20 {
+		return 0, io.EOF
+	}
+	count := min(len(data), (1<<20)-body.read)
+	for i := range data[:count] {
+		data[i] = 'x'
+	}
+	body.read += count
+	return count, nil
+}
+func (body *diagnosticBody) Close() error { body.closed = true; return nil }
+
+func TestUploadBlobBoundsErrorDiagnosticsAndClosesBody(t *testing.T) {
+	body := &diagnosticBody{}
+	transport := roundTripFunc(func(*http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusInternalServerError, Body: body, Header: make(http.Header)}, nil
+	})
+	client := &ATProto{Client: &atclient.APIClient{Client: &http.Client{Transport: transport}, Host: "https://pds.example"}}
+	_, err := client.UploadBlob(context.Background(), []byte("content"), "text/plain")
+	if err == nil || !strings.Contains(err.Error(), "500") || !strings.Contains(err.Error(), "truncated") {
+		t.Fatalf("missing bounded HTTP diagnostic; error length=%d", len(fmt.Sprint(err)))
+	}
+	if body.read > (64<<10)+1 || len(err.Error()) > (64<<10)+200 || !body.closed {
+		t.Fatalf("read=%d error bytes=%d closed=%t", body.read, len(err.Error()), body.closed)
 	}
 }

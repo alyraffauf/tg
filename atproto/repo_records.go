@@ -110,9 +110,13 @@ func (a *ATProto) UploadBlob(ctx context.Context, data []byte, mimeType string) 
 	defer resp.Body.Close()
 
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		body, readErr := io.ReadAll(resp.Body)
+		const maxDiagnosticBytes = 64 << 10
+		body, readErr := io.ReadAll(io.LimitReader(resp.Body, maxDiagnosticBytes+1))
 		if readErr != nil {
 			return nil, fmt.Errorf("upload blob: PDS returned HTTP %d", resp.StatusCode)
+		}
+		if len(body) > maxDiagnosticBytes {
+			body = append(body[:maxDiagnosticBytes], []byte(" [truncated]")...)
 		}
 		return nil, fmt.Errorf("upload blob: PDS returned HTTP %d: %s", resp.StatusCode, string(body))
 	}
