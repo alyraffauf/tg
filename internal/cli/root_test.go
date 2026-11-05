@@ -88,7 +88,7 @@ func TestExecuteWithRendersPreCommandErrors(t *testing.T) {
 		t.Fatal("ExecuteWith() returned nil error")
 	}
 
-	if got := errorOutput.String(); !strings.Contains(got, "Error: flag --appview requires a value\n") {
+	if got := errorOutput.String(); !strings.Contains(got, "Error:") || !strings.Contains(got, "--appview") {
 		t.Errorf("error output = %q", got)
 	}
 }
@@ -205,5 +205,44 @@ func TestParseFlagSettings(t *testing.T) {
 func TestParseFlagSettingsRejectsMissingValue(t *testing.T) {
 	if _, err := parseFlagSettings([]string{"--appview"}); err == nil {
 		t.Fatal("parseFlagSettings() accepted a missing value")
+	}
+}
+
+func TestCommandValuesDoNotChangeGlobalSettings(t *testing.T) {
+	for _, value := range []string{"--config", "--account", "--appview", "--foster-knot"} {
+		t.Run(value, func(t *testing.T) {
+			flags, err := parseFlagSettings([]string{"issue", "edit", "key", "--title", value, "--help"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if flags.ConfigSet || flags.AccountSet || flags.AppviewSet || flags.FosterKnotSet {
+				t.Fatalf("command value changed settings: %+v", flags)
+			}
+		})
+	}
+}
+
+
+
+func TestHelpAndCompletionRequestsExecute(t *testing.T) {
+	for _, test := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"help"}, "Usage:"},
+		{[]string{"help", "issue"}, "issue"},
+		{[]string{"__complete", "issue", ""}, "create"},
+		{[]string{"__completeNoDesc", "issue", "edit", "--ti"}, "--title"},
+		{[]string{"__complete", "issue", "edit", "--title", ""}, ":"},
+	} {
+		t.Run(strings.Join(test.args, " "), func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			if err := ExecuteWith(test.args, nil, &stdout, &stderr); err != nil {
+				t.Fatalf("err=%v stderr=%q", err, stderr.String())
+			}
+			if !strings.Contains(stdout.String(), test.want) {
+				t.Fatalf("stdout=%q", stdout.String())
+			}
+		})
 	}
 }

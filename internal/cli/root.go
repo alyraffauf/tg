@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strings"
 
 	"github.com/alyraffauf/tg/internal/app"
 	"github.com/spf13/cobra"
@@ -107,45 +106,47 @@ func ExecuteWith(arguments []string, input io.Reader, output, errorOutput io.Wri
 }
 
 func parseFlagSettings(arguments []string) (flagSettings, error) {
-	var flags flagSettings
-	for index := 0; index < len(arguments); index++ {
-		if arguments[index] == "--" {
-			break
-		}
-		argument := arguments[index]
-		name, value, hasValue := strings.Cut(argument, "=")
-		switch name {
-		case "--config":
-			flags.ConfigPath = flagValue(arguments, index, value, hasValue)
-			flags.ConfigSet = true
-		case "--foster-knot":
-			flags.FosterKnot = flagValue(arguments, index, value, hasValue)
-			flags.FosterKnotSet = true
-		case "--appview":
-			flags.Appview = flagValue(arguments, index, value, hasValue)
-			flags.AppviewSet = true
-		case "--account":
-			flags.Account = flagValue(arguments, index, value, hasValue)
-			flags.AccountSet = true
-		}
-		if !hasValue && (name == "--config" || name == "--appview" || name == "--foster-knot" || name == "--account") {
-			if index+1 >= len(arguments) || arguments[index+1] == "--" {
-				return flagSettings{}, fmt.Errorf("flag %s requires a value", name)
-			}
-			index++
-		}
+	root := NewRoot(nil)
+	root.InitDefaultVersionFlag()
+	root.InitDefaultHelpCmd()
+	// Cobra registers its completion request command only during Execute.
+	// Recognize it here without parsing the word currently being completed.
+	completion := &cobra.Command{Use: cobra.ShellCompRequestCmd, Aliases: []string{cobra.ShellCompNoDescRequestCmd}, DisableFlagParsing: true}
+	root.AddCommand(completion)
+	command, args, err := root.Find(arguments)
+	if err != nil {
+		return flagSettings{}, err
 	}
-	return flags, nil
-}
-
-func flagValue(arguments []string, index int, value string, hasValue bool) string {
-	if hasValue {
-		return value
+	completing := command == completion
+	if completing {
+		root.RemoveCommand(completion)
+		if len(args) == 0 {
+			return flagSettings{}, nil
+		}
+		command, args, err = root.Find(args[:len(args)-1])
+		if err != nil {
+			return flagSettings{}, nil
+		}
+		command.FParseErrWhitelist.UnknownFlags = true
 	}
-	if index+1 < len(arguments) {
-		return arguments[index+1]
+	command.InitDefaultHelpFlag()
+	if err := command.ParseFlags(args); err != nil {
+		if completing {
+			return flagSettings{}, nil
+		}
+		return flagSettings{}, err
 	}
-	return ""
+	flags := root.PersistentFlags()
+	config, _ := flags.GetString("config")
+	appview, _ := flags.GetString("appview")
+	account, _ := flags.GetString("account")
+	foster, _ := flags.GetString("foster-knot")
+	return flagSettings{
+		ConfigPath: config, ConfigSet: flags.Changed("config"),
+		Appview: appview, AppviewSet: flags.Changed("appview"),
+		Account: account, AccountSet: flags.Changed("account"),
+		FosterKnot: foster, FosterKnotSet: flags.Changed("foster-knot"),
+	}, nil
 }
 
 func configureRoot(rootCmd *cobra.Command) {
