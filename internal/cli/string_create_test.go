@@ -251,3 +251,27 @@ func (service *testStringCreateService) CreateString(_ context.Context, input ap
 	}
 	return &app.CreatedRecordResult{URI: "at://did:plc:owner/sh.tangled.string/123"}, nil
 }
+
+type oversizedStringReader struct{ read int }
+
+func (reader *oversizedStringReader) Read(data []byte) (int, error) {
+	if reader.read >= maxStringContents+2 {
+		return 0, io.EOF
+	}
+	count := min(len(data), maxStringContents+2-reader.read)
+	for i := range data[:count] {
+		data[i] = 'x'
+	}
+	reader.read += count
+	return count, nil
+}
+func TestStringContentsStopsReadingOversizedInput(t *testing.T) {
+	reader := &oversizedStringReader{}
+	_, _, err := stringContents(reader, nil, "input.txt")
+	if err == nil {
+		t.Fatal("accepted oversized contents")
+	}
+	if reader.read > maxStringContents+1 {
+		t.Fatalf("consumed %d bytes beyond size limit", reader.read)
+	}
+}

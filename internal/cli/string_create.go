@@ -105,13 +105,18 @@ func stringContents(stdin io.Reader, args []string, filenameFlag string) (conten
 		if filenameFlag == "" {
 			return "", "", fmt.Errorf("provide --filename when reading from standard input")
 		}
-		data, err := io.ReadAll(stdin)
+		data, err := io.ReadAll(io.LimitReader(stdin, maxStringContents+1))
 		if err != nil {
 			return "", "", fmt.Errorf("read standard input: %w", err)
 		}
 		contents, filename = string(data), filenameFlag
 	} else {
-		data, err := os.ReadFile(args[0])
+		source, err := os.Open(args[0])
+		if err != nil {
+			return "", "", fmt.Errorf("open file %q: %w", args[0], err)
+		}
+		defer source.Close()
+		data, err := io.ReadAll(io.LimitReader(source, maxStringContents+1))
 		if err != nil {
 			return "", "", fmt.Errorf("read file %q: %w", args[0], err)
 		}
