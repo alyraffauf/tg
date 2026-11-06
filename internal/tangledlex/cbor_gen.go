@@ -6031,7 +6031,11 @@ func (t *TrackDefs_TicketViewDetailed) MarshalCBOR(w io.Writer) error {
 	}
 
 	cw := cbg.NewCborWriter(w)
-	fieldCount := 10
+	fieldCount := 11
+
+	if t.Assignees == nil {
+		fieldCount--
+	}
 
 	if t.Body == nil {
 		fieldCount--
@@ -6189,6 +6193,42 @@ func (t *TrackDefs_TicketViewDetailed) MarshalCBOR(w io.Writer) error {
 
 	if err := t.Author.MarshalCBOR(cw); err != nil {
 		return err
+	}
+
+	// t.Assignees ([]string) (slice)
+	if t.Assignees != nil {
+
+		if len("assignees") > 1000000 {
+			return xerrors.Errorf("Value in field \"assignees\" was too long")
+		}
+
+		if err := cw.WriteMajorTypeHeader(cbg.MajTextString, uint64(len("assignees"))); err != nil {
+			return err
+		}
+		if _, err := cw.WriteString(string("assignees")); err != nil {
+			return err
+		}
+
+		if len(t.Assignees) > 8192 {
+			return xerrors.Errorf("Slice value in field t.Assignees was too long")
+		}
+
+		if err := cw.WriteMajorTypeHeader(cbg.MajArray, uint64(len(t.Assignees))); err != nil {
+			return err
+		}
+		for _, v := range t.Assignees {
+			if len(v) > 1000000 {
+				return xerrors.Errorf("Value in field v was too long")
+			}
+
+			if err := cw.WriteMajorTypeHeader(cbg.MajTextString, uint64(len(v))); err != nil {
+				return err
+			}
+			if _, err := cw.WriteString(string(v)); err != nil {
+				return err
+			}
+
+		}
 	}
 
 	// t.CreatedAt (string) (string)
@@ -6440,6 +6480,46 @@ func (t *TrackDefs_TicketViewDetailed) UnmarshalCBOR(r io.Reader) (err error) {
 					}
 				}
 
+			}
+			// t.Assignees ([]string) (slice)
+		case "assignees":
+
+			maj, extra, err = cr.ReadHeader()
+			if err != nil {
+				return err
+			}
+
+			if extra > 8192 {
+				return fmt.Errorf("t.Assignees: array too large (%d)", extra)
+			}
+
+			if maj != cbg.MajArray {
+				return fmt.Errorf("expected cbor array")
+			}
+
+			if extra > 0 {
+				t.Assignees = make([]string, extra)
+			}
+
+			for i := 0; i < int(extra); i++ {
+				{
+					var maj byte
+					var extra uint64
+					var err error
+					_ = maj
+					_ = extra
+					_ = err
+
+					{
+						sval, err := cbg.ReadStringWithMax(cr, 1000000)
+						if err != nil {
+							return err
+						}
+
+						t.Assignees[i] = string(sval)
+					}
+
+				}
 			}
 			// t.CreatedAt (string) (string)
 		case "createdAt":

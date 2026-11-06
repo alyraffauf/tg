@@ -13,6 +13,7 @@ import (
 
 // TrackDefs_TicketViewDetailed is a "ticketViewDetailed" in the org.tangled.track.defs schema.
 type TrackDefs_TicketViewDetailed struct {
+	Assignees []string `json:"assignees,omitempty" cborgen:"assignees,omitempty"`
 	// author: The account that opened the ticket, the editor of its first version. Not the account that last edited or closed it.
 	Author        *ActorDefs_ProfileViewBasic                        `json:"author" cborgen:"author"`
 	Body          *TrackDefs_TicketViewDetailed_Body                 `json:"body,omitempty" cborgen:"body,omitempty"`

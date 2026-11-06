@@ -54,6 +54,10 @@
             "refs": ["org.tangled.label.defs#labelToken"]
           }
         },
+        "assignees": {
+          "type": "array",
+          "items": { "type": "string", "format": "did" }
+        },
         "targetBranch": {
           "type": "string",
           "description": "Present when the ticket is a pull request."
