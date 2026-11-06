@@ -212,6 +212,7 @@ func (p *testPDS) GetServiceAuth(_ context.Context, audience, lexiconMethod stri
 type testGit struct {
 	branch         string
 	commit         string
+	commits        map[string]string
 	patch          []byte
 	patchErr       error
 	patchBase      string
@@ -248,7 +249,14 @@ func (g *testGit) GeneratePatch(_ context.Context, _, base, head string) ([]byte
 	return nil, errors.New("not implemented")
 }
 func (g *testGit) CurrentBranch(context.Context, string) (string, error) { return g.branch, nil }
-func (g *testGit) ResolveCommit(context.Context, string, string) (string, error) {
+func (g *testGit) ResolveCommit(_ context.Context, _, revision string) (string, error) {
+	if g.commits != nil {
+		commit, found := g.commits[revision]
+		if !found {
+			return "", errors.New("commit is not available locally")
+		}
+		return commit, nil
+	}
 	return g.commit, nil
 }
 func (g *testGit) ResolvePullBase(_ context.Context, _, base string) (gitutil.PullBase, error) {
@@ -384,6 +392,7 @@ type testAppview struct {
 	formatErr        error
 	patches          []tangled.Patch
 	ref              string
+	refs             map[string]map[string]string
 	refErr           error
 	mergeErr         error
 	mergeHook        func(string, any)
@@ -483,12 +492,21 @@ func (a testAppview) FormatPatch(_ context.Context, repo, base, head string) ([]
 	}
 	return []byte("diff --git a/file b/file\n"), nil
 }
-func (a testAppview) GetRef(context.Context, string, string) (string, error) {
+func (a testAppview) GetRef(_ context.Context, repo, ref string) (string, error) {
 	if a.refErr != nil {
 		return "", a.refErr
 	}
 	if a.ref != "" {
 		return a.ref, nil
+	}
+	if a.refs != nil {
+		if commit := a.refs[repo][ref]; commit != "" {
+			return commit, nil
+		}
+		return "", errors.New("published ref not found")
+	}
+	if ref == "refs/heads/main" {
+		return strings.Repeat("b", 40), nil
 	}
 	return strings.Repeat("a", 40), nil
 }

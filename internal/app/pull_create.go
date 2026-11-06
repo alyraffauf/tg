@@ -23,6 +23,20 @@ type CreatePullInput struct {
 
 var errForkPullBaseRequired = errors.New("fork pull requests require --base; pass the target remote branch, for example --base upstream/main")
 
+// PullBaseUnavailableError means the published target tip is absent locally.
+type PullBaseUnavailableError struct {
+	Branch          string
+	LocalCommit     string
+	PublishedCommit string
+	Err             error
+}
+
+func (err *PullBaseUnavailableError) Error() string {
+	return fmt.Sprintf("target branch %s is published at %s, but local base %s cannot provide that commit; fetch the target repository and retry: %v", err.Branch, err.PublishedCommit, err.LocalCommit, err.Err)
+}
+
+func (err *PullBaseUnavailableError) Unwrap() error { return err.Err }
+
 type pullRange struct {
 	Base         string
 	Head         string
@@ -63,7 +77,16 @@ func (s *Service) resolvePullRange(ctx context.Context, in CreatePullInput, targ
 	if err != nil {
 		return pullRange{}, err
 	}
-	mergeBase, err := s.git.MergeBase(ctx, in.RepoDir, base.Revision, headOID)
+	targetTip, err := s.appview.GetRef(ctx, stringValue(target.Value.RepoDid), "refs/heads/"+base.Branch)
+	if err != nil {
+		return pullRange{}, fmt.Errorf("confirm published target branch %s: %w", base.Branch, explainMirrorError(err))
+	}
+	if targetTip != base.Revision {
+		if _, err := s.git.ResolveCommit(ctx, in.RepoDir, targetTip); err != nil {
+			return pullRange{}, &PullBaseUnavailableError{Branch: base.Branch, LocalCommit: base.Revision, PublishedCommit: targetTip, Err: err}
+		}
+	}
+	mergeBase, err := s.git.MergeBase(ctx, in.RepoDir, targetTip, headOID)
 	if err != nil {
 		return pullRange{}, err
 	}
@@ -78,7 +101,11 @@ func (s *Service) resolvePullRange(ctx context.Context, in CreatePullInput, targ
 	if remoteHead != headOID {
 		return pullRange{}, fmt.Errorf("source commit %s is not the published tip of %s; push that branch to the source Tangled repository and wait for the Git mirror before submitting the PR", headOID, sourceBranch)
 	}
-	return pullRange{Base: mergeBase, Head: headOID, Branch: base.Branch, SourceBranch: sourceBranch, SourceRepo: stringValue(source.Value.RepoDid)}, nil
+	change := pullRange{Base: mergeBase, Head: headOID, Branch: base.Branch, SourceBranch: sourceBranch, SourceRepo: stringValue(source.Value.RepoDid)}
+	if _, err := s.formatPullPatch(ctx, change); err != nil {
+		return pullRange{}, err
+	}
+	return change, nil
 }
 func (s *Service) submitPullPatch(ctx context.Context, repo *tangled.Repo, ticket string, change pullRange) (*knot.Receipt, []string, error) {
 	patch := map[string]any{"ticket": extractRKey(ticket), "base": map[string]string{"oid": change.Base}, "head": map[string]string{"oid": change.Head}, "sourceRepo": change.SourceRepo, "sourceBranch": change.SourceBranch}

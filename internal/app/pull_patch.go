@@ -48,15 +48,23 @@ func (s *Service) pullPatch(ctx context.Context, repo *tangled.Repo, rkey string
 	if last.Value.Source != nil && last.Value.Source.Repo != "" {
 		source = last.Value.Source.Repo
 	}
-	data, err := s.appview.FormatPatch(ctx, source, last.Value.Base.OID, last.Value.Head.OID)
+	data, err := s.formatPullPatch(ctx, pullRange{SourceRepo: source, Base: last.Value.Base.OID, Head: last.Value.Head.OID})
 	if err != nil {
-		return nil, explainMirrorError(err)
+		return nil, err
 	}
 	body := ""
 	if ticket.Body != nil {
 		body = ticket.Body.Text
 	}
 	return &PullPatch{URI: item.URI, CID: item.CID, Title: ticket.Title.Text, Body: body, TargetBranch: ticket.TargetBranch, Patch: data, Base: last.Value.Base.OID, Head: last.Value.Head.OID}, nil
+}
+
+func (s *Service) formatPullPatch(ctx context.Context, change pullRange) ([]byte, error) {
+	data, err := s.appview.FormatPatch(ctx, change.SourceRepo, change.Base, change.Head)
+	if err != nil {
+		return nil, fmt.Errorf("serve pull request patch from %s to %s in source repository %s: %w", change.Base, change.Head, change.SourceRepo, explainMirrorError(err))
+	}
+	return data, nil
 }
 
 func explainMirrorError(err error) error {

@@ -47,7 +47,7 @@ func newPRUpdateCommand(service *app.Service) *cobra.Command {
 	command.Flags().StringVarP(&repository, "repo", "R", "", "Target repository as handle/repo")
 	command.Flags().StringVar(&sourceRepository, "source-repo", "", "Source repository as handle/repo")
 	command.Flags().StringVarP(&head, "head", "H", "", "Published source branch")
-	command.Flags().StringVarP(&base, "base", "B", "", "Target branch or local remote-tracking branch. Required for forks.")
+	command.Flags().StringVarP(&base, "base", "B", "", "Local or remote-tracking ref selecting the target branch; uses its published tip (required for forks)")
 	return command
 }
 

@@ -564,7 +564,10 @@ async def create_pull_request(
     """Create a pull request using published commits from a local checkout.
 
     head defaults to the current branch. For a fork, provide source_repo and base.
-    Use an existing checkout as working_directory.
+    base selects the target branch using a local or remote-tracking ref.
+    Fetch the target remote first; tg uses the target's published tip.
+    Use an existing checkout as working_directory. Unservable patches are rejected
+    before the PR is created.
     """
     arguments = [
         "pr",
@@ -595,6 +598,7 @@ async def update_pull_request(
     """Submit published commits as a new patch round for a PR.
 
     Use the source checkout as working_directory.
+    Fetch the target remote first; base selects a branch, and tg uses its published tip.
     Use edit_pull_request for title or body changes.
     """
     arguments = [

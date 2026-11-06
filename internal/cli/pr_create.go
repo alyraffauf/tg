@@ -25,6 +25,8 @@ func newPRCreateCommand(service pullCreateService) *cobra.Command {
 The current branch is the source branch. The origin remote and its default
 branch are the target. For a fork, set --repo, --source-repo, and --base.
 Push the source branch first. tg submits published commits without pushing.
+The base selects the target branch by name. tg uses its published tip; fetch
+the target remote first so that commit is available locally.
 
 Without title or body flags, tg opens $EDITOR. Write the title on the first line,
 leave the second line blank, and write the body below it.`,
@@ -94,7 +96,7 @@ leave the second line blank, and write the body below it.`,
 	command.Flags().StringVarP(&title, "title", "t", "", "Pull request title")
 	command.Flags().StringVarP(&bodyText, "body", "b", "", "Pull request body")
 	command.Flags().StringVarP(&bodyFile, "body-file", "F", "", "Read pull request body from file")
-	command.Flags().StringVarP(&base, "base", "B", "", "Target branch. Defaults to origin's default branch. Required for forks.")
+	command.Flags().StringVarP(&base, "base", "B", "", "Local or remote-tracking ref selecting the target branch; uses its published tip (required for forks)")
 	command.Flags().StringVarP(&head, "head", "H", "", "Source branch (default: current branch)")
 	command.Flags().StringVarP(&repository, "repo", "R", "", "Target repository as handle/repo")
 	command.Flags().StringVar(&sourceRepository, "source-repo", "", "Source repository as handle/repo")
