@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"sync"
 
+	"github.com/alyraffauf/tg/internal/fsutil"
 	"github.com/bluesky-social/indigo/atproto/atclient"
 	"github.com/zalando/go-keyring"
 )
@@ -125,12 +126,7 @@ func (s *insecureFileStore) saveLocked(record credentialRecord) error {
 		return fmt.Errorf("replace credentials file: %w", err)
 	}
 	committed = true
-	directoryFile, err := os.Open(directory)
-	if err != nil {
-		return fmt.Errorf("open credentials directory for sync: %w", err)
-	}
-	defer directoryFile.Close()
-	if err := directoryFile.Sync(); err != nil {
+	if err := fsutil.SyncDir(directory); err != nil {
 		return fmt.Errorf("sync credentials directory: %w", err)
 	}
 	return nil

@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/alyraffauf/tg/atproto"
+	"github.com/alyraffauf/tg/internal/fsutil"
 	"github.com/alyraffauf/tg/knot"
 	"github.com/alyraffauf/tg/tangled"
 	"github.com/bluesky-social/indigo/atproto/syntax"
@@ -100,17 +101,8 @@ func (s *Service) queueAttestation(ctx context.Context, pds pdsClient, actor str
 	if err = os.Link(temporary, path); err != nil {
 		return err
 	}
-	directory, err := os.Open(dir)
-	if err != nil {
+	if err := fsutil.SyncDir(dir); err != nil {
 		return err
-	}
-	syncErr := directory.Sync()
-	closeErr := directory.Close()
-	if syncErr != nil {
-		return syncErr
-	}
-	if closeErr != nil {
-		return closeErr
 	}
 	return attestEntry(ctx, pds, actor, entry, path)
 }
