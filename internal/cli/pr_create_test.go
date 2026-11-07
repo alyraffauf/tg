@@ -107,15 +107,17 @@ func TestPullCreateRetainsDraftWhenSubmissionFails(t *testing.T) {
 
 type testPullCreateService struct {
 	createError error
-	input       app.CreatePullInput
+	// partial is returned with createError, as when a ticket outlives a failed patch.
+	partial *app.PRCreateResult
+	input   app.CreatePullInput
 }
 
 func (service *testPullCreateService) CreatePull(_ context.Context, input app.CreatePullInput) (*app.PRCreateResult, error) {
 	service.input = input
 	if service.createError != nil {
-		return nil, service.createError
+		return service.partial, service.createError
 	}
-	return &app.PRCreateResult{URI: "at://did:plc:owner/sh.tangled.repo.pull/123", Base: "main", Head: "feature"}, nil
+	return &app.PRCreateResult{PatchStatus: app.PatchSubmitted, URI: "at://did:plc:owner/sh.tangled.repo.pull/123", Base: "main", Head: "feature"}, nil
 }
 
 func (*testPullCreateService) TargetFromCWD(context.Context) (app.Target, error) {

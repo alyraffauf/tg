@@ -27,10 +27,16 @@ func (s *Service) ForkRepoOnKnot(ctx context.Context, source Target, name, host 
 		}
 	}
 	result, err := s.provisionRepo(ctx, provisionRepoInput{KnotHost: host, Name: name, Source: stringValue(repo.Value.RepoDid)})
-	if err != nil {
+	if result == nil {
 		return nil, fmt.Errorf("fork repository: %w", err)
 	}
-	out := &RepoForkResult{Handle: result.Handle, Name: name, URI: result.URI, Knot: host, Warnings: result.Warnings}
+	out := &RepoForkResult{
+		RepoDID: result.RepoDID, Declared: result.Declared,
+		Handle: result.Handle, Name: name, URI: result.URI, Knot: host, Warnings: result.Warnings,
+	}
+	if err != nil {
+		return out, fmt.Errorf("fork repository: %w", err)
+	}
 	status, err := s.knot.NewPublic(host).GetImportStatus(ctx, result.RepoDID)
 	if err != nil {
 		out.Warnings = append(out.Warnings, fmt.Sprintf("repository created, but import status is unavailable: %v", err))

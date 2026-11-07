@@ -244,8 +244,12 @@ type RepoDefaultBranchResult struct {
 	Branch   string   `json:"branch"`
 }
 
-// RepoForkResult is returned by repository forking.
+// RepoForkResult is returned by repository forking. A failed fork can still
+// return a result when the Knot repository exists; Declared reports whether
+// the owner declaration was written.
 type RepoForkResult struct {
+	RepoDID      string   `json:"repoDid"`
+	Declared     bool     `json:"declared"`
 	ImportStatus string   `json:"importStatus,omitempty"`
 	ImportReason string   `json:"importReason,omitempty"`
 	Warnings     []string `json:"warnings,omitempty"`
@@ -255,14 +259,26 @@ type RepoForkResult struct {
 	Knot         string   `json:"knot"`
 }
 
-// PRCreateResult is returned by pull request creation.
+// Patch submission outcomes for a pull request ticket.
+const (
+	PatchSubmitted = "submitted"
+	// PatchRejected means the Knot refused the patch and the ticket remains.
+	PatchRejected = "rejected"
+	// PatchUnknown means the submission may or may not have been saved.
+	PatchUnknown = "unknown"
+)
+
+// PRCreateResult is returned by pull request creation. A failed creation can
+// still return a result when the ticket exists; PatchStatus then reports
+// whether its patch was saved.
 type PRCreateResult struct {
-	CID      string   `json:"cid,omitempty"`
-	Warnings []string `json:"warnings,omitempty"`
-	URI      string   `json:"uri"`
-	Title    string   `json:"title"`
-	Base     string   `json:"base"`
-	Head     string   `json:"head"`
+	PatchStatus string   `json:"patchStatus"`
+	CID         string   `json:"cid,omitempty"`
+	Warnings    []string `json:"warnings,omitempty"`
+	URI         string   `json:"uri"`
+	Title       string   `json:"title"`
+	Base        string   `json:"base"`
+	Head        string   `json:"head"`
 }
 
 // PRCheckoutResult is returned by pull request checkout.

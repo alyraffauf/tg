@@ -534,7 +534,11 @@ async def edit_repo(
 async def fork_repo(
     repo: RepoTarget, name: RecordKey | None = None, knot: NonEmptyText | None = None
 ) -> RepoForkResult:
-    """Fork a repository under the tg account."""
+    """Fork a repository under the tg account.
+
+    If the fork fails after its repository exists, the error includes the
+    partial result. declared false means the fork has no owner declaration.
+    """
     arguments = ["repo", "fork", *optional_flags(knot=knot), "--", repo]
     if name is not None:
         arguments.append(name)
@@ -567,7 +571,9 @@ async def create_pull_request(
     base selects the target branch using a local or remote-tracking ref.
     Fetch the target remote first; tg uses the target's published tip.
     Use an existing checkout as working_directory. Unservable patches are rejected
-    before the PR is created.
+    before the PR is created. If patch submission fails after the ticket exists,
+    the error includes the partial result; patch_status reports whether the
+    patch was rejected or may have been saved.
     """
     arguments = [
         "pr",

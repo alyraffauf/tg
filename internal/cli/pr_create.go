@@ -79,6 +79,12 @@ leave the second line blank, and write the body below it.`,
 				Target:  target,
 				Source:  source,
 			})
+			// A failed submission can leave a ticket behind; report it before the error.
+			if result != nil {
+				if outputErr := output(cmd, result, func(created *app.PRCreateResult) { renderPullCreate(cmd, created) }); outputErr != nil {
+					return outputErr
+				}
+			}
 			if err != nil {
 				if draft.Path != "" {
 					return fmt.Errorf("%w; draft saved to %s", err, draft.Path)
@@ -88,9 +94,7 @@ leave the second line blank, and write the body below it.`,
 			if draft.Path != "" {
 				removeTitledDraft(draft.Path, "pull request", cmd.ErrOrStderr())
 			}
-			return output(cmd, result, func(created *app.PRCreateResult) {
-				fmt.Fprintf(cmd.OutOrStdout(), "Created pull request %s (%s -> %s)\n", created.URI, created.Head, created.Base)
-			})
+			return nil
 		},
 	}
 	command.Flags().StringVarP(&title, "title", "t", "", "Pull request title")
@@ -101,4 +105,15 @@ leave the second line blank, and write the body below it.`,
 	command.Flags().StringVarP(&repository, "repo", "R", "", "Target repository as handle/repo")
 	command.Flags().StringVar(&sourceRepository, "source-repo", "", "Source repository as handle/repo")
 	return command
+}
+
+func renderPullCreate(cmd *cobra.Command, created *app.PRCreateResult) {
+	switch created.PatchStatus {
+	case app.PatchRejected:
+		fmt.Fprintf(cmd.ErrOrStderr(), "Created ticket %s, but its patch was rejected; remove or reuse the ticket before retrying\n", created.URI)
+	case app.PatchUnknown:
+		fmt.Fprintf(cmd.ErrOrStderr(), "Created ticket %s, but its patch may not have been saved; inspect it before retrying\n", created.URI)
+	default:
+		fmt.Fprintf(cmd.OutOrStdout(), "Created pull request %s (%s -> %s)\n", created.URI, created.Head, created.Base)
+	}
 }

@@ -240,6 +240,11 @@ class RepoDefaultBranchResult(TGOutput):
 
 
 class RepoForkResult(TGOutput):
+    repo_did: str = ""
+    declared: bool = Field(
+        default=False,
+        description="Whether the owner declaration for the fork was written",
+    )
     import_status: str = ""
     import_reason: str = ""
     warnings: list[str] = Field(default_factory=list)
@@ -250,6 +255,11 @@ class RepoForkResult(TGOutput):
 
 
 class PRCreateResult(TGOutput):
+    patch_status: Literal["submitted", "rejected", "unknown"] = Field(
+        default="submitted",
+        description="Whether the ticket's patch was saved. Anything other than "
+        "submitted is only reported in a failed call's partial output.",
+    )
     cid: str = ""
     warnings: list[str] = Field(default_factory=list)
     uri: str = Field(

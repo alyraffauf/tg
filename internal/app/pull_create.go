@@ -131,16 +131,21 @@ func (s *Service) CreatePull(ctx context.Context, in CreatePullInput) (*PRCreate
 	if err != nil {
 		return nil, err
 	}
+	result := &PRCreateResult{PatchStatus: PatchSubmitted, URI: receipt.URI, CID: receipt.CID, Title: in.Title, Base: change.Branch, Head: change.SourceBranch, Warnings: warnings}
 	_, patchWarnings, err := s.submitPullPatch(ctx, repo, receipt.URI, change)
-	if err != nil {
-		// A transport failure may have saved the patch. Only erase after a definite rejection.
-		if isDefiniteRejection(err) {
-			if cleanupErr := s.eraseSocial(ctx, repo, *receipt); cleanupErr != nil {
-				return nil, fmt.Errorf("submit patch: %w; ticket %s could not be removed: %v", err, receipt.URI, cleanupErr)
-			}
-		}
-		return nil, fmt.Errorf("submit patch for %s: %w; inspect this ticket before retrying", receipt.URI, err)
+	if err == nil {
+		result.Warnings = append(result.Warnings, patchWarnings...)
+		return result, nil
 	}
-	return &PRCreateResult{URI: receipt.URI, CID: receipt.CID, Title: in.Title, Base: change.Branch, Head: change.SourceBranch, Warnings: append(warnings, patchWarnings...)}, nil
+	// A transport failure may have saved the patch. Only erase after a definite rejection.
+	if !isDefiniteRejection(err) {
+		result.PatchStatus = PatchUnknown
+		return result, fmt.Errorf("submit patch for %s: %w; inspect this ticket before retrying", receipt.URI, err)
+	}
+	if cleanupErr := s.eraseSocial(ctx, repo, *receipt); cleanupErr != nil {
+		result.PatchStatus = PatchRejected
+		return result, fmt.Errorf("submit patch for %s: %w; the ticket could not be removed: %v", receipt.URI, err, cleanupErr)
+	}
+	return nil, fmt.Errorf("submit patch: %w; ticket %s was removed", err, receipt.URI)
 }
 func atURIPrefix(uri string) bool { return strings.HasPrefix(uri, "at://") }
