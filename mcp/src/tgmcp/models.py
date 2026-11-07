@@ -376,6 +376,7 @@ class AttestationEntry(TGOutput):
 
 class AttestationListResult(TGOutput):
     items: list[AttestationEntry]
+    warnings: list[str] = Field(default_factory=list)
 
 
 class AttestationRetryResult(TGOutput):

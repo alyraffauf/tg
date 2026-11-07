@@ -150,7 +150,7 @@ func TestAttestationQueueIsPrivateAndAccountSpecific(t *testing.T) {
 	if err != nil || info.Mode().Perm() != 0600 {
 		t.Fatalf("mode=%v err=%v", info, err)
 	}
-	other, _, err := service.pendingAttestations("did:plc:other")
+	other, _, _, err := service.pendingAttestations("did:plc:other")
 	if err != nil || len(other) != 0 {
 		t.Fatal("account queues overlap")
 	}

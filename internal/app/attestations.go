@@ -33,7 +33,8 @@ type AttestationEntry struct {
 	CreatedAt string `json:"createdAt"`
 }
 type AttestationListResult struct {
-	Items []AttestationEntry `json:"items"`
+	Items    []AttestationEntry `json:"items"`
+	Warnings []string           `json:"warnings,omitempty"`
 }
 type AttestationRetryResult struct {
 	Retried  int      `json:"retried"`
@@ -119,78 +120,99 @@ func attestEntry(ctx context.Context, pds pdsClient, actor string, entry Attesta
 	}
 	return nil
 }
-func (s *Service) pendingAttestations(actor string) ([]AttestationEntry, string, error) {
-	dir, err := s.attestationDir(actor)
+
+// pendingAttestations reads the actor's queue. An entry that cannot be read
+// or validated is left on disk and reported as a warning so it neither blocks
+// the valid entries nor disappears from view.
+func (s *Service) pendingAttestations(actor string) (items []AttestationEntry, dir string, warnings []string, err error) {
+	dir, err = s.attestationDir(actor)
 	if err != nil {
-		return nil, "", err
+		return nil, "", nil, err
 	}
 	files, err := os.ReadDir(dir)
 	if errors.Is(err, os.ErrNotExist) {
-		return []AttestationEntry{}, dir, nil
+		return []AttestationEntry{}, dir, nil, nil
 	}
 	if err != nil {
-		return nil, "", err
+		return nil, "", nil, err
 	}
-	items := make([]AttestationEntry, 0, len(files))
+	items = make([]AttestationEntry, 0, len(files))
 	for _, file := range files {
 		if file.IsDir() || !strings.HasSuffix(file.Name(), ".json") {
 			continue
 		}
-		data, err := os.ReadFile(filepath.Join(dir, file.Name()))
+		path := filepath.Join(dir, file.Name())
+		entry, err := readPendingAttestation(path)
 		if err != nil {
-			return nil, "", err
-		}
-		var entry AttestationEntry
-		if err := json.Unmarshal(data, &entry); err != nil {
-			return nil, "", fmt.Errorf("read pending attestation %s: %w", file.Name(), err)
-		}
-		if entry.Rkey+".json" != file.Name() {
-			return nil, "", fmt.Errorf("invalid pending attestation key")
-		}
-		if _, err := syntax.ParseTID(entry.Rkey); err != nil {
-			return nil, "", err
-		}
-		if _, err := syntax.ParseATURI(entry.Subject.URI); err != nil {
-			return nil, "", err
-		}
-		if _, err := syntax.ParseCID(entry.Subject.CID); err != nil {
-			return nil, "", err
+			warnings = append(warnings, fmt.Sprintf("skipped unreadable pending attestation %s (left in place): %v", path, err))
+			continue
 		}
 		items = append(items, entry)
 	}
 	sort.Slice(items, func(i, j int) bool { return items[i].Rkey < items[j].Rkey })
-	return items, dir, nil
+	return items, dir, warnings, nil
+}
+func readPendingAttestation(path string) (AttestationEntry, error) {
+	var entry AttestationEntry
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return entry, err
+	}
+	if err := json.Unmarshal(data, &entry); err != nil {
+		return entry, err
+	}
+	if entry.Rkey+".json" != filepath.Base(path) {
+		return entry, fmt.Errorf("record key %q does not match file name", entry.Rkey)
+	}
+	if _, err := syntax.ParseTID(entry.Rkey); err != nil {
+		return entry, err
+	}
+	if _, err := syntax.ParseATURI(entry.Subject.URI); err != nil {
+		return entry, err
+	}
+	if _, err := syntax.ParseCID(entry.Subject.CID); err != nil {
+		return entry, err
+	}
+	return entry, nil
 }
 func (s *Service) ListPendingAttestations(ctx context.Context) (*AttestationListResult, error) {
 	actor, err := s.sessions.CurrentDID(ctx)
 	if err != nil {
 		return nil, err
 	}
-	items, _, err := s.pendingAttestations(actor)
-	return &AttestationListResult{Items: items}, err
+	items, _, warnings, err := s.pendingAttestations(actor)
+	if err != nil {
+		return nil, err
+	}
+	return &AttestationListResult{Items: items, Warnings: warnings}, nil
 }
+
+// RetryPendingAttestations re-puts every valid queued attestation. Pending
+// counts everything still queued afterwards, including entries that could not
+// be read.
 func (s *Service) RetryPendingAttestations(ctx context.Context) (*AttestationRetryResult, error) {
 	pds, actor, err := s.authenticatedPDS(ctx)
 	if err != nil {
 		return nil, err
 	}
-	items, dir, err := s.pendingAttestations(actor)
+	items, dir, warnings, err := s.pendingAttestations(actor)
 	if err != nil {
 		return nil, err
 	}
-	result := &AttestationRetryResult{}
+	result := &AttestationRetryResult{Pending: len(warnings) + len(items), Warnings: warnings}
 	for _, entry := range items {
 		if err := ctx.Err(); err != nil {
 			return result, err
 		}
 		if err := attestEntry(ctx, pds, actor, entry, filepath.Join(dir, entry.Rkey+".json")); err != nil {
-			result.Pending++
 			result.Warnings = append(result.Warnings, fmt.Sprintf("%s: %v", entry.Subject.URI, err))
 		} else {
+			result.Pending--
 			result.Retried++
 		}
 	}
 	return result, nil
 }
 
+func (r *AttestationListResult) MutationWarnings() []string  { return r.Warnings }
 func (r *AttestationRetryResult) MutationWarnings() []string { return r.Warnings }

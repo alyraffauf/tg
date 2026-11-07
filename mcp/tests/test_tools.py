@@ -316,9 +316,14 @@ async def test_discovery_schemas_and_annotations(client: Client) -> None:
 
 
 async def test_pending_attestation_tools(client: Client, fake_tg: FakeTG) -> None:
-    fake_tg.configure(stdout='{"items":[]}')
+    fake_tg.configure(
+        stdout='{"items":[],"warnings":["invalid queue entry left in place"]}'
+    )
     listed = await client.call_tool("list_pending_attestations", {})
-    assert listed.structured_content == {"items": []}
+    assert listed.structured_content == {
+        "items": [],
+        "warnings": ["invalid queue entry left in place"],
+    }
     assert fake_tg.requests[0]["arguments"] == [
         "--json",
         "auth",
