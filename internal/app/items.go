@@ -25,7 +25,7 @@ func (s *Service) resolveAuthor(ctx context.Context, did string) Author {
 }
 
 // buildItems decodes listing records and reports records it could not use.
-func (s *Service) buildItems(ctx context.Context, items []tangled.ListItem, pull bool) ([]Item, []RecordWarning) {
+func (s *Service) buildItems(ctx context.Context, items []tangled.ListItem, pull bool, catalog labelCatalog) ([]Item, []RecordWarning) {
 	result := make([]Item, 0, len(items))
 	var warnings []RecordWarning
 
@@ -51,6 +51,11 @@ func (s *Service) buildItems(ctx context.Context, items []tangled.ListItem, pull
 			}
 		}
 
+		labels, unresolvedKeys := catalog.appliedLabels(ticket.TangledLabels)
+		if len(unresolvedKeys) > 0 {
+			warnings = append(warnings, RecordWarning{URI: listItem.URI, Error: unresolvedLabelMessage(unresolvedKeys)})
+		}
+
 		title := ticket.Title.Text
 		if title == "" {
 			title = "(no title)"
@@ -67,6 +72,7 @@ func (s *Service) buildItems(ctx context.Context, items []tangled.ListItem, pull
 			CommentCount: listItem.CommentCount,
 			SourceBranch: sourceBranch,
 			TargetBranch: ticket.TargetBranch,
+			Labels:       labels,
 		})
 	}
 

@@ -32,6 +32,9 @@ Without --repo, tg uses the origin remote in the current directory.`,
 					{"Author", view.Author.Handle},
 					{"Created", localTimestamp(view.CreatedAt)},
 				}
+				if labels := labelNames(view.Labels); labels != "" {
+					fields = append(fields, detailField{"Labels", labels})
+				}
 				renderDetail(cmd.OutOrStdout(), fields, view.Body)
 			})
 		},

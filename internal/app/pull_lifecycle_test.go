@@ -71,7 +71,7 @@ func TestPullStateChangesSwapTheCheckedRecord(t *testing.T) {
 func TestEditingAMergedPullKeepsItsState(t *testing.T) {
 	service, origin := lifecycleService(t, "completed")
 	title := "Renamed"
-	if _, err := service.EditPull(context.Background(), migrationTarget(), lifecycleKey, &title, nil, ""); err != nil {
+	if _, err := service.EditPull(context.Background(), EditTicketInput{Target: migrationTarget(), Rkey: lifecycleKey, Title: &title, ExpectedCID: ""}); err != nil {
 		t.Fatal(err)
 	}
 	if state := origin.procedureInputs[0]["record"].(map[string]any)["state"]; state != "completed" {

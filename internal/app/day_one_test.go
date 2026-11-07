@@ -76,7 +76,7 @@ func TestForkReportsOneImmediateStatus(t *testing.T) {
 func TestExpectedCIDRejectsBeforeMutation(t *testing.T) {
 	s, _, origin := migrationService(t)
 	title := "Changed"
-	if _, err := s.EditIssue(context.Background(), migrationTarget(), "ticket", &title, nil, "stale"); err == nil {
+	if _, err := s.EditIssue(context.Background(), EditTicketInput{Target: migrationTarget(), Rkey: "ticket", Title: &title, ExpectedCID: "stale"}); err == nil {
 		t.Fatal("stale edit accepted")
 	}
 	if len(origin.procedureMethods) != 0 {
@@ -117,7 +117,7 @@ func TestTicketViewRejectsMismatchedIdentity(t *testing.T) {
 func TestExpectedCIDSuccessReturnsUsableReceipt(t *testing.T) {
 	s, _, _ := migrationService(t)
 	title := "Changed"
-	result, err := s.EditIssue(context.Background(), migrationTarget(), "ticket", &title, nil, testCID)
+	result, err := s.EditIssue(context.Background(), EditTicketInput{Target: migrationTarget(), Rkey: "ticket", Title: &title, ExpectedCID: testCID})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -130,7 +130,7 @@ func TestEditRejectsReceiptForDifferentRecord(t *testing.T) {
 	s, _, origin := migrationService(t)
 	origin.receipt = knot.Receipt{URI: "at://did:plc:repo/org.tangled.track.ticket/another-ticket", CID: testCID}
 	title := "Changed"
-	if _, err := s.EditIssue(context.Background(), migrationTarget(), "ticket", &title, nil); err == nil {
+	if _, err := s.EditIssue(context.Background(), EditTicketInput{Target: migrationTarget(), Rkey: "ticket", Title: &title}); err == nil {
 		t.Fatal("accepted receipt for a different ticket")
 	}
 }

@@ -8,6 +8,7 @@ import (
 )
 
 type listFlags struct {
+	labels []string
 	author string
 	state  string
 	limit  int64
@@ -15,6 +16,7 @@ type listFlags struct {
 }
 
 func (flags *listFlags) add(command *cobra.Command, states string) {
+	command.Flags().StringArrayVar(&flags.labels, "label", nil, "Filter by exact label name (repeat to require all labels)")
 	command.Flags().StringVar(&flags.author, "author", "", "Filter by author handle or DID")
 	command.Flags().StringVar(&flags.state, "state", "", "Filter by state: "+states)
 	command.Flags().Int64Var(&flags.limit, "limit", 0, "Maximum number of results")
@@ -26,6 +28,7 @@ func (flags listFlags) options(command *cobra.Command) (app.ListOptions, error) 
 		return app.ListOptions{}, fmt.Errorf("list limit must be positive")
 	}
 	return app.ListOptions{
+		Labels: flags.labels,
 		Author: flags.author,
 		State:  flags.state,
 		Limit:  flags.limit,

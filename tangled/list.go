@@ -40,6 +40,9 @@ type ListOpts struct {
 	Limit    int64  // page size: 1-1000, default 50
 	MaxItems int64  // maximum results to return; zero returns every item
 	Order    string // "asc" or "desc"
+	// Match, when set, keeps only tickets it accepts. It runs before MaxItems
+	// counts results, so filtered listings still return up to MaxItems.
+	Match func(Ticket) bool
 }
 
 func (o ListOpts) limit() int64 {
@@ -47,7 +50,9 @@ func (o ListOpts) limit() int64 {
 	if o.Limit > 0 {
 		limit = o.Limit
 	}
-	if o.MaxItems > 0 && o.MaxItems < limit {
+	// Client-side filters discard items, so small pages would cost extra
+	// requests without shortening the result.
+	if o.MaxItems > 0 && o.MaxItems < limit && o.Match == nil {
 		return o.MaxItems
 	}
 	return limit

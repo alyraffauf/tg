@@ -75,7 +75,7 @@ func TestExecuteWithRendersErrors(t *testing.T) {
 		t.Fatal("ExecuteWith() returned nil error")
 	}
 
-	const want = "Error: provide --title or --body\n"
+	want := "Error: " + err.Error() + "\n"
 	if got := errorOutput.String(); got != want {
 		t.Errorf("error output = %q, want %q", got, want)
 	}

@@ -17,14 +17,26 @@ func (s *Service) ViewRepo(ctx context.Context, t Target) (*RepoItem, error) {
 	if name == "" {
 		name = t.Repo
 	}
+	repoDID := stringValue(tangledRepo.Value.RepoDid)
+	labels := []Label{}
+	var warnings []string
+	if repoDID != "" {
+		catalog, catalogWarnings := s.loadDisplayLabelCatalog(ctx, repoDID)
+		labels = catalog.definitionLabels()
+		for _, warning := range catalogWarnings {
+			warnings = append(warnings, formatRecordWarning(warning))
+		}
+	}
 	return &RepoItem{
+		Labels:      labels,
+		Warnings:    warnings,
 		Name:        name,
 		Author:      s.ownerHandle(ctx, tangledRepo.OwnerDID),
 		URI:         tangledRepo.URI,
 		Knot:        tangledRepo.Value.Knot,
 		Description: stringValue(tangledRepo.Value.Description),
 		CreatedAt:   tangledRepo.Value.CreatedAt,
-		RepoDid:     stringValue(tangledRepo.Value.RepoDid),
+		RepoDid:     repoDID,
 	}, nil
 }
 

@@ -83,6 +83,203 @@ async def test_edit_field_semantics(
 
 
 @pytest.mark.parametrize(
+    "tool, kind", [("list_issues", "issue"), ("list_pull_requests", "pr")]
+)
+async def test_list_labels_filter_repeats_exact_names(
+    client: Client, fake_tg: FakeTG, tool: str, kind: str
+) -> None:
+    labelled = {
+        "rkey": "one",
+        "uri": "at://example/one",
+        "title": "First",
+        "state": "open",
+        "author": {"did": "did:plc:alice", "handle": "alice.example"},
+        "createdAt": "2026-01-01T00:00:00Z",
+        "commentCount": 2,
+        "labels": [
+            {"name": "bug", "color": "#d73a4a", "uri": "at://example/labels/bug"},
+            {"name": "help wanted", "uri": "at://example/labels/help"},
+        ],
+    }
+    unlabelled = {**labelled, "rkey": "two", "uri": "at://example/two"}
+    del unlabelled["labels"]
+    fake_tg.configure(stdout=json.dumps({"items": [labelled, unlabelled]}))
+    result = await client.call_tool(
+        tool,
+        {
+            "repo": "alice.example/repo",
+            "author": "alice.example",
+            "state": "open",
+            "labels": ["bug", "help wanted"],
+            "limit": 5,
+            "order": "asc",
+        },
+    )
+    assert result.structured_content["items"][0]["labels"] == [
+        {"name": "bug", "color": "#d73a4a", "uri": "at://example/labels/bug"},
+        {"name": "help wanted", "color": "", "uri": "at://example/labels/help"},
+    ]
+    assert result.structured_content["items"][1]["labels"] == []
+    assert fake_tg.requests[0]["arguments"] == [
+        "--json",
+        kind,
+        "list",
+        "--limit",
+        "5",
+        "--author",
+        "alice.example",
+        "--state",
+        "open",
+        "--order",
+        "asc",
+        "--label=bug",
+        "--label=help wanted",
+        "--",
+        "alice.example/repo",
+    ]
+
+
+async def test_view_repo_lists_label_definitions(
+    client: Client, fake_tg: FakeTG
+) -> None:
+    fake_tg.configure(
+        stdout=json.dumps(
+            {
+                "name": "repo",
+                "uri": "at://example/repo",
+                "author": "alice.example",
+                "knot": "knot.example",
+                "createdAt": "2026-01-01T00:00:00Z",
+                "labels": [{"name": "bug", "uri": "at://example/labels/bug"}],
+                "warnings": ["label definitions unavailable"],
+            }
+        )
+    )
+    result = await client.call_tool("view_repo", {"repo": "alice.example/repo"})
+    assert result.structured_content["labels"] == [
+        {"name": "bug", "color": "", "uri": "at://example/labels/bug"}
+    ]
+    assert result.structured_content["warnings"] == ["label definitions unavailable"]
+    assert fake_tg.requests[0]["arguments"] == [
+        "--json",
+        "repo",
+        "view",
+        "--",
+        "alice.example/repo",
+    ]
+
+
+@pytest.mark.parametrize(
+    "tool, kind", [("view_issue", "issue"), ("view_pull_request", "pr")]
+)
+async def test_view_item_returns_labels(
+    client: Client, fake_tg: FakeTG, tool: str, kind: str
+) -> None:
+    fake_tg.configure(
+        stdout=json.dumps(
+            {
+                "rkey": "key",
+                "title": "Title",
+                "state": "open",
+                "author": {"did": "did:plc:alice", "handle": "alice.example"},
+                "createdAt": "2026-01-01T00:00:00Z",
+                "labels": [
+                    {
+                        "name": "",
+                        "uri": "at://example/labels/missing",
+                    }
+                ],
+                "warnings": ["unresolved label at://example/labels/missing"],
+            }
+        )
+    )
+    result = await client.call_tool(tool, {"repo": "alice.example/repo", "rkey": "key"})
+    assert result.structured_content["labels"] == [
+        {"name": "", "color": "", "uri": "at://example/labels/missing"}
+    ]
+    assert result.structured_content["warnings"] == [
+        "unresolved label at://example/labels/missing"
+    ]
+    assert fake_tg.requests[0]["arguments"] == [
+        "--json",
+        kind,
+        "view",
+        "--repo",
+        "alice.example/repo",
+        "--",
+        "key",
+    ]
+
+
+@pytest.mark.parametrize(
+    "tool, kind", [("edit_issue", "issue"), ("edit_pull_request", "pr")]
+)
+async def test_label_only_edit_is_allowed(
+    client: Client, fake_tg: FakeTG, tool: str, kind: str
+) -> None:
+    await client.call_tool(
+        tool,
+        {
+            "repo": "alice.example/repo",
+            "rkey": "key",
+            "add_labels": ["bug", "one,two"],
+            "remove_labels": ["wontfix"],
+        },
+    )
+    assert fake_tg.requests[0]["arguments"] == [
+        "--json",
+        kind,
+        "edit",
+        "--repo",
+        "alice.example/repo",
+        "--add-label=bug",
+        "--add-label=one,two",
+        "--remove-label=wontfix",
+        "--",
+        "key",
+    ]
+    await client.call_tool(
+        tool,
+        {
+            "repo": "alice.example/repo",
+            "rkey": "key",
+            "title": "New",
+            "add_labels": ["bug"],
+        },
+    )
+    assert fake_tg.requests[1]["arguments"] == [
+        "--json",
+        kind,
+        "edit",
+        "--repo",
+        "alice.example/repo",
+        "--title=New",
+        "--add-label=bug",
+        "--",
+        "key",
+    ]
+
+
+@pytest.mark.parametrize("tool", ["edit_issue", "edit_pull_request"])
+@pytest.mark.parametrize(
+    "fields",
+    [
+        {"add_labels": ["bug"], "remove_labels": ["other", "bug"]},
+        {"add_labels": [], "remove_labels": []},
+        {"add_labels": []},
+    ],
+)
+async def test_label_edit_without_a_change_does_not_launch_tg(
+    client: Client, fake_tg: FakeTG, tool: str, fields: dict[str, Any]
+) -> None:
+    with pytest.raises(ToolError):
+        await client.call_tool(
+            tool, {"repo": "alice.example/repo", "rkey": "key", **fields}
+        )
+    assert not fake_tg.requests
+
+
+@pytest.mark.parametrize(
     "tool, arguments",
     [
         ("edit_issue", {"rkey": "key"}),

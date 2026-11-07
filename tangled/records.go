@@ -6,14 +6,18 @@ import (
 )
 
 const (
-	FeedCommentCollection = "org.tangled.feed.comment"
-	IssueCollection       = "org.tangled.track.ticket"
-	PullCollection        = IssueCollection
-	StringCollection      = "org.tangled.snippet.string"
-	SSHKeyCollection      = "org.tangled.key.sshKey"
-	RepoCollection        = "org.tangled.repo.manifest"
-	DeclarationCollection = "org.tangled.repo.declaration"
-	AttestationCollection = "org.tangled.graph.attestation"
+	FeedCommentCollection     = "org.tangled.feed.comment"
+	IssueCollection           = "org.tangled.track.ticket"
+	PullCollection            = IssueCollection
+	StringCollection          = "org.tangled.snippet.string"
+	SSHKeyCollection          = "org.tangled.key.sshKey"
+	RepoCollection            = "org.tangled.repo.manifest"
+	DeclarationCollection     = "org.tangled.repo.declaration"
+	AttestationCollection     = "org.tangled.graph.attestation"
+	LabelDefinitionCollection = "org.tangled.label.definition"
+
+	// LabelTokenType is the only tangledLabels union member tg understands.
+	LabelTokenType = "org.tangled.label.defs#labelToken"
 )
 
 type Markdown struct {
@@ -27,7 +31,16 @@ type Ticket struct {
 	Body         *Markdown `json:"body,omitempty"`
 	State        string    `json:"state"`
 	TargetBranch string    `json:"targetBranch,omitempty"`
-	CreatedAt    string    `json:"createdAt"`
+	// TangledLabels are repository label applications, not ATProto self-labels.
+	TangledLabels []LabelToken `json:"tangledLabels,omitempty"`
+	CreatedAt     string       `json:"createdAt"`
+}
+
+// LabelToken applies a label definition to a ticket. Key is the record key of
+// an org.tangled.label.definition in the ticket's repository.
+type LabelToken struct {
+	Type string `json:"$type"`
+	Key  string `json:"key"`
 }
 
 // UnmarshalJSON accepts historical knot tickets whose title predates inline markup.

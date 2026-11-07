@@ -52,6 +52,9 @@ func (t *Tangled) listTickets(ctx context.Context, repo string, opts ListOpts, p
 			if opts.Author != "" && item.Author != opts.Author {
 				continue
 			}
+			if opts.Match != nil && !opts.Match(ticket) {
+				continue
+			}
 			if pulls && item.State == "completed" {
 				item.State = "merged"
 			}
@@ -71,16 +74,17 @@ func (t *Tangled) GetTicket(ctx context.Context, uri string) (*ListItem, error) 
 		Author struct {
 			DID string `json:"did"`
 		} `json:"author"`
-		Title        Markdown  `json:"title"`
-		Body         *Markdown `json:"body"`
-		State        string    `json:"state"`
-		TargetBranch string    `json:"targetBranch"`
-		CreatedAt    string    `json:"createdAt"`
+		Title         Markdown     `json:"title"`
+		Body          *Markdown    `json:"body"`
+		State         string       `json:"state"`
+		TargetBranch  string       `json:"targetBranch"`
+		TangledLabels []LabelToken `json:"tangledLabels"`
+		CreatedAt     string       `json:"createdAt"`
 	}
 	if err := t.Client.Get(ctx, syntax.NSID("org.tangled.track.getTicketView"), map[string]any{"uri": uri}, &value); err != nil {
 		return nil, err
 	}
-	ticket := Ticket{Type: IssueCollection, Title: value.Title, Body: value.Body, State: value.State, TargetBranch: value.TargetBranch, CreatedAt: value.CreatedAt}
+	ticket := Ticket{Type: IssueCollection, Title: value.Title, Body: value.Body, State: value.State, TargetBranch: value.TargetBranch, TangledLabels: value.TangledLabels, CreatedAt: value.CreatedAt}
 	data, err := json.Marshal(ticket)
 	if err != nil {
 		return nil, err

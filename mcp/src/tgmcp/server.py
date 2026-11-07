@@ -83,11 +83,15 @@ type RecordTitle = Annotated[
 type CommentBody = Annotated[
     str, Field(description="Comment text in Markdown", pattern=r"\S")
 ]
+type LabelName = Annotated[
+    str,
+    Field(description="Exact label name defined on the repository", min_length=1),
+]
 
 
 @mcp.tool(annotations=READ_ONLY)
 async def view_repo(repo: RepoTarget) -> RepoItem:
-    """Get repository metadata and its latest pipeline, if available."""
+    """Get repository metadata, its label definitions, and its latest pipeline, if available."""
     return await runner.run_json(["repo", "view", "--", repo], RepoItem)
 
 
@@ -116,6 +120,7 @@ def item_list_arguments(
     *,
     author: str | None,
     state: str | None,
+    labels: list[str] | None,
     limit: int,
     order: SortOrder | None,
 ) -> list[str]:
@@ -123,6 +128,7 @@ def item_list_arguments(
     for flag, value in (("author", author), ("state", state), ("order", order)):
         if value is not None:
             arguments.extend([f"--{flag}", value])
+    arguments.extend(repeated_flags("label", labels))
     return [*arguments, "--", repo]
 
 
@@ -131,12 +137,23 @@ async def list_issues(
     repo: RepoTarget,
     author: Account | None = None,
     state: Literal["open", "closed", "completed"] | None = None,
+    labels: list[LabelName] | None = None,
     limit: ResultLimit = 50,
     order: SortOrder | None = None,
 ) -> ItemListResult:
-    """List issues and their record keys. Filter by author or state."""
+    """List issues and their record keys. Filter by author, state, or labels.
+
+    Each label name must match exactly. An item must have every named label.
+    Label filtering combines with the other filters and applies before limit.
+    """
     arguments = item_list_arguments(
-        "issue", repo, author=author, state=state, limit=limit, order=order
+        "issue",
+        repo,
+        author=author,
+        state=state,
+        labels=labels,
+        limit=limit,
+        order=order,
     )
     return await runner.run_json(arguments, ItemListResult)
 
@@ -169,15 +186,21 @@ async def edit_issue(
     rkey: RecordKey,
     title: RecordTitle | None = None,
     body: str | None = None,
+    add_labels: list[LabelName] | None = None,
+    remove_labels: list[LabelName] | None = None,
     expected_cid: str | None = None,
 ) -> UpdatedRecordResult:
     """Edit an issue in the specified repository.
 
-    Provide a title or body. Omitted or null fields stay unchanged.
-    Set body to an empty string to clear it.
+    Provide a title, body, or label change. Omitted or null fields stay unchanged.
+    Set body to an empty string to clear it. Label names must match a label
+    defined on the repository exactly. Adding a label that is already applied
+    and removing one that is not applied have no effect. A label cannot be
+    added and removed in the same edit.
     """
-    if title is None and body is None:
-        raise ToolError("Provide title or body to edit an issue")
+    label_flags = label_edit_flags(add_labels, remove_labels)
+    if title is None and body is None and not label_flags:
+        raise ToolError("Provide title, body, or labels to edit an issue")
     arguments = ["issue", "edit", "--repo", repo]
     if expected_cid is not None:
         arguments.append(f"--expected-cid={expected_cid}")
@@ -185,6 +208,7 @@ async def edit_issue(
         arguments.append(f"--title={title}")
     if body is not None:
         arguments.append(f"--body={body}")
+    arguments.extend(label_flags)
     return await runner.run_json([*arguments, "--", rkey], UpdatedRecordResult)
 
 
@@ -245,12 +269,23 @@ async def list_pull_requests(
     repo: RepoTarget,
     author: Account | None = None,
     state: Literal["open", "closed", "merged"] | None = None,
+    labels: list[LabelName] | None = None,
     limit: ResultLimit = 50,
     order: SortOrder | None = None,
 ) -> ItemListResult:
-    """List pull requests and their record keys. Filter by author or state."""
+    """List pull requests and their record keys. Filter by author, state, or labels.
+
+    Each label name must match exactly. An item must have every named label.
+    Label filtering combines with the other filters and applies before limit.
+    """
     arguments = item_list_arguments(
-        "pr", repo, author=author, state=state, limit=limit, order=order
+        "pr",
+        repo,
+        author=author,
+        state=state,
+        labels=labels,
+        limit=limit,
+        order=order,
     )
     return await runner.run_json(arguments, ItemListResult)
 
@@ -275,15 +310,21 @@ async def edit_pull_request(
     rkey: RecordKey,
     title: RecordTitle | None = None,
     body: str | None = None,
+    add_labels: list[LabelName] | None = None,
+    remove_labels: list[LabelName] | None = None,
     expected_cid: str | None = None,
 ) -> UpdatedRecordResult:
-    """Change the title or body of a pull request in the specified repository.
+    """Change the title, body, or labels of a pull request in the specified repository.
 
-    Null leaves a field unchanged. An empty body clears it.
+    Null leaves a field unchanged. An empty body clears it. Label names must
+    match a label defined on the repository exactly. Adding a label that is
+    already applied and removing one that is not applied have no effect. A
+    label cannot be added and removed in the same edit.
     Use update_pull_request to submit code changes.
     """
-    if title is None and body is None:
-        raise ToolError("Provide title or body to edit a pull request")
+    label_flags = label_edit_flags(add_labels, remove_labels)
+    if title is None and body is None and not label_flags:
+        raise ToolError("Provide title, body, or labels to edit a pull request")
     arguments = ["pr", "edit", "--repo", repo]
     if expected_cid is not None:
         arguments.append(f"--expected-cid={expected_cid}")
@@ -291,6 +332,7 @@ async def edit_pull_request(
         arguments.append(f"--title={title}")
     if body is not None:
         arguments.append(f"--body={body}")
+    arguments.extend(label_flags)
     return await runner.run_json([*arguments, "--", rkey], UpdatedRecordResult)
 
 
@@ -445,6 +487,25 @@ def list_flag(name: str, values: list[str] | None) -> list[str]:
     return [f"--{name}={buffer.getvalue()[:-2]}"]
 
 
+def repeated_flags(name: str, values: list[str] | None) -> list[str]:
+    return [f"--{name}={value}" for value in values or []]
+
+
+def label_edit_flags(
+    add_labels: list[str] | None, remove_labels: list[str] | None
+) -> list[str]:
+    added = add_labels or []
+    removed = remove_labels or []
+    removed_names = set(removed)
+    overlap = list(dict.fromkeys(name for name in added if name in removed_names))
+    if overlap:
+        raise ToolError(
+            "A label cannot be added and removed in the same edit: "
+            + ", ".join(overlap)
+        )
+    return repeated_flags("add-label", added) + repeated_flags("remove-label", removed)
+
+
 @mcp.tool(annotations=WRITE)
 async def clone_repo(repo: RepoTarget, destination: AbsolutePath) -> RepoCloneResult:
     """Clone a repository to an absolute path on the server. Check warnings for setup problems."""
@@ -512,9 +573,11 @@ async def edit_repo(
     remove_labels: list[NonEmptyText] | None = None,
     contribution_policy: Literal["anyone", "members", "collaborators"] | None = None,
 ) -> RepoEditResult:
-    """Change repository metadata or labels.
+    """Change repository metadata or topics.
 
     Null leaves a field unchanged. An empty string clears it.
+    Here add_labels and remove_labels change repository topics. They do not
+    change the labels applied to issues or pull requests.
     """
     flags = optional_flags(
         description=description,

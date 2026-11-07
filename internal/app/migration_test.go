@@ -160,7 +160,7 @@ func TestTicketEditUsesCASAndPreservesUnrelatedFields(t *testing.T) {
 	value := map[string]any{"$type": tangled.IssueCollection, "title": map[string]string{"$type": "org.tangled.markup.markdown#inline", "text": "Original"}, "state": "open", "createdAt": "2026-10-01T00:00:00Z", "assignees": []string{"did:plc:alice"}}
 	origin.records = map[string]*atproto.GetRecordOutput{tangled.IssueCollection + "/ticket": {CID: cidPointer(), Value: value}}
 	title := "Updated"
-	_, err := service.EditIssue(context.Background(), migrationTarget(), "ticket", &title, nil)
+	_, err := service.EditIssue(context.Background(), EditTicketInput{Target: migrationTarget(), Rkey: "ticket", Title: &title})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -173,7 +173,7 @@ func TestTicketEditUsesCASAndPreservesUnrelatedFields(t *testing.T) {
 		t.Fatal("edit removed unrelated fields")
 	}
 	origin.procedureErr = &atclient.APIError{StatusCode: 409, Name: "InvalidSwap"}
-	if _, err := service.EditIssue(context.Background(), migrationTarget(), "ticket", &title, nil); err == nil {
+	if _, err := service.EditIssue(context.Background(), EditTicketInput{Target: migrationTarget(), Rkey: "ticket", Title: &title}); err == nil {
 		t.Fatal("CAS conflict swallowed")
 	}
 }

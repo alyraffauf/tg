@@ -37,6 +37,29 @@ func TestTicketAuthorFilterAppliesBeforeLimitAcrossPages(t *testing.T) {
 		t.Fatalf("result=%+v pages=%d err=%v", result, pages, err)
 	}
 }
+func TestTicketMatchAppliesBeforeLimitAcrossPages(t *testing.T) {
+	pages := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		pages++
+		labels := ""
+		cursor := ",\"cursor\":\"next\""
+		if pages == 2 {
+			labels = `,"tangledLabels":[{"$type":"org.tangled.label.defs#labelToken","key":"bug"}]`
+			cursor = ""
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"items":[{"uri":"at://did:plc:repo/org.tangled.track.ticket/t%d","cid":"cid","author":"did:plc:alice","state":"open","value":{"$type":"org.tangled.track.ticket","title":{"text":"Title"},"state":"open"%s,"createdAt":"2026-10-01T00:00:00Z"}}]%s}`, pages, labels, cursor)
+	}))
+	defer server.Close()
+	client := Tangled{Client: &atclient.APIClient{Host: server.URL, Client: server.Client()}}
+	hasBug := func(ticket Ticket) bool {
+		return len(ticket.TangledLabels) == 1 && ticket.TangledLabels[0].Key == "bug"
+	}
+	result, err := client.ListIssues(context.Background(), "did:plc:repo", ListOpts{MaxItems: 1, Match: hasBug})
+	if err != nil || pages != 2 || len(result.Items) != 1 || result.Items[0].URI != "at://did:plc:repo/org.tangled.track.ticket/t2" {
+		t.Fatalf("result=%+v pages=%d err=%v", result, pages, err)
+	}
+}
 func TestPullFilterMapsMergedToCompletedStatus(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Query().Get("status") != "completed" || r.URL.Query().Get("state") != "" {

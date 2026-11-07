@@ -46,6 +46,8 @@ type Item struct {
 	CommentCount int64  `json:"commentCount"`
 	SourceBranch string `json:"sourceBranch,omitempty"`
 	TargetBranch string `json:"targetBranch,omitempty"`
+	// Labels is always present in JSON; an unlabeled item has [].
+	Labels []Label `json:"labels"`
 }
 
 // RepoItem is a single repository in a listing or view.
@@ -59,6 +61,10 @@ type RepoItem struct {
 	RepoDid     string    `json:"repoDid,omitempty"`
 	Stars       int64     `json:"stars,omitempty"`
 	Pipeline    *Pipeline `json:"pipeline,omitempty"`
+	// Labels lists the repository's label definitions. ViewRepo always sets
+	// it, so JSON has [] for none; listings leave it nil and omit the field.
+	Labels   []Label  `json:"labels,omitzero"`
+	Warnings []string `json:"warnings,omitempty"`
 }
 
 // Pipeline is one CI pipeline associated with a repository.
@@ -157,6 +163,9 @@ type ViewResult struct {
 	CreatedAt    string `json:"createdAt"`
 	SourceBranch string `json:"sourceBranch,omitempty"`
 	TargetBranch string `json:"targetBranch,omitempty"`
+	// Labels is always present in JSON; an unlabeled ticket has [].
+	Labels   []Label  `json:"labels"`
+	Warnings []string `json:"warnings,omitempty"`
 }
 
 // CreatedRecordResult is returned by any operation that creates a record.
@@ -377,3 +386,9 @@ func (r *RepoDefaultBranchResult) MutationWarnings() []string { return r.Warning
 func (r *RepoForkResult) MutationWarnings() []string { return r.Warnings }
 
 func (r *PRCreateResult) MutationWarnings() []string { return r.Warnings }
+
+// MutationWarnings lets the CLI print read degradations, such as label
+// definitions that could not be resolved, with the same warning path.
+func (r *ViewResult) MutationWarnings() []string { return r.Warnings }
+
+func (r *RepoItem) MutationWarnings() []string { return r.Warnings }

@@ -2,6 +2,7 @@ package app
 
 import "context"
 
-func (s *Service) EditPull(ctx context.Context, t Target, rkey string, title, body *string, expectedCID ...string) (*UpdatedRecordResult, error) {
-	return s.editTicket(ctx, ticketEditInput{ExpectedCID: firstCID(expectedCID), Target: t, Rkey: rkey, Title: title, Body: body, Pull: true})
+// EditPull edits a ticket's title, body, or labels. Nil text fields stay unchanged.
+func (s *Service) EditPull(ctx context.Context, input EditTicketInput) (*UpdatedRecordResult, error) {
+	return s.editTicket(ctx, ticketEditInput{ExpectedCID: input.ExpectedCID, Target: input.Target, Rkey: input.Rkey, Title: input.Title, Body: input.Body, Labels: input.Labels, Pull: true})
 }

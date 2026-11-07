@@ -14,25 +14,77 @@ type ListOptions struct {
 	State  string
 	Limit  int64
 	Order  string
+	// Labels keeps items carrying every named label. Names match label
+	// definitions exactly.
+	Labels []string
 }
 
 // ListIssues lists issues in the target repository.
 func (s *Service) ListIssues(ctx context.Context, t Target, options ListOptions) (*ItemListResult, error) {
-	repoDid, err := s.repoDID(ctx, t)
-	if err != nil {
-		return nil, err
-	}
 	listOptions, err := s.issueListOptions(ctx, options)
 	if err != nil {
 		return nil, err
 	}
-	issues, err := s.appview.ListIssues(ctx, repoDid, listOptions)
+	return s.listTickets(ctx, t, options, listOptions, false)
+}
+
+// listTickets lists issues or pulls and applies label filters. The appview
+// cannot filter by label, so tg filters each page as it arrives and keeps
+// paging until the caller's limit is met or the list ends.
+func (s *Service) listTickets(ctx context.Context, t Target, options ListOptions, listOptions tangled.ListOpts, pull bool) (*ItemListResult, error) {
+	repoDid, err := s.repoDID(ctx, t)
 	if err != nil {
-		return nil, fmt.Errorf("list issues for %q: %w", t.Repo, err)
+		return nil, err
 	}
-	items, warnings := s.buildItems(ctx, issues.Items, false)
-	warnings = append(recordWarnings(issues.Warnings), warnings...)
-	return &ItemListResult{Items: items, Warnings: warnings}, nil
+
+	var catalog labelCatalog
+	var warnings []RecordWarning
+	if len(options.Labels) > 0 {
+		catalog, err = s.loadCompleteLabelCatalog(ctx, repoDid)
+		if err != nil {
+			return nil, fmt.Errorf("read label definitions for %q: %w", t.Repo, err)
+		}
+		requiredKeySets, err := catalog.filterKeySets(options.Labels)
+		if err != nil {
+			return nil, err
+		}
+		listOptions.Match = func(ticket tangled.Ticket) bool {
+			return matchesAllLabels(ticket.TangledLabels, requiredKeySets)
+		}
+	}
+
+	list, err := s.listAppviewTickets(ctx, repoDid, listOptions, pull)
+	if err != nil {
+		return nil, fmt.Errorf("list %s for %q: %w", ticketKindPlural(pull), t.Repo, err)
+	}
+	if len(options.Labels) == 0 {
+		catalog = newLabelCatalog(repoDid, nil)
+		for _, item := range list.Items {
+			ticket, err := decodeTicket(item.Value, pull)
+			if err == nil && len(appliedLabelKeys(ticket.TangledLabels)) > 0 {
+				catalog, warnings = s.loadDisplayLabelCatalog(ctx, repoDid)
+				break
+			}
+		}
+	}
+	warnings = append(warnings, recordWarnings(list.Warnings)...)
+
+	items, itemWarnings := s.buildItems(ctx, list.Items, pull, catalog)
+	return &ItemListResult{Items: items, Warnings: append(warnings, itemWarnings...)}, nil
+}
+
+func (s *Service) listAppviewTickets(ctx context.Context, repoDid string, listOptions tangled.ListOpts, pull bool) (*tangled.List, error) {
+	if pull {
+		return s.appview.ListPulls(ctx, repoDid, listOptions)
+	}
+	return s.appview.ListIssues(ctx, repoDid, listOptions)
+}
+
+func ticketKindPlural(pull bool) string {
+	if pull {
+		return "PRs"
+	}
+	return "issues"
 }
 
 func (s *Service) issueListOptions(ctx context.Context, options ListOptions) (tangled.ListOpts, error) {

@@ -412,6 +412,10 @@ type testAppview struct {
 	blob             []byte
 	blobErr          error
 	blobHook         func(repoDid, path string) ([]byte, error)
+
+	listPullsHook        func(tangled.ListOpts) (*tangled.List, error)
+	listIssuesHook       func(tangled.ListOpts) (*tangled.List, error)
+	labelDefinitionsHook func(repoDID string) (*tangled.LabelDefinitionList, error)
 }
 
 func (a testAppview) GetRepo(_ context.Context, uri string) (*tangled.Repo, error) {
@@ -444,17 +448,30 @@ func (a testAppview) GetBlob(_ context.Context, repoDID, path string) ([]byte, e
 func (testAppview) ListRepos(context.Context, string) (*tangled.RepoList, error) {
 	return nil, errors.New("not implemented")
 }
-func (a testAppview) ListIssues(context.Context, string, tangled.ListOpts) (*tangled.List, error) {
+func (a testAppview) ListIssues(_ context.Context, _ string, options tangled.ListOpts) (*tangled.List, error) {
+	if a.listIssuesHook != nil {
+		return a.listIssuesHook(options)
+	}
 	if a.issues == nil {
 		return nil, errors.New("not implemented")
 	}
 	return a.issues, nil
 }
-func (a testAppview) ListPulls(context.Context, string, tangled.ListOpts) (*tangled.List, error) {
+
+func (a testAppview) ListPulls(_ context.Context, _ string, options tangled.ListOpts) (*tangled.List, error) {
+	if a.listPullsHook != nil {
+		return a.listPullsHook(options)
+	}
 	if a.pulls == nil {
 		return nil, errors.New("not implemented")
 	}
 	return a.pulls, nil
+}
+func (a testAppview) ListLabelDefinitions(_ context.Context, repoDID string) (*tangled.LabelDefinitionList, error) {
+	if a.labelDefinitionsHook != nil {
+		return a.labelDefinitionsHook(repoDID)
+	}
+	return &tangled.LabelDefinitionList{}, nil
 }
 func (a testAppview) Search(context.Context, string, int64) (*tangled.SearchResult, error) {
 	if a.search == nil {

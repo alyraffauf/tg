@@ -173,7 +173,19 @@ func workflowStatusColor(status string) color.Color {
 func renderList(writer io.Writer, items []app.Item, emptyMessage string) {
 	rows := make([][]string, 0, len(items))
 	for _, it := range items {
-		rows = append(rows, []string{it.Rkey, it.Title, it.State, it.Author.Handle, shortDate(it.UpdatedAt)})
+		rows = append(rows, []string{it.Rkey, it.Title, it.State, it.Author.Handle, shortDate(it.UpdatedAt), labelNames(it.Labels)})
 	}
-	renderTable(writer, []string{"RKEY", "TITLE", "STATE", "AUTHOR", "UPDATED"}, rows, emptyMessage)
+	renderTable(writer, []string{"RKEY", "TITLE", "STATE", "AUTHOR", "UPDATED", "LABELS"}, rows, emptyMessage)
+}
+
+func labelNames(labels []app.Label) string {
+	names := make([]string, 0, len(labels))
+	for _, label := range labels {
+		name := label.Name
+		if name == "" {
+			name = label.URI
+		}
+		names = append(names, name)
+	}
+	return strings.Join(names, ", ")
 }

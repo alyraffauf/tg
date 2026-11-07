@@ -32,6 +32,14 @@ class RecordWarning(TGOutput):
     error: str
 
 
+class Label(TGOutput):
+    """A label definition, or a label applied to an issue or pull request."""
+
+    name: str
+    color: str = ""
+    uri: str
+
+
 class Item(TGOutput):
     """Issue or pull request listing entry."""
 
@@ -45,6 +53,7 @@ class Item(TGOutput):
     comment_count: int
     source_branch: str = ""
     target_branch: str = ""
+    labels: list[Label] = Field(default_factory=list)
 
 
 class PipelineWorkflow(TGOutput):
@@ -93,6 +102,8 @@ class RepoItem(TGOutput):
     repo_did: str = ""
     stars: int = 0
     pipeline: Pipeline | None = None
+    labels: list[Label] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
 
 
 class StringItem(TGOutput):
@@ -143,6 +154,8 @@ class ViewResult(TGOutput):
     created_at: str
     source_branch: str = ""
     target_branch: str = ""
+    labels: list[Label] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
 
 
 class StringViewResult(TGOutput):

@@ -98,11 +98,18 @@ type ticketEditInput struct {
 	Title       *string
 	Body        *string
 	State       string
+	Labels      LabelEditInput
 	Pull        bool
 }
 
 func (s *Service) editTicket(ctx context.Context, input ticketEditInput) (*UpdatedRecordResult, error) {
 	t, rkey, title, body, state := input.Target, input.Rkey, input.Title, input.Body, input.State
+	if title == nil && body == nil && state == "" && input.Labels.isEmpty() {
+		return nil, fmt.Errorf("nothing to edit")
+	}
+	if err := checkLabelEditConflicts(input.Labels); err != nil {
+		return nil, err
+	}
 	repo, err := s.resolveRepo(ctx, t)
 	if err != nil {
 		return nil, err
@@ -171,12 +178,52 @@ func (s *Service) editTicket(ctx context.Context, input ticketEditInput) (*Updat
 	if state != "" {
 		record["state"] = state
 	}
+	var labelWarnings []string
+	if !input.Labels.isEmpty() {
+		labelsChanged, warnings, err := s.editTicketLabels(ctx, stringValue(repo.Value.RepoDid), record, input.Labels)
+		if err != nil {
+			return nil, err
+		}
+		labelWarnings = warnings
+		if !labelsChanged && title == nil && body == nil && state == "" {
+			uri := "at://" + stringValue(repo.Value.RepoDid) + "/" + tangled.IssueCollection + "/" + rkey
+			return &UpdatedRecordResult{Rkey: rkey, URI: uri, CID: found.CID.String(), Warnings: labelWarnings}, nil
+		}
+	}
+	normalizeTicketLabelTokens(record)
 	receipt, warnings, err := s.socialProcedure(ctx, repo, "com.atproto.repo.putRecord", map[string]any{"collection": tangled.IssueCollection, "rkey": rkey, "swapRecord": found.CID.String(), "record": record})
 	if err != nil {
 		return nil, err
 	}
-	return &UpdatedRecordResult{Rkey: rkey, URI: receipt.URI, CID: receipt.CID, Warnings: warnings}, nil
+	return &UpdatedRecordResult{Rkey: rkey, URI: receipt.URI, CID: receipt.CID, Warnings: append(labelWarnings, warnings...)}, nil
 }
+
+// editTicketLabels resolves label names against the repository's definitions
+// and rewrites the record's tangledLabels. Applied labels without a
+// definition are dropped and reported so the knot accepts the updated record.
+func (s *Service) editTicketLabels(ctx context.Context, repoDID string, record map[string]any, input LabelEditInput) (bool, []string, error) {
+	catalog, err := s.loadCompleteLabelCatalog(ctx, repoDID)
+	if err != nil {
+		return false, nil, fmt.Errorf("read label definitions: %w", err)
+	}
+	edit, err := catalog.resolveLabelEdit(input)
+	if err != nil {
+		return false, nil, err
+	}
+	var warnings []string
+	var unresolvedKeys []string
+	for _, key := range recordLabelKeys(record) {
+		if _, found := catalog.byKey[key]; !found {
+			unresolvedKeys = append(unresolvedKeys, key)
+		}
+	}
+	if len(unresolvedKeys) > 0 {
+		warnings = append(warnings, "dropped "+unresolvedLabelMessage(unresolvedKeys))
+		edit.remove = append(edit.remove, unresolvedKeys...)
+	}
+	return applyLabelKeyEdit(record, edit), warnings, nil
+}
+
 func ticketRecord(title, body, target string) tangled.Ticket {
 	record := tangled.Ticket{Type: tangled.IssueCollection, Title: tangled.Markdown{Type: "org.tangled.markup.markdown#inline", Text: title}, State: "open", TargetBranch: target, CreatedAt: nowString()}
 	if strings.TrimSpace(body) != "" {

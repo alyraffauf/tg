@@ -35,6 +35,7 @@ type appviewClient interface {
 	ListRepos(context.Context, string) (*tangled.RepoList, error)
 	ListIssues(context.Context, string, tangled.ListOpts) (*tangled.List, error)
 	ListPulls(context.Context, string, tangled.ListOpts) (*tangled.List, error)
+	ListLabelDefinitions(context.Context, string) (*tangled.LabelDefinitionList, error)
 	Search(context.Context, string, int64) (*tangled.SearchResult, error)
 	CountStars(context.Context, string) (int64, error)
 }
