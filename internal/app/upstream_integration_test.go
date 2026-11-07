@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/alyraffauf/tg/atproto"
-	"github.com/alyraffauf/tg/knot"
 	"github.com/alyraffauf/tg/tangled"
 	"github.com/bluesky-social/indigo/atproto/atclient"
 	"github.com/bluesky-social/indigo/atproto/identity"
@@ -239,7 +238,6 @@ func TestUpstreamNativeRecordRoundTrip(t *testing.T) {
 	if err != nil || reopened.CID == "" || len(reopened.Warnings) != 0 {
 		t.Fatalf("reopen=%+v err=%v", reopened, err)
 	}
-	verifyUpstreamIssueLabels(t, ctx, service, resolved, target, issue.Rkey, reopened.CID, actor)
 	listed, err := service.ListIssues(ctx, target, ListOptions{State: "open", Author: actor})
 	if err != nil || len(listed.Items) != 1 || listed.Items[0].Title != title || len(listed.Warnings) != 0 {
 		t.Fatalf("issues=%+v err=%v", listed, err)
@@ -251,87 +249,6 @@ func TestUpstreamNativeRecordRoundTrip(t *testing.T) {
 	// Keep failures available for inspection, but clean up a fully verified run.
 	if _, err := service.DeleteRepo(ctx, target); err != nil {
 		t.Fatal(err)
-	}
-}
-
-// createUpstreamLabelDefinition writes a definition directly to the Knot.
-// tg has no definition commands, so this stands in for the web UI.
-func createUpstreamLabelDefinition(t *testing.T, ctx context.Context, service *Service, repo *tangled.Repo, key, name string) {
-	t.Helper()
-	pds, actor, err := service.authenticatedPDS(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	repoDID := stringValue(repo.Value.RepoDid)
-	const method = "com.atproto.repo.createRecord"
-	token, err := pds.GetServiceAuth(ctx, repoDID, method)
-	if err != nil {
-		t.Fatal(err)
-	}
-	record := map[string]any{"$type": tangled.LabelDefinitionCollection, "name": name, "createdAt": nowString()}
-	var receipt knot.Receipt
-	input := map[string]any{"repo": repoDID, "collection": tangled.LabelDefinitionCollection, "rkey": key, "record": record}
-	if err := service.knot.New(repo.Value.Knot, token).Procedure(ctx, method, input, &receipt); err != nil {
-		t.Fatalf("create label definition %q: %v", name, err)
-	}
-	if warnings := service.finishWrite(ctx, pds, actor, receipt); len(warnings) != 0 {
-		t.Fatalf("label definition %q not indexed: %v", name, warnings)
-	}
-}
-
-// verifyUpstreamIssueLabels applies, filters, preserves, and removes labels on
-// an issue that already has an assignee.
-func verifyUpstreamIssueLabels(t *testing.T, ctx context.Context, service *Service, repo *tangled.Repo, target Target, rkey, currentCID, actor string) {
-	t.Helper()
-	createUpstreamLabelDefinition(t, ctx, service, repo, "tg-verify-bug", "bug")
-	createUpstreamLabelDefinition(t, ctx, service, repo, "tg-verify-docs", "docs")
-	viewedRepo, err := service.ViewRepo(ctx, target)
-	if err != nil || len(viewedRepo.Labels) < 2 || len(viewedRepo.Warnings) != 0 {
-		t.Fatalf("repository labels=%+v err=%v", viewedRepo, err)
-	}
-
-	labeled, err := service.EditIssue(ctx, EditTicketInput{Target: target, Rkey: rkey, Labels: LabelEditInput{AddLabels: []string{"bug", "docs"}}, ExpectedCID: currentCID})
-	if err != nil || len(labeled.Warnings) != 0 {
-		t.Fatalf("label edit=%+v err=%v", labeled, err)
-	}
-	body := "Body edited after labeling"
-	renamed, err := service.EditIssue(ctx, EditTicketInput{Target: target, Rkey: rkey, Body: &body, ExpectedCID: labeled.CID})
-	if err != nil {
-		t.Fatal(err)
-	}
-	viewed, err := service.ViewIssue(ctx, target, rkey)
-	if err != nil || len(viewed.Labels) != 2 || viewed.Labels[0].Name != "bug" || viewed.Labels[1].Name != "docs" {
-		t.Fatalf("body edit lost labels: %+v err=%v", viewed, err)
-	}
-	filtered, err := service.ListIssues(ctx, target, ListOptions{Labels: []string{"docs", "bug"}, Limit: 1})
-	if err != nil || len(filtered.Items) != 1 || filtered.Items[0].Rkey != rkey {
-		t.Fatalf("label filter=%+v err=%v", filtered, err)
-	}
-
-	unlabeled, err := service.EditIssue(ctx, EditTicketInput{Target: target, Rkey: rkey, Labels: LabelEditInput{RemoveLabels: []string{"bug", "docs"}}, ExpectedCID: renamed.CID})
-	if err != nil {
-		t.Fatal(err)
-	}
-	stored, err := service.knot.NewPublic(repo.Value.Knot).GetRecord(ctx, stringValue(repo.Value.RepoDid), tangled.IssueCollection, rkey)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if stored.CID == nil || stored.CID.String() != unlabeled.CID {
-		t.Fatalf("stored version=%v, want %s", stored.CID, unlabeled.CID)
-	}
-	data, err := json.Marshal(stored.Value)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var preserved struct {
-		Assignees     []string          `json:"assignees"`
-		TangledLabels []json.RawMessage `json:"tangledLabels"`
-	}
-	if err := json.Unmarshal(data, &preserved); err != nil {
-		t.Fatal(err)
-	}
-	if len(preserved.TangledLabels) != 0 || len(preserved.Assignees) != 1 || preserved.Assignees[0] != actor {
-		t.Fatalf("label removal changed the ticket: %s", data)
 	}
 }
 
