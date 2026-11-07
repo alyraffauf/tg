@@ -139,6 +139,12 @@ func (s *Service) editTicket(ctx context.Context, input ticketEditInput) (*Updat
 	if (targetBranch != "") != input.Pull {
 		return nil, fmt.Errorf("ticket is not the requested resource kind")
 	}
+	if input.Pull && state != "" {
+		currentState, _ := record["state"].(string)
+		if err := checkPullTransition(currentState, state); err != nil {
+			return nil, err
+		}
+	}
 	if legacyTitle, ok := record["title"].(string); ok {
 		record["title"] = tangled.Markdown{Type: "org.tangled.markup.markdown#inline", Text: legacyTitle}
 	}
