@@ -123,14 +123,14 @@ func TestFosterReadDoesNotChangeTheAppviewSnapshot(t *testing.T) {
 	}
 }
 
-func TestCommentPullRejectsPatchFromAnotherRepository(t *testing.T) {
+func TestCommentPullDoesNotRequirePatchRounds(t *testing.T) {
 	service, _, origin := migrationService(t)
 	view := service.appview.(testAppview)
 	view.ticket = &ticketList(true).Items[0]
-	view.patches = []tangled.Patch{{URI: "at://did:plc:other/org.tangled.review.patch/patch", CID: testCID}}
+	view.patches = []tangled.Patch{}
 	service.appview = view
 	_, err := service.CommentPull(context.Background(), migrationTarget(), "3m2zq4c6pmk2a", "Comment")
-	if err == nil || !strings.Contains(err.Error(), "different repository") || len(origin.procedureMethods) != 0 {
+	if err != nil || len(origin.procedureMethods) != 1 {
 		t.Fatalf("err=%v writes=%v", err, origin.procedureMethods)
 	}
 }

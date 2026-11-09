@@ -325,11 +325,7 @@ func TestIssueAndPullCommentsUseCorrectStrongReferences(t *testing.T) {
 			input := origin.procedureInputs[0]
 			record := input["record"].(map[string]any)
 			subject := record["subject"].(map[string]any)
-			collection := tangled.IssueCollection
-			if pull {
-				collection = "org.tangled.review.patch"
-			}
-			if !strings.Contains(subject["uri"].(string), "/"+collection+"/") || subject["cid"] != testCID {
+			if subject["uri"] != view.ticket.URI || subject["cid"] != view.ticket.CID {
 				t.Fatalf("subject=%+v", subject)
 			}
 			if record["pullRoundIdx"] != nil || record["body"].(map[string]any)["original"] != nil {
