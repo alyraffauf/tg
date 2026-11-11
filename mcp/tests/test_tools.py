@@ -490,7 +490,7 @@ def check_schema(schema: Any, path: str) -> None:
 
 async def test_discovery_schemas_and_annotations(client: Client) -> None:
     tools = {tool.name: tool for tool in await client.list_tools()}
-    assert len(tools) == 46
+    assert len(tools) == 47
     for tool in tools.values():
         check_schema(tool.input_schema, f"{tool.name}.input")
         check_schema(tool.output_schema, f"{tool.name}.output")
@@ -506,6 +506,10 @@ async def test_discovery_schemas_and_annotations(client: Client) -> None:
     assert write.idempotent_hint is False
     assert delete.destructive_hint is True
     assert merge.destructive_hint is True
+    manual_merge = tools["mark_pull_request_merged"].annotations
+    assert manual_merge is not None
+    assert manual_merge.read_only_hint is False
+    assert manual_merge.idempotent_hint is False
     assert tools["approve_pipeline"].annotations.read_only_hint is False
     assert tools["retry_pipeline"].output_schema is not None
     assert tools["pipeline_logs"].output_schema is not None
@@ -634,3 +638,45 @@ async def test_trigger_pipeline_preserves_all_scheduled_pipelines(
     assert result.structured_content["pipeline"] == "first"
     assert result.structured_content["pipelines"] == ["first", "second"]
     assert result.structured_content["message"] == "Started verification"
+
+
+async def test_record_manual_merge_updates_status(
+    client: Client, fake_tg: FakeTG
+) -> None:
+    fake_tg.configure(
+        stdout=json.dumps(
+            {
+                "rkey": "key",
+                "state": "merged",
+                "uri": "at://example",
+                "cid": "cid",
+                "warnings": ["attestation pending"],
+            }
+        )
+    )
+    result = await client.call_tool(
+        "mark_pull_request_merged",
+        {
+            "repo": "alice.example/repo",
+            "rkey": "key",
+            "expected_cid": "expected",
+        },
+    )
+    assert not result.is_error
+    assert result.structured_content == {
+        "rkey": "key",
+        "state": "merged",
+        "uri": "at://example",
+        "cid": "cid",
+        "warnings": ["attestation pending"],
+    }
+    assert fake_tg.requests[0]["arguments"] == [
+        "--json",
+        "pr",
+        "mark-merged",
+        "--repo",
+        "alice.example/repo",
+        "--expected-cid=expected",
+        "--",
+        "key",
+    ]

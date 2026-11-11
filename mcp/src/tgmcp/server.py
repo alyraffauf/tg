@@ -21,9 +21,9 @@ from tgmcp.models import (
     Pipeline,
     PipelineApproveResult,
     PipelineCancelResult,
-    PipelineRetryResult,
     PipelineListResult,
     PipelineLogsResult,
+    PipelineRetryResult,
     PipelineTriggerResult,
     PRCheckoutResult,
     PRCreateResult,
@@ -375,6 +375,31 @@ async def reopen_pull_request(
         [
             "pr",
             "reopen",
+            "--repo",
+            repo,
+            *([f"--expected-cid={expected_cid}"] if expected_cid is not None else []),
+            "--",
+            rkey,
+        ],
+        StateResult,
+    )
+
+
+@mcp.tool(annotations=WRITE)
+async def mark_pull_request_merged(
+    repo: RepoTarget,
+    rkey: RecordKey,
+    expected_cid: str | None = None,
+) -> StateResult:
+    """Mark a pull request as manually merged.
+
+    Only updates the PR status. The code must already be integrated.
+    After a timeout inspect the PR status before retrying.
+    """
+    return await runner.run_json(
+        [
+            "pr",
+            "mark-merged",
             "--repo",
             repo,
             *([f"--expected-cid={expected_cid}"] if expected_cid is not None else []),

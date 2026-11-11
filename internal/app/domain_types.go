@@ -188,7 +188,7 @@ type UpdatedRecordResult struct {
 	Rkey     string   `json:"rkey"`
 }
 
-// StateResult is returned by issue/PR state changes (close and reopen).
+// StateResult is returned by issue/PR state changes.
 type StateResult struct {
 	CID      string   `json:"cid,omitempty"`
 	URI      string   `json:"uri,omitempty"`
