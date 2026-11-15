@@ -113,4 +113,5 @@ async def test_log_step_outcome_survives_collection(fake_tg: FakeTG) -> None:
     result = await fake_tg.runner().collect_logs(
         [], max_events=10, max_bytes=4096, timeout_seconds=2
     )
+    assert result.events[0].control is not None
     assert result.events[0].control.outcome == "failed"

@@ -115,6 +115,7 @@ async def test_list_labels_filter_repeats_exact_names(
             "order": "asc",
         },
     )
+    assert result.structured_content is not None
     assert result.structured_content["items"][0]["labels"] == [
         {"name": "bug", "color": "#d73a4a", "uri": "at://example/labels/bug"},
         {"name": "help wanted", "color": "", "uri": "at://example/labels/help"},
@@ -156,6 +157,7 @@ async def test_view_repo_lists_label_definitions(
         )
     )
     result = await client.call_tool("view_repo", {"repo": "alice.example/repo"})
+    assert result.structured_content is not None
     assert result.structured_content["labels"] == [
         {"name": "bug", "color": "", "uri": "at://example/labels/bug"}
     ]
@@ -194,6 +196,7 @@ async def test_view_item_returns_labels(
         )
     )
     result = await client.call_tool(tool, {"repo": "alice.example/repo", "rkey": "key"})
+    assert result.structured_content is not None
     assert result.structured_content["labels"] == [
         {"name": "", "color": "", "uri": "at://example/labels/missing"}
     ]
@@ -510,6 +513,7 @@ async def test_discovery_schemas_and_annotations(client: Client) -> None:
     assert manual_merge is not None
     assert manual_merge.read_only_hint is False
     assert manual_merge.idempotent_hint is False
+    assert tools["approve_pipeline"].annotations is not None
     assert tools["approve_pipeline"].annotations.read_only_hint is False
     assert tools["retry_pipeline"].output_schema is not None
     assert tools["pipeline_logs"].output_schema is not None
@@ -533,6 +537,7 @@ async def test_pending_attestation_tools(client: Client, fake_tg: FakeTG) -> Non
     ]
     fake_tg.configure(stdout='{"retried":1,"pending":1,"warnings":["PDS unavailable"]}')
     retried = await client.call_tool("retry_pending_attestations", {})
+    assert retried.structured_content is not None
     assert retried.structured_content["pending"] == 1
     assert fake_tg.requests[-1]["arguments"] == [
         "--json",
@@ -549,6 +554,7 @@ async def test_saved_write_preserves_warning(client: Client, fake_tg: FakeTG) ->
     result = await client.call_tool(
         "create_issue", {"repo": "alice.example/repo", "title": "Saved"}
     )
+    assert result.structured_content is not None
     assert result.structured_content["warnings"] == ["attestation pending"]
     assert len(fake_tg.requests) == 1
 
@@ -615,6 +621,7 @@ async def test_expected_cid_is_passed_to_edit(
         },
     )
     assert "--expected-cid=version" in fake_tg.requests[0]["arguments"]
+    assert result.structured_content is not None
     assert result.structured_content["cid"] == "version"
 
 
@@ -635,6 +642,7 @@ async def test_trigger_pipeline_preserves_all_scheduled_pipelines(
     result = await client.call_tool(
         "trigger_pipeline", {"repo": "alice.example/repo", "revision": commit}
     )
+    assert result.structured_content is not None
     assert result.structured_content["pipeline"] == "first"
     assert result.structured_content["pipelines"] == ["first", "second"]
     assert result.structured_content["message"] == "Started verification"

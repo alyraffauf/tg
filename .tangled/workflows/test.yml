@@ -5,7 +5,7 @@ when:
 engine: "nixery"
 
 dependencies:
-  # go.mod requires Go 1.26+; unstable tracks the latest Go release.
+  # go.mod requires Go 1.27+; unstable tracks the latest Go release.
   nixpkgs/nixpkgs-unstable:
     - go
     - gcc

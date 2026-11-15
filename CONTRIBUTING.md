@@ -86,7 +86,7 @@ list in `cborgen/main.go` if needed) and run the update script. See
 
 ## Dependencies
 
-- Go 1.26+
+- Go 1.27+
 - `git` and `ssh` (for clone and PR checkout)
 - [`github.com/bluesky-social/indigo`](https://github.com/bluesky-social/indigo) — atproto SDK
 - [`github.com/spf13/cobra`](https://github.com/spf13/cobra) — CLI framework

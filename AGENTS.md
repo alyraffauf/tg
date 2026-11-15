@@ -1,6 +1,6 @@
 # AGENTS.md
 
-`tg` is a Go 1.26+ CLI for Tangled (git forge on atproto), built with Cobra + Viper. Entry point: `cmd/tg/main.go`.
+`tg` is a Go 1.27+ CLI for Tangled (git forge on atproto), built with Cobra + Viper. Entry point: `cmd/tg/main.go`.
 
 ## Verify changes (in order)
 
