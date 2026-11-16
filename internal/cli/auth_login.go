@@ -1,15 +1,19 @@
 package cli
 
 import (
+	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"runtime"
 	"strings"
+	"sync"
 
 	"github.com/alyraffauf/tg/internal/app"
 	"github.com/spf13/cobra"
@@ -46,7 +50,13 @@ func newAuthLoginCommand(service *app.Service) *cobra.Command {
 				return nil
 			}
 
-			server, resultChannel, err := runCallbackServer(service)
+			var finishOnce sync.Once
+			var finishErr error
+			finishLogin := func(ctx context.Context, query url.Values) error {
+				finishOnce.Do(func() { finishErr = service.FinishLogin(ctx, query) })
+				return finishErr
+			}
+			server, resultChannel, err := runCallbackServer(service, finishLogin)
 			if err != nil {
 				return err
 			}
@@ -61,25 +71,54 @@ func newAuthLoginCommand(service *app.Service) *cobra.Command {
 			defer service.CancelLogin()
 
 			fmt.Fprintln(cmd.OutOrStdout(), "Opening browser to complete login...")
-			if err := openBrowser(loginURL); err != nil {
-				fmt.Fprintf(cmd.ErrOrStderr(), "Could not open browser. Open this URL manually:\n%s\n", loginURL)
-			}
+			browserResult := make(chan error, 1)
+			go func(result chan<- error) { result <- openBrowser(loginURL) }(browserResult)
+			manualCallback := make(chan url.Values, 1)
 
-			select {
-			case err := <-resultChannel:
-				if err != nil {
-					return err
+		waitForLogin:
+			for {
+				select {
+				case err := <-browserResult:
+					browserResult = nil
+					if err != nil {
+						fmt.Fprintf(cmd.ErrOrStderr(), "Could not open browser. Open this URL manually:\n%s\n", loginURL)
+						fmt.Fprintln(cmd.ErrOrStderr(), "After authorizing, copy the full callback URL from your browser's address bar and paste it here.")
+						go func() {
+							query, err := promptOAuthCallback(cmd.InOrStdin(), cmd.ErrOrStderr(), "http://"+server.Addr+oauthCallbackPath)
+							if errors.Is(err, io.EOF) {
+								return
+							}
+							if err != nil {
+								select {
+								case resultChannel <- err:
+								case <-ctx.Done():
+								}
+								return
+							}
+							manualCallback <- query
+						}()
+					}
+				case query := <-manualCallback:
+					if err := finishLogin(ctx, query); err != nil {
+						return err
+					}
+					break waitForLogin
+				case err := <-resultChannel:
+					if err != nil {
+						return err
+					}
+					break waitForLogin
+				case <-ctx.Done():
+					return ctx.Err()
 				}
-				did, err := service.CurrentDID(ctx)
-				if err != nil {
-					fmt.Fprintln(cmd.ErrOrStderr(), "Login completed but session could not be confirmed.")
-					return err
-				}
-				renderAuthLogin(cmd.OutOrStdout(), did)
-				return nil
-			case <-ctx.Done():
-				return ctx.Err()
 			}
+			did, err := service.CurrentDID(ctx)
+			if err != nil {
+				fmt.Fprintln(cmd.ErrOrStderr(), "Login completed but session could not be confirmed.")
+				return err
+			}
+			renderAuthLogin(cmd.OutOrStdout(), did)
+			return nil
 		},
 	}
 	command.Flags().BoolVar(&passwordStdin, "password-stdin", false, "Read the app password from standard input")
@@ -114,7 +153,51 @@ func loginPassword(args []string, fromStdin bool, stdin io.Reader) (string, bool
 	return password, true, nil
 }
 
-func runCallbackServer(service *app.Service) (*http.Server, <-chan error, error) {
+func promptOAuthCallback(reader io.Reader, writer io.Writer, expectedURL string) (url.Values, error) {
+	buffered := bufio.NewReader(reader)
+	for {
+		fmt.Fprint(writer, "Callback URL: ")
+		line, readErr := buffered.ReadString('\n')
+		if readErr != nil && readErr != io.EOF {
+			return nil, fmt.Errorf("read callback URL: %w", readErr)
+		}
+		if readErr == io.EOF && strings.TrimSpace(line) == "" {
+			return nil, io.EOF
+		}
+		query, err := parseOAuthCallback(line, expectedURL)
+		if err == nil {
+			return query, nil
+		}
+		fmt.Fprintln(writer, err)
+		if readErr == io.EOF {
+			return nil, io.EOF
+		}
+	}
+}
+
+func parseOAuthCallback(line, expectedURL string) (url.Values, error) {
+	callback, err := url.Parse(strings.TrimSpace(line))
+	if err != nil {
+		return nil, fmt.Errorf("parse callback URL: %w", err)
+	}
+	expected, err := url.Parse(expectedURL)
+	if err != nil {
+		return nil, err
+	}
+	if callback.Scheme != expected.Scheme || callback.Host != expected.Host || callback.Path != expected.Path || callback.User != nil || callback.Fragment != "" {
+		return nil, fmt.Errorf("callback URL must start with %s", expectedURL)
+	}
+	query, err := url.ParseQuery(callback.RawQuery)
+	if err != nil {
+		return nil, fmt.Errorf("parse callback query: %w", err)
+	}
+	if query.Get("state") == "" || (query.Get("code") == "" && query.Get("error") == "") {
+		return nil, fmt.Errorf("callback URL must include state and code or error parameters")
+	}
+	return query, nil
+}
+
+func runCallbackServer(service *app.Service, finishLogin func(context.Context, url.Values) error) (*http.Server, chan error, error) {
 	resultChannel := make(chan error, 1)
 
 	listener, err := net.Listen("tcp", oauthCallbackHost+":0")
@@ -130,16 +213,23 @@ func runCallbackServer(service *app.Service) (*http.Server, <-chan error, error)
 
 	serveMux := http.NewServeMux()
 	serveMux.HandleFunc(oauthCallbackPath, func(w http.ResponseWriter, r *http.Request) {
-		if err := service.FinishLogin(r.Context(), r.URL.Query()); err != nil {
-			resultChannel <- err
+		if err := finishLogin(r.Context(), r.URL.Query()); err != nil {
+			select {
+			case resultChannel <- err:
+			default:
+			}
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		resultChannel <- nil
+		select {
+		case resultChannel <- nil:
+		default:
+		}
 		fmt.Fprintln(w, "Authenticated successfully. You can close this tab.")
 	})
 
 	server := &http.Server{
+		Addr:    listener.Addr().String(),
 		Handler: serveMux,
 	}
 
@@ -173,7 +263,7 @@ func openBrowser(url string) error {
 		}
 	}
 
-	return exec.Command(cmd, args...).Start()
+	return exec.Command(cmd, args...).Run()
 }
 
 func isWSL() bool {
