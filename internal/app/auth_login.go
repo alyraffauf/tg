@@ -12,8 +12,8 @@ func (s *Service) LoginWithPassword(ctx context.Context, identifier, password st
 }
 
 // StartLogin starts an OAuth login flow.
-func (s *Service) StartLogin(ctx context.Context, identifier string) (string, error) {
-	return s.auth.StartLogin(ctx, identifier)
+func (s *Service) StartLogin(ctx context.Context, identifier string, useInsecureFileStore bool) (string, error) {
+	return s.auth.StartLogin(ctx, identifier, useInsecureFileStore)
 }
 
 // FinishLogin completes an OAuth login flow from callback query parameters.

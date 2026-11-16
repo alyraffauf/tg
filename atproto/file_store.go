@@ -10,6 +10,7 @@ import (
 
 	"github.com/alyraffauf/tg/internal/fsutil"
 	"github.com/bluesky-social/indigo/atproto/atclient"
+	"github.com/bluesky-social/indigo/atproto/auth/oauth"
 	"github.com/zalando/go-keyring"
 )
 
@@ -21,21 +22,25 @@ const (
 	credentialsFileName      = "credentials.json"
 )
 
-// insecureFileStore persists a single app-password session to a plaintext file for
+// insecureFileStore persists a single OAuth or app-password session to a plaintext file for
 // environments without a Secret Service provider (e.g. headless servers). It is
 // opt-in via `tg auth login --insecure` and stores exactly one account;
 // re-login overwrites the previous entry.
 type insecureFileStore struct {
-	path string
-	mu   sync.Mutex
+	path    string
+	mu      sync.Mutex
+	pending *oauth.AuthRequestData
 }
 
 // credentialRecord is the on-disk JSON shape: the account handle alongside the
 // session, so the active account can be reported without resolving the DID.
 type credentialRecord struct {
-	Active  bool                         `json:"active,omitempty"`
-	Handle  string                       `json:"handle"`
-	Session atclient.PasswordSessionData `json:"session"`
+	OAuth       *oauth.ClientSessionData      `json:"oauth,omitempty"`
+	CallbackURL string                        `json:"callbackUrl,omitempty"`
+	ClientID    string                        `json:"clientId,omitempty"`
+	Active      bool                          `json:"active,omitempty"`
+	Handle      string                        `json:"handle"`
+	Session     *atclient.PasswordSessionData `json:"session,omitempty"`
 }
 
 // newInsecureFileStore creates a store rooted at $XDG_DATA_HOME/tg/credentials.json
@@ -88,6 +93,9 @@ func (s *insecureFileStore) loadLocked() (*credentialRecord, error) {
 	if err := json.Unmarshal(data, &record); err != nil {
 		return nil, fmt.Errorf("parse credentials file %q: %w: %w", s.path, errCredentialsCorrupt, err)
 	}
+	if record.OAuth == nil && record.Session == nil {
+		return nil, fmt.Errorf("credentials file %q has no session: %w", s.path, errCredentialsCorrupt)
+	}
 	return &record, nil
 }
 
@@ -139,20 +147,30 @@ func (s *insecureFileStore) GetPasswordSession() (*atclient.PasswordSessionData,
 	if err != nil {
 		return nil, "", err
 	}
-	session := record.Session
+	if record.OAuth != nil || record.Session == nil {
+		return nil, "", keyring.ErrNotFound
+	}
+	session := *record.Session
 	return &session, record.Handle, nil
 }
 
-// FindAccount returns the account described by the stored app-password session.
+// FindAccount returns the account described by the stored session.
 func (s *insecureFileStore) FindAccount() (Account, bool, error) {
-	session, handle, err := s.GetPasswordSession()
+	record, err := s.load()
 	if errors.Is(err, keyring.ErrNotFound) {
 		return Account{}, false, nil
 	}
 	if err != nil {
 		return Account{}, false, err
 	}
-	return Account{DID: session.AccountDID.String(), Handle: handle, Method: AuthMethodPassword}, true, nil
+	return record.account(), true, nil
+}
+
+func (r *credentialRecord) account() Account {
+	if r.OAuth != nil {
+		return Account{DID: r.OAuth.AccountDID.String(), Handle: r.Handle, Method: AuthMethodOAuth, CallbackURL: r.CallbackURL, ClientID: r.ClientID}
+	}
+	return Account{DID: r.Session.AccountDID.String(), Handle: r.Handle, Method: AuthMethodPassword}
 }
 
 // SavePasswordSession writes the session for the given handle, overwriting any
@@ -164,8 +182,8 @@ func (s *insecureFileStore) SavePasswordSession(handle string, session atclient.
 	if err != nil && !errors.Is(err, keyring.ErrNotFound) && !errors.Is(err, errCredentialsCorrupt) {
 		return err
 	}
-	active := record != nil && record.Active && record.Session.AccountDID == session.AccountDID
-	return s.saveLocked(credentialRecord{Handle: handle, Session: session, Active: active})
+	active := record != nil && record.Active && record.account().DID == session.AccountDID.String()
+	return s.saveLocked(credentialRecord{Handle: handle, Session: &session, Active: active})
 }
 
 // DeletePasswordSession removes the credential file. A missing file is not an
@@ -173,6 +191,10 @@ func (s *insecureFileStore) SavePasswordSession(handle string, session atclient.
 func (s *insecureFileStore) DeletePasswordSession() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.deleteLocked()
+}
+
+func (s *insecureFileStore) deleteLocked() error {
 	err := os.Remove(s.path)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("delete credentials file: %w", err)
@@ -205,7 +227,7 @@ func (s *insecureFileStore) activeDID() string {
 		return ""
 	}
 	if record.Active {
-		return record.Session.AccountDID.String()
+		return record.account().DID
 	}
 	return ""
 }

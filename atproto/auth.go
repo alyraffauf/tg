@@ -153,8 +153,7 @@ func NewAuthManagerWithClient(httpClient *http.Client) *AuthManager {
 	app := oauth.NewClientApp(&config, store)
 	app.Client = httpClient
 	app.Resolver.Client = httpClient
-	// Best-effort: if the credentials directory cannot be created (e.g. no home
-	// directory), --insecure login will surface a clear error instead.
+	// Best-effort: --insecure login reports unavailable file storage.
 	insecureStore, _ := newInsecureFileStore()
 	return &AuthManager{
 		app:           app,
@@ -225,12 +224,29 @@ func (m *AuthManager) LoginWithPassword(ctx context.Context, identifier, passwor
 	return err
 }
 
-func (m *AuthManager) StartLogin(ctx context.Context, identifier string) (string, error) {
-	loginURL, err := m.app.StartAuthFlow(ctx, identifier)
-	if err == nil {
-		m.pendingIdentifier = identifier
+func (m *AuthManager) StartLogin(ctx context.Context, identifier string, useInsecureFileStore bool) (string, error) {
+	if useInsecureFileStore {
+		if m.insecureStore == nil {
+			return "", errors.New("insecure credential storage is unavailable")
+		}
+		m.app.Store = m.insecureStore
+	} else {
+		if _, _, err := m.store.Accounts(); err != nil && !errors.Is(err, keyring.ErrNotFound) {
+			return "", fmt.Errorf("OAuth login requires an OS keyring: %w; enable a Secret Service provider or run \"tg auth login %s --insecure\" to store credentials in plaintext", err, identifier)
+		}
+		m.app.Store = m.store
 	}
-	return loginURL, err
+	loginURL, err := m.app.StartAuthFlow(ctx, identifier)
+	if err != nil {
+		return "", err
+	}
+	if !useInsecureFileStore {
+		if err := m.store.verifyPendingAuthRequest(); err != nil {
+			return "", fmt.Errorf("could not store OAuth login request in the OS keyring: %w; run \"tg auth login %s --insecure\" to store credentials in plaintext", err, identifier)
+		}
+	}
+	m.pendingIdentifier = identifier
+	return loginURL, nil
 }
 
 func (m *AuthManager) FinishLogin(ctx context.Context, query url.Values) error {
@@ -244,8 +260,15 @@ func (m *AuthManager) FinishLogin(ctx context.Context, query url.Values) error {
 	}
 	m.pendingIdentifier = ""
 	did := session.AccountDID.String()
-	if err := m.validateOAuthScopes(ctx, Account{DID: did, Handle: handle}, session.Scopes); err != nil {
+	if err := validateOAuthScopes(ctx, Account{DID: did, Handle: handle}, session.Scopes, m.app.Store); err != nil {
 		return err
+	}
+	if m.app.Store == m.insecureStore {
+		if err := m.insecureStore.finishOAuthLogin(handle, m.app.Config.CallbackURL, m.app.Config.ClientID); err != nil {
+			return err
+		}
+		m.selector = did
+		return nil
 	}
 	if err := m.store.SetAccountHandle(did, handle); err != nil {
 		return err
@@ -262,6 +285,9 @@ func (m *AuthManager) FinishLogin(ctx context.Context, query url.Values) error {
 // callback). It is safe to call after a completed login.
 func (m *AuthManager) CancelLogin() {
 	m.pendingIdentifier = ""
+	if m.insecureStore != nil {
+		m.insecureStore.cancelLogin()
+	}
 	_ = m.store.DeletePendingAuthRequest()
 }
 
@@ -274,11 +300,11 @@ func (m *AuthManager) CurrentDID(ctx context.Context) (syntax.DID, error) {
 	if err != nil {
 		return "", err
 	}
-	if source == sessionSourceInsecureFile {
+	if source == sessionSourceInsecureFile && account.Method == AuthMethodPassword {
 		return did, nil
 	}
 	if account.Method == AuthMethodOAuth {
-		session, err := m.resumeOAuthSession(ctx, account)
+		session, err := m.resumeOAuthSession(ctx, account, source)
 		if err != nil {
 			return "", err
 		}
@@ -299,12 +325,11 @@ func (m *AuthManager) CurrentSession(ctx context.Context) (*oauth.ClientSession,
 	if err != nil {
 		return nil, err
 	}
-	// The file store only holds app-password sessions, so there is no OAuth
-	// ClientSession to return. Callers fall back to APIClient for token access.
-	if source == sessionSourceInsecureFile || account.Method != AuthMethodOAuth {
+	// App-password sessions use APIClient directly.
+	if account.Method != AuthMethodOAuth {
 		return nil, ErrNotAuthenticated
 	}
-	return m.resumeOAuthSession(ctx, account)
+	return m.resumeOAuthSession(ctx, account, source)
 }
 
 // OAuthSessionHasScope reports whether the active OAuth session grants scope.
@@ -329,7 +354,7 @@ func (m *AuthManager) APIClient(ctx context.Context) (*atclient.APIClient, synta
 	if err != nil {
 		return nil, "", err
 	}
-	if source == sessionSourceInsecureFile {
+	if source == sessionSourceInsecureFile && account.Method == AuthMethodPassword {
 		session, _, err := m.insecureStore.GetPasswordSession()
 		if err != nil {
 			if errors.Is(err, keyring.ErrNotFound) {
@@ -349,7 +374,7 @@ func (m *AuthManager) APIClient(ctx context.Context) (*atclient.APIClient, synta
 		return nil, "", err
 	}
 	if account.Method == AuthMethodOAuth {
-		session, err := m.resumeOAuthSession(ctx, account)
+		session, err := m.resumeOAuthSession(ctx, account, source)
 		if err != nil {
 			return nil, "", err
 		}
@@ -388,25 +413,34 @@ func (m *AuthManager) restoreOAuthClient(account Account) error {
 	return fmt.Errorf("OAuth session is missing the login client identity; run \"tg auth login\" once to persist it")
 }
 
-func (m *AuthManager) resumeOAuthSession(ctx context.Context, account Account) (*oauth.ClientSession, error) {
+func (m *AuthManager) resumeOAuthSession(ctx context.Context, account Account, source sessionSource) (*oauth.ClientSession, error) {
 	did, err := syntax.ParseDID(account.DID)
 	if err != nil {
 		return nil, err
 	}
-	session, err := m.app.ResumeSession(ctx, did, "")
+	app := *m.app
+	app.Store = m.oauthStore(source)
+	session, err := app.ResumeSession(ctx, did, "")
 	if err != nil {
 		if errors.Is(err, keyring.ErrNotFound) {
 			return nil, ErrNotAuthenticated
 		}
 		return nil, err
 	}
-	if err := m.validateOAuthScopes(ctx, account, session.Data.Scopes); err != nil {
+	if err := validateOAuthScopes(ctx, account, session.Data.Scopes, app.Store); err != nil {
 		return nil, err
 	}
 	if err := m.restoreOAuthClient(account); err != nil {
 		return nil, err
 	}
 	return session, nil
+}
+
+func (m *AuthManager) oauthStore(source sessionSource) oauth.ClientAuthStore {
+	if source == sessionSourceInsecureFile {
+		return m.insecureStore
+	}
+	return m.store
 }
 
 func (m *AuthManager) requestContext(ctx context.Context) (context.Context, context.CancelFunc) {
@@ -492,6 +526,17 @@ func (m *AuthManager) Logout(ctx context.Context) error {
 // logoutFile revokes the file-backed session server-side (best-effort) and
 // deletes the credentials file.
 func (m *AuthManager) logoutFile(ctx context.Context) error {
+	account, found, err := m.insecureStore.FindAccount()
+	if err != nil {
+		return err
+	}
+	if found && account.Method == AuthMethodOAuth {
+		_ = m.restoreOAuthClient(account)
+		app := *m.app
+		app.Store = m.insecureStore
+		_ = app.Logout(ctx, syntax.DID(account.DID), "")
+		return m.insecureStore.DeleteSession(ctx, syntax.DID(account.DID), "")
+	}
 	session, _, _ := m.insecureStore.GetPasswordSession()
 	if session != nil {
 		client := atclient.ResumePasswordSession(*session, nil)

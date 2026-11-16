@@ -48,7 +48,18 @@ session bus (e.g. a server or container), install and start
 
 ### Insecure file storage (`--insecure`)
 
-For an app-password login without a keyring, use `--insecure`:
+For OAuth login without a keyring, use `--insecure`:
+
+```bash
+tg auth login alice.example.com --insecure
+```
+
+If the browser cannot be opened, open the printed authorization URL on another
+device. After authorizing, paste the full callback URL from the browser address
+bar into the terminal. The callback page may fail to load on that device; copy
+its URL anyway.
+
+App-password login also supports `--insecure`:
 
 ```bash
 tg auth login alice.example.com xxxx-xxxx-xxxx-xxxx --insecure
@@ -58,8 +69,10 @@ This stores one account in plaintext at `$XDG_DATA_HOME/tg/credentials.json`
 (default `~/.local/share/tg/credentials.json`); logging in again overwrites it.
 The directory and file are created with `0700` and `0600` permissions.
 
-Use the keyring when available. `--insecure` requires an app password; it does
-not support OAuth.
+Use the keyring when available. `--insecure` stores OAuth tokens and signing
+keys, or the app-password session, in plaintext. Later commands read the saved
+credentials without requiring the flag. OAuth token refreshes update the same
+file.
 
 See the [command reference](/reference/commands/tg_auth/) for the full `tg auth`
 subcommand list.

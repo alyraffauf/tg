@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/bluesky-social/indigo/atproto/auth"
+	"github.com/bluesky-social/indigo/atproto/auth/oauth"
 	"github.com/bluesky-social/indigo/atproto/syntax"
 )
 
@@ -29,7 +30,7 @@ func normalizeOAuthScope(scope string) string {
 	return scope
 }
 
-func (m *AuthManager) validateOAuthScopes(ctx context.Context, account Account, granted []string) error {
+func validateOAuthScopes(ctx context.Context, account Account, granted []string, store oauth.ClientAuthStore) error {
 	if hasOAuthScopes(granted, DefaultScopes) {
 		return nil
 	}
@@ -37,7 +38,7 @@ func (m *AuthManager) validateOAuthScopes(ctx context.Context, account Account, 
 	if identifier == "" {
 		identifier = account.DID
 	}
-	if err := m.store.DeleteSession(ctx, syntax.DID(account.DID), ""); err != nil {
+	if err := store.DeleteSession(ctx, syntax.DID(account.DID), ""); err != nil {
 		return fmt.Errorf("%w for %s; could not clear saved credentials: %w", ErrOAuthScopeMismatch, identifier, err)
 	}
 	return fmt.Errorf("%w; signed out %s; run \"tg auth login %s\" again", ErrOAuthScopeMismatch, identifier, identifier)

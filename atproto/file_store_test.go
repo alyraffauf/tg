@@ -220,8 +220,7 @@ func TestAuthManager_PrefersKeyringAccountOverFileAccount(t *testing.T) {
 }
 
 func TestAuthManager_CurrentSessionFileIsNotOAuth(t *testing.T) {
-	// The file store is password-only, so CurrentSession must report
-	// ErrNotAuthenticated so callers (e.g. AccessToken) fall back to APIClient.
+	// App-password sessions use APIClient instead of CurrentSession.
 	manager := newAuthManagerWithFileStore(t, "http://127.0.0.1:8095/callback")
 	did := mustDID(t, "did:plc:aaaabbbbccccddddeeeeffff")
 	saveFileSession(t, manager, did)

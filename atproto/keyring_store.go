@@ -472,6 +472,15 @@ func (s *KeyringStore) SaveAuthRequestInfo(_ context.Context, info oauth.AuthReq
 	return s.saveSecret(requestKey(info.State), info)
 }
 
+// Indigo currently ignores SaveAuthRequestInfo errors. Verify persistence
+// before asking the user to authorize a request that cannot be completed.
+func (s *KeyringStore) verifyPendingAuthRequest() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var info oauth.AuthRequestData
+	return s.getSecret(requestKey(s.pendingState), &info)
+}
+
 func (s *KeyringStore) DeleteAuthRequestInfo(_ context.Context, state string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

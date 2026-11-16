@@ -798,3 +798,24 @@ func TestResumeOAuthSessionRequiresStoredClientIdentity(t *testing.T) {
 		t.Errorf("CurrentSession error = %v, want login hint", err)
 	}
 }
+
+func TestStartLoginRejectsUnavailableKeyringBeforeAuthorization(t *testing.T) {
+	backend := newFakeKeyring()
+	backend.getErr = errors.New("The name is not activatable")
+	manager := newAuthManagerForTest("http://127.0.0.1:8095/callback", testKeyringStore(backend))
+	manager.app.Client = &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		t.Fatal("authorization must not start when the keyring is unavailable")
+		return nil, errors.New("unexpected request")
+	})}
+	manager.app.Resolver.Client = manager.app.Client
+	loginURL, err := manager.StartLogin(context.Background(), "https://pds.example", false)
+	if !errors.Is(err, backend.getErr) {
+		t.Fatalf("got %v, want keyring error", err)
+	}
+	if loginURL != "" || manager.pendingIdentifier != "" {
+		t.Fatal("unavailable keyring must not leave an active login")
+	}
+	if !strings.Contains(err.Error(), "--insecure") {
+		t.Fatalf("missing recovery guidance: %v", err)
+	}
+}

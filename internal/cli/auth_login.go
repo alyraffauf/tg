@@ -26,16 +26,13 @@ func newAuthLoginCommand(service *app.Service) *cobra.Command {
 	command := &cobra.Command{
 		Use:   "login <handle> [app-password]",
 		Short: "Log in with OAuth or an app password",
-		Long:  `Log in with OAuth. For login without a browser, pass an app password.`,
+		Long:  `Log in with OAuth, or pass an app password. If the browser cannot be opened, paste the callback URL after authorizing. Use --insecure to store credentials in plaintext when no OS keyring is available.`,
 		Args:  cobra.RangeArgs(1, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			identifier := args[0]
 			password, usePassword, err := loginPassword(args, passwordStdin, cmd.InOrStdin())
 			if err != nil {
 				return err
-			}
-			if useInsecureFileStore && !usePassword {
-				return fmt.Errorf("--insecure requires an app password; pass one as the second argument or use --password-stdin")
 			}
 			if usePassword {
 				if err := service.LoginWithPassword(cmd.Context(), identifier, password, useInsecureFileStore); err != nil {
@@ -63,7 +60,7 @@ func newAuthLoginCommand(service *app.Service) *cobra.Command {
 			defer server.Shutdown(context.Background())
 
 			ctx := cmd.Context()
-			loginURL, err := service.StartLogin(ctx, identifier)
+			loginURL, err := service.StartLogin(ctx, identifier, useInsecureFileStore)
 			if err != nil {
 				service.CancelLogin()
 				return err
@@ -122,7 +119,7 @@ func newAuthLoginCommand(service *app.Service) *cobra.Command {
 		},
 	}
 	command.Flags().BoolVar(&passwordStdin, "password-stdin", false, "Read the app password from standard input")
-	command.Flags().BoolVar(&useInsecureFileStore, "insecure", false, "Store credentials in ~/.local/share/tg/credentials.json instead of the system keyring. Requires an app password.")
+	command.Flags().BoolVar(&useInsecureFileStore, "insecure", false, "Store credentials in ~/.local/share/tg/credentials.json instead of the system keyring.")
 	return command
 }
 
